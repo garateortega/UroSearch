@@ -256,7 +256,7 @@ function AuthScreen({ onLogin, users, setUsers }) {
           <button onClick={()=>{setView("register"); setError(""); setInfo("");}} style={btnSecondary}>Solicitar cuenta</button>
         </div>
         <div style={{fontSize:11, color:"#7aa3c4", marginTop:30, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
-        <div style={{fontSize:11, fontStyle:"italic", color:"#4a7eab", marginTop:24, paddingTop:16, borderTop:"0.5px solid #b8d8ef"}}>Creado por Dr. Sebastián Gárate Ortega</div>
+        <div style={{fontSize:11, fontStyle:"italic", color:"#4a7eab", marginTop:24, paddingTop:16, borderTop:"0.5px solid #b8d8ef"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"#7aa3c4", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
     );
@@ -277,7 +277,7 @@ function AuthScreen({ onLogin, users, setUsers }) {
         {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
         <button onClick={handleLogin} style={btnPrimary}>Ingresar</button>
         <div style={{textAlign:"center",fontSize:12,color:"#4a7eab",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"#1a6fb5",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Solicítala aquí</button></div>
-        <div style={{marginTop:18,padding:"10px 12px",background:"#f0f8fd",borderRadius:8,fontSize:11,color:"#4a7eab",lineHeight:1.5}}><strong>Modo demostración:</strong><br/>Admin: admin@urosearch.cl / admin2026</div>
+        <div style={{marginTop:18,padding:"10px 12px",background:"#f0f8fd",borderRadius:8,fontSize:11,color:"#4a7eab",lineHeight:1.5}}><strong>Modo demostración</strong><br/></div>
       </div>
     );
   }
@@ -2235,10 +2235,19 @@ export default function App() {
       }
       const sysPrompt = SYSTEM_PROMPT + modoIns + ctx;
       const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({model:"claude-sonnet-4-20250514", max_tokens:1500, system:sysPrompt, messages:apiMsgs})
-      });
+      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+  },
+  body: JSON.stringify({
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 1500,
+    system: sysPrompt,
+    messages: apiMsgs,
+  }),
+});
       const data = await res.json();
       const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
       const respuesta = { role:"assistant", content:reply };
@@ -2258,10 +2267,19 @@ export default function App() {
     if (PRESET_MAPS[tema]) { setMapaActual(PRESET_MAPS[tema]); return; }
     setMapaLoading(true); setMapaActual(null);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1000, system: SYSTEM_PROMPT, messages:[{role:"user", content:`Mapa conceptual sobre: "${tema}". SOLO JSON.`}] })
-      });
+     const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+  },
+  body: JSON.stringify({
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 1000,
+    system: SYSTEM_PROMPT,
+    messages: [{role: "user", content: `Mapa conceptual sobre: "${tema}". SOLO JSON.`}],
+  }),
+});
       const data = await res.json();
       const txt = data.content?.find(b => b.type==="text")?.text || "";
       const clean = txt.replace(/```json|```/g,"").trim();
@@ -2354,7 +2372,7 @@ export default function App() {
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
 
       <div style={{padding:"8px 16px",borderTop:"0.5px solid #b8d8ef",background:"#d0e9f8",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,fontStyle:"italic",color:"#4a7eab"}}>
-        <span>Creado por Dr. Sebastián Gárate Ortega</span>
+        <span>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</span>
         <span style={{fontStyle:"normal",fontFamily:"monospace",fontSize:9,color:"#7aa3c4",letterSpacing:"0.3px"}}>{VERSION}</span>
       </div>
     </div>
