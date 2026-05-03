@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
@@ -206,11 +207,12 @@ const labelStyle = { fontSize:12, fontWeight:500, color:"#4a7eab", marginBottom:
 const btnPrimary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"#1a6fb5", color:"#fff", border:"none", borderRadius:8, cursor:"pointer", marginTop:6 };
 const btnSecondary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"#fff", color:"#1a6fb5", border:"1px solid #1a6fb5", borderRadius:8, cursor:"pointer", marginTop:8 };
 
-function AuthScreen({ onLogin, users, setUsers }) {
+function AuthScreen({ onLogin }) {
   const [view, setView] = useState("welcome");
   const [form, setForm] = useState({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [loading, setLoading] = useState(false);
   const fileRef = useRef(null);
 
   const handleFile = (e) => {
@@ -221,28 +223,52 @@ function AuthScreen({ onLogin, users, setUsers }) {
     setError("");
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setError(""); setInfo("");
     if (!form.nombre.trim()) return setError("Ingresa tu nombre completo");
     if (!form.correo.trim() || !form.correo.includes("@")) return setError("Correo electrónico inválido");
     if (form.password.length < 6) return setError("La contraseña debe tener al menos 6 caracteres");
     if (form.password !== form.password2) return setError("Las contraseñas no coinciden");
     if (!form.documento) return setError("Debes adjuntar tu título o carta de aceptación");
-    if (users.some(u => u.correo === form.correo) || form.correo === ADMIN_ACCOUNT.correo) return setError("Ya existe una cuenta con ese correo");
-    const newUser = { nombre: form.nombre, correo: form.correo, especialidad: form.especialidad, password: form.password, documentoNombre: form.documentoNombre, rol: "usuario", estado: "pendiente", fechaRegistro: new Date().toISOString().split("T")[0] };
-    setUsers([...users, newUser]);
+
+    setLoading(true);
+    const result = await registerUser({
+      nombre: form.nombre,
+      correo: form.correo,
+      password: form.password,
+      especialidad: form.especialidad,
+      documentoNombre: form.documentoNombre,
+    });
+    setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
     setInfo("Tu solicitud fue enviada. Recibirás acceso una vez sea aprobada por el administrador.");
     setForm({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError(""); setInfo("");
-    if (form.correo === ADMIN_ACCOUNT.correo && form.password === ADMIN_ACCOUNT.password) { onLogin(ADMIN_ACCOUNT); return; }
-    const user = users.find(u => u.correo === form.correo && u.password === form.password);
-    if (!user) return setError("Correo o contraseña incorrectos");
-    if (user.estado === "pendiente") return setError("Tu cuenta aún está pendiente de aprobación");
-    if (user.estado === "rechazado") return setError("Tu cuenta fue rechazada. Contacta al administrador.");
-    onLogin(user);
+    if (!form.correo.trim() || !form.correo.includes("@")) return setError("Ingresa un correo válido");
+    if (!form.password) return setError("Ingresa tu contraseña");
+
+    setLoading(true);
+    const result = await loginUser({
+      correo: form.correo,
+      password: form.password,
+    });
+    setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    // El componente App detecta el cambio de sesión y carga el perfil automáticamente.
+    // No necesitamos llamar a onLogin aquí, lo hace el listener de onAuthChange.
   };
 
   if (view === "welcome") {
@@ -271,13 +297,14 @@ function AuthScreen({ onLogin, users, setUsers }) {
           <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"#1a3a5c"}}>Iniciar sesión</div>
         </div>
         <label style={labelStyle}>Correo electrónico</label>
-        <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle}/>
+        <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Contraseña</label>
-        <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" style={inputStyle}/>
+        <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" style={inputStyle} disabled={loading}/>
         {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
-        <button onClick={handleLogin} style={btnPrimary}>Ingresar</button>
+        <button onClick={handleLogin} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
+          {loading ? "Ingresando..." : "Ingresar"}
+        </button>
         <div style={{textAlign:"center",fontSize:12,color:"#4a7eab",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"#1a6fb5",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Solicítala aquí</button></div>
-        <div style={{marginTop:18,padding:"10px 12px",background:"#f0f8fd",borderRadius:8,fontSize:11,color:"#4a7eab",lineHeight:1.5}}><strong>Modo demostración</strong><br/></div>
       </div>
     );
   }
@@ -291,71 +318,140 @@ function AuthScreen({ onLogin, users, setUsers }) {
       </div>
       <div style={{fontSize:12,color:"#4a7eab",marginBottom:18,lineHeight:1.5}}>Tu cuenta será revisada por el administrador antes de ser activada.</div>
       <label style={labelStyle}>Nombre completo</label>
-      <input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} placeholder="Dr. Juan Pérez" style={inputStyle}/>
+      <input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} placeholder="Dr. Juan Pérez" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Correo electrónico</label>
-      <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle}/>
+      <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Especialidad / cargo</label>
-      <select value={form.especialidad} onChange={e=>setForm({...form,especialidad:e.target.value})} style={inputStyle}>
+      <select value={form.especialidad} onChange={e=>setForm({...form,especialidad:e.target.value})} style={inputStyle} disabled={loading}>
         {ESPECIALIDADES.map(e=><option key={e}>{e}</option>)}
       </select>
       <label style={labelStyle}>Documento de respaldo</label>
       <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Adjunta título de especialidad o carta de residencia (PDF/JPG/PNG, máx. 5 MB)</div>
-      <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} style={{display:"none"}}/>
-      <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:"10px",fontSize:13,background:"#fff",color:"#1a6fb5",border:"1px dashed #1a6fb5",borderRadius:8,cursor:"pointer",marginBottom:10,textAlign:"left"}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
+      <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} style={{display:"none"}} disabled={loading}/>
+      <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:13,background:"#fff",color:"#1a6fb5",border:"1px dashed #1a6fb5",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
       <label style={labelStyle}>Contraseña</label>
-      <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 6 caracteres" style={inputStyle}/>
+      <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 6 caracteres" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Confirmar contraseña</label>
-      <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle}/>
+      <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle} disabled={loading}/>
       {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
       {info && <div style={{fontSize:12,color:"#1a6f5c",background:"#e0f5ec",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
-      <button onClick={handleRegister} style={btnPrimary}>Enviar solicitud</button>
+      <button onClick={handleRegister} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
+        {loading ? "Enviando solicitud..." : "Enviar solicitud"}
+      </button>
       <div style={{textAlign:"center",fontSize:12,color:"#4a7eab",marginTop:14}}>¿Ya tienes cuenta? <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"#1a6fb5",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Inicia sesión</button></div>
     </div>
   );
 }
 
-function AdminPanel({ users, setUsers }) {
+function AdminPanel() {
+  const [perfiles, setPerfiles] = useState([]);
   const [filtro, setFiltro] = useState("pendiente");
-  const filtrados = users.filter(u => filtro === "todos" || u.estado === filtro);
-  const counts = { pendiente: users.filter(u=>u.estado==="pendiente").length, aprobado: users.filter(u=>u.estado==="aprobado").length, rechazado: users.filter(u=>u.estado==="rechazado").length };
-  const cambiar = (correo, e) => setUsers(users.map(u => u.correo === correo ? {...u, estado: e} : u));
-  const eliminar = (correo) => { if (confirm("¿Eliminar definitivamente esta cuenta?")) setUsers(users.filter(u => u.correo !== correo)); };
-  const badge = (e) => ({ fontSize:10, fontWeight:500, padding:"2px 8px", borderRadius:10, background: e==="aprobado"?"#d4f0e0":e==="rechazado"?"#fde8e6":"#fdf0d0", color: e==="aprobado"?"#1a6f5c":e==="rechazado"?"#c0392b":"#a06b1a" });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // Cargar perfiles al montar el componente
+  useEffect(() => {
+    cargarPerfiles();
+  }, []);
+
+  const cargarPerfiles = async () => {
+    setLoading(true);
+    setError("");
+    const result = await listarPerfiles();
+    if (!result.ok) {
+      setError("Error al cargar usuarios: " + result.error);
+      setLoading(false);
+      return;
+    }
+    setPerfiles(result.perfiles);
+    setLoading(false);
+  };
+
+  const filtrados = perfiles.filter(u => filtro === "todos" || u.estado === filtro);
+  const counts = {
+    pendiente: perfiles.filter(u=>u.estado==="pendiente").length,
+    aprobado: perfiles.filter(u=>u.estado==="aprobado").length,
+    rechazado: perfiles.filter(u=>u.estado==="rechazado").length,
+  };
+
+  const cambiar = async (userId, nuevoEstado) => {
+    const result = await cambiarEstadoUsuario(userId, nuevoEstado);
+    if (!result.ok) {
+      alert("Error al cambiar estado: " + result.error);
+      return;
+    }
+    // Actualizar localmente sin recargar todo
+    setPerfiles(perfiles.map(u => u.id === userId ? {...u, estado: nuevoEstado} : u));
+  };
+
+  const eliminar = async (userId) => {
+    if (!confirm("¿Eliminar definitivamente esta cuenta?\n\nNota: el usuario seguirá registrado en el sistema de autenticación pero no podrá acceder a UroSearch hasta que un admin lo vuelva a aprobar.")) return;
+    const result = await eliminarUsuario(userId);
+    if (!result.ok) {
+      alert("Error al eliminar: " + result.error);
+      return;
+    }
+    setPerfiles(perfiles.filter(u => u.id !== userId));
+  };
+
+  const badge = (e) => ({
+    fontSize:10, fontWeight:500, padding:"2px 8px", borderRadius:10,
+    background: e==="aprobado"?"#d4f0e0":e==="rechazado"?"#fde8e6":"#fdf0d0",
+    color: e==="aprobado"?"#1a6f5c":e==="rechazado"?"#c0392b":"#a06b1a"
+  });
+
+  if (loading) {
+    return (
+      <div style={{padding:"40px 16px", textAlign:"center", color:"#7aa3c4", fontSize:13}}>
+        Cargando usuarios...
+      </div>
+    );
+  }
 
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-      <div style={{marginBottom:16}}>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:4}}>Panel de administración</div>
-        <div style={{fontSize:12,color:"#4a7eab"}}>Gestión de cuentas del equipo clínico</div>
+      <div style={{marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
+        <div>
+          <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:4}}>Panel de administración</div>
+          <div style={{fontSize:12,color:"#4a7eab"}}>Gestión de cuentas del equipo clínico</div>
+        </div>
+        <button onClick={cargarPerfiles} style={{padding:"6px 12px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #1a6fb5",borderRadius:6,cursor:"pointer"}}>↻ Actualizar</button>
       </div>
+
+      {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:10}}>{error}</div>}
+
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
         {[["pendiente",`Pendientes (${counts.pendiente})`],["aprobado",`Aprobados (${counts.aprobado})`],["rechazado",`Rechazados (${counts.rechazado})`],["todos","Todos"]].map(([id,label]) => (
           <button key={id} onClick={()=>setFiltro(id)} style={{padding:"6px 12px",fontSize:12,fontWeight:filtro===id?500:400,borderRadius:6,cursor:"pointer",border:filtro===id?"none":"0.5px solid #b8d8ef",background:filtro===id?"#1a6fb5":"#fff",color:filtro===id?"#fff":"#4a7eab"}}>{label}</button>
         ))}
       </div>
+
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>No hay solicitudes</div>
+        <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>
+          {perfiles.length === 0 ? "No hay usuarios registrados" : "No hay usuarios en esta categoría"}
+        </div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {filtrados.map(u => (
-            <div key={u.correo} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px"}}>
+            <div key={u.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c"}}>{u.nombre}</div>
+                <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c"}}>{u.nombre || "Sin nombre"}</div>
                 <span style={badge(u.estado)}>{u.estado}</span>
+                {u.rol === "admin" && <span style={{fontSize:9,padding:"1px 6px",background:"#1a3a5c",color:"#fff",borderRadius:4,fontWeight:500}}>ADMIN</span>}
               </div>
-              <div style={{fontSize:12,color:"#4a7eab"}}>{u.correo} · {u.especialidad}</div>
-              {u.fechaRegistro && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Solicitud: {u.fechaRegistro}</div>}
-              {u.documentoNombre && (
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#f0f8fd",borderRadius:6,fontSize:11,color:"#4a7eab",marginTop:8}}>📎 <span style={{flex:1}}>{u.documentoNombre}</span></div>
+              <div style={{fontSize:12,color:"#4a7eab"}}>{u.correo} · {u.especialidad || "Sin especialidad"}</div>
+              {u.fecha_registro && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
+              {u.documento_nombre && (
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#f0f8fd",borderRadius:6,fontSize:11,color:"#4a7eab",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
               )}
               <div style={{display:"flex",gap:6,marginTop:8}}>
                 {u.estado === "pendiente" && (<>
-                  <button onClick={()=>cambiar(u.correo,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aprobar</button>
-                  <button onClick={()=>cambiar(u.correo,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"#c0392b",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✗ Rechazar</button>
+                  <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aprobar</button>
+                  <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"#c0392b",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✗ Rechazar</button>
                 </>)}
-                {u.estado === "aprobado" && <button onClick={()=>cambiar(u.correo,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
-                {u.estado === "rechazado" && <button onClick={()=>cambiar(u.correo,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"#fff",color:"#1a6f5c",border:"0.5px solid #1a6f5c",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
-                <button onClick={()=>eliminar(u.correo)} style={{padding:"7px 10px",fontSize:12,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>Eliminar</button>
+                {u.estado === "aprobado" && u.rol !== "admin" && <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
+                {u.estado === "rechazado" && <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"#fff",color:"#1a6f5c",border:"0.5px solid #1a6f5c",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
+                {u.rol !== "admin" && <button onClick={()=>eliminar(u.id)} style={{padding:"7px 10px",fontSize:12,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
               </div>
             </div>
           ))}
@@ -2029,7 +2125,9 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
 }
 
 export default function App() {
-  const [users, setUsers] = useState([]);
+  const [session, setSession] = useState(null);
+  const [users, setUsers] = useState([]); // TEMPORAL: hasta migrar AdminPanel/EquiposPanel
+  const [loadingSession, setLoadingSession] = useState(true);
   const [videos, setVideos] = useState(VIDEOS_INICIALES);
   const [pacientes, setPacientes] = useState([]);
   const [tablaCirugias, setTablaCirugias] = useState([]);
@@ -2051,23 +2149,94 @@ export default function App() {
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const bottomRef = useRef(null);
+// Verificar si hay sesión al cargar la app, y suscribirse a cambios
+useEffect(() => {
+  // Verificar sesión inicial
+  getSession().then((result) => {
+    if (result.ok && result.session) {
+      setSession(result.session);
+      cargarPerfil(result.session);
+    }
+    setLoadingSession(false);
+  });
 
+  // Suscribirse a cambios futuros (login, logout)
+  const unsubscribe = onAuthChange((event, newSession) => {
+    setSession(newSession);
+    if (newSession) {
+      cargarPerfil(newSession);
+    } else {
+      setCurrentUser(null);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, loading]);
 
   const isAdmin = currentUser?.rol === "admin";
-  const pendientesCount = users.filter(u => u.estado === "pendiente").length;
+  const pendientesCount = 0; // TODO: cargar desde Supabase con un useEffect propio
 
-  const handleLogin = (user) => {
-    setCurrentUser(user);
-    setTab(user.rol === "admin" ? "admin" : "chat");
-    if (user.rol !== "admin") {
-      setMessages([{ role:"assistant", content:`Hola ${user.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` }]);
-    }
-  };
+ const handleLogout = async () => {
+  await logoutUser();
+  setCurrentUser(null);
+  setSession(null);
+  setMessages([]);
+  setTab("chat");
+  setMenuOpen(false);
+  setMapaActual(null);
+  setMapaTema("");
+};
 
-  const handleLogout = () => {
-    setCurrentUser(null); setMessages([]); setTab("chat"); setMenuOpen(false); setMapaActual(null); setMapaTema("");
+// Cargar el perfil del usuario cuando hay una sesión activa
+const cargarPerfil = async (sessionData) => {
+  if (!sessionData?.user) {
+    setCurrentUser(null);
+    return;
+  }
+  
+  const result = await getPerfil(sessionData.user.id);
+  
+  if (!result.ok) {
+    // Si no se pudo cargar el perfil, cerrar sesión
+    console.error("Error al cargar perfil:", result.error);
+    await logoutUser();
+    setCurrentUser(null);
+    return;
+  }
+  
+  const perfil = result.perfil;
+  
+  // Si el usuario no está aprobado, no dejarlo entrar
+  if (perfil.estado !== "aprobado") {
+    let mensaje = "";
+    if (perfil.estado === "pendiente") mensaje = "Tu cuenta aún está pendiente de aprobación por el administrador.";
+    else if (perfil.estado === "rechazado") mensaje = "Tu cuenta fue rechazada. Contacta al administrador.";
+    else mensaje = "Tu cuenta no está activa.";
+    
+    alert(mensaje);
+    await logoutUser();
+    setCurrentUser(null);
+    setSession(null);
+    return;
+  }
+  
+  // Adaptar el perfil al formato que espera el resto del código
+  const userAdaptado = {
+    nombre: perfil.nombre,
+    correo: perfil.correo,
+    especialidad: perfil.especialidad,
+    rol: perfil.rol,
+    estado: perfil.estado,
   };
+  
+  setCurrentUser(userAdaptado);
+  setTab(perfil.rol === "admin" ? "admin" : "chat");
+  
+  if (perfil.rol !== "admin") {
+    setMessages([{ role:"assistant", content:`Hola ${perfil.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` }]);
+  }
+};
 
   const userInitials = currentUser ? (currentUser.nombre.split(" ").map(p=>p[0]).filter(c=>c.match(/[A-Z]/i)).slice(0,2).join("").toUpperCase() || "U") : "";
 
@@ -2290,13 +2459,25 @@ export default function App() {
     setMapaLoading(false);
   };
 
-  if (!currentUser) {
-    return (
-      <div style={{fontFamily:"var(--font-sans)",minHeight:540,background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
-        <AuthScreen onLogin={handleLogin} users={users} setUsers={setUsers}/>
+  // Pantalla de carga mientras se verifica la sesión inicial
+if (loadingSession) {
+  return (
+    <div style={{fontFamily:"var(--font-sans)",minHeight:540,background:"#e8f3fb",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center",color:"#4a7eab",fontSize:14}}>
+        <LogoUroSearch size={60}/>
+        <div style={{marginTop:16}}>Cargando UroSearch...</div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+if (!currentUser) {
+  return (
+    <div style={{fontFamily:"var(--font-sans)",minHeight:540,background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
+      <AuthScreen/>
+    </div>
+  );
+}
 
   const tabs = isAdmin
     ? [["admin",`👤 Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`],["chat","💬 Chat"],["hospital","🏥 Hospital"],["conocimiento","📖 Biblioteca"]]
@@ -2338,7 +2519,7 @@ export default function App() {
         </div>
       </div>
 
-      {tab==="admin" && isAdmin && <AdminPanel users={users} setUsers={setUsers}/>}
+      {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} serviciosUsuario={serviciosUsuario} setServiciosUsuario={setServiciosUsuario} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitaciones={invitaciones} setInvitaciones={setInvitaciones} users={users}/>}
       {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
