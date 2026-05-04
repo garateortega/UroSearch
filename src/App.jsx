@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
+import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
@@ -148,7 +149,155 @@ function MapaConceptual({ data }) {
     </svg>
   );
 }
+function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar, onNueva, onEliminar, onCerrar }) {
+  const formatearFecha = (fechaStr) => {
+    if (!fechaStr) return '';
+    const fecha = new Date(fechaStr);
+    const ahora = new Date();
+    const diffMs = ahora - fecha;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHoras = Math.floor(diffMs / 3600000);
+    const diffDias = Math.floor(diffMs / 86400000);
+    
+    if (diffMin < 1) return 'Hace un momento';
+    if (diffMin < 60) return `Hace ${diffMin}m`;
+    if (diffHoras < 24) return `Hace ${diffHoras}h`;
+    if (diffDias < 7) return `Hace ${diffDias}d`;
+    return fecha.toLocaleDateString("es-CL");
+  };
 
+  const handleEliminar = (e, conv) => {
+    e.stopPropagation(); // evita que se abra la conversación al hacer click en eliminar
+    if (!confirm(`¿Eliminar la conversación "${conv.titulo}"?\n\nEsto borrará todos sus mensajes y no se puede deshacer.`)) return;
+    onEliminar(conv.id);
+  };
+
+  return (
+    <div style={{
+      position: "absolute",
+      top: 0,
+      left: 0,
+      bottom: 0,
+      width: "280px",
+      background: "#fff",
+      borderRight: "0.5px solid #b8d8ef",
+      display: "flex",
+      flexDirection: "column",
+      zIndex: 20,
+      boxShadow: "2px 0 8px rgba(0,0,0,0.05)",
+      borderRadius: "var(--border-radius-lg) 0 0 var(--border-radius-lg)",
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: "14px 16px",
+        borderBottom: "0.5px solid #b8d8ef",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        background: "#f0f8fd",
+      }}>
+        <div style={{fontSize:14, fontWeight:600, color:"#1a3a5c"}}>Mis conversaciones</div>
+        <button onClick={onCerrar} style={{
+          background: "none",
+          border: "none",
+          fontSize: 18,
+          color: "#7aa3c4",
+          cursor: "pointer",
+          padding: 0,
+          lineHeight: 1,
+        }}>✕</button>
+      </div>
+
+      {/* Botón nueva conversación */}
+      <div style={{padding: "10px 12px", borderBottom: "0.5px solid #e8f3fb"}}>
+        <button onClick={onNueva} style={{
+          width: "100%",
+          padding: "9px",
+          fontSize: 13,
+          fontWeight: 500,
+          background: "#1a6fb5",
+          color: "#fff",
+          border: "none",
+          borderRadius: 8,
+          cursor: "pointer",
+        }}>+ Nueva conversación</button>
+      </div>
+
+      {/* Lista de conversaciones */}
+      <div style={{flex: 1, overflowY: "auto", padding: "8px 6px"}}>
+        {conversaciones.length === 0 ? (
+          <div style={{textAlign:"center", padding:"30px 16px", color:"#7aa3c4", fontSize:12, lineHeight:1.5}}>
+            No tienes conversaciones aún.<br/>Empieza una con el botón de arriba.
+          </div>
+        ) : (
+          conversaciones.map(conv => {
+            const esActual = conv.id === conversacionActual;
+            return (
+              <div
+                key={conv.id}
+                onClick={() => onSeleccionar(conv.id)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  background: esActual ? "#e0e9f5" : "transparent",
+                  border: esActual ? "0.5px solid #1a6fb5" : "0.5px solid transparent",
+                  marginBottom: 4,
+                  position: "relative",
+          
+                }}
+                onMouseEnter={e => {
+                  if (!esActual) e.currentTarget.style.background = "#f0f8fd";
+                  const btn = e.currentTarget.querySelector('.btn-eliminar');
+                  if (btn) btn.style.opacity = '1';
+                }}
+                onMouseLeave={e => {
+                  if (!esActual) e.currentTarget.style.background = "transparent";
+                  const btn = e.currentTarget.querySelector('.btn-eliminar');
+                  if (btn) btn.style.opacity = '0';
+                }}
+              >
+                <div style={{
+                  fontSize: 12.5,
+                  fontWeight: esActual ? 500 : 400,
+                  color: "#1a3a5c",
+                  marginBottom: 3,
+                  lineHeight: 1.3,
+                  paddingRight: 24,
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                }}>{conv.titulo || "Sin título"}</div>
+                <div style={{fontSize: 10, color: "#7aa3c4"}}>
+                  {formatearFecha(conv.fecha_actualizacion)}
+                </div>
+                <button
+                  className="btn-eliminar"
+                  onClick={(e) => handleEliminar(e, conv)}
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    background: "none",
+                    border: "none",
+                    color: "#c0392b",
+                    fontSize: 14,
+                    cursor: "pointer",
+                    padding: 2,
+                    opacity: 0,
+                    transition: "opacity 0.15s",
+                  }}
+                  title="Eliminar conversación"
+                >🗑</button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
 function ChatBubble({ msg, userInitials, onPlayVideo }) {
   const isUser = msg.role === "user";
   const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "#1a6fb5" : "#fff", color: isUser ? "#fff" : "#1a3a5c", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid #b8d8ef", whiteSpace:"pre-wrap" };
@@ -2140,6 +2289,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [tab, setTab] = useState("chat");
   const [messages, setMessages] = useState([]);
+  const [conversaciones, setConversaciones] = useState([]); // lista de conversaciones del usuario
+const [conversacionActual, setConversacionActual] = useState(null); // ID de la conversación abierta
+const [panelConversacionesAbierto, setPanelConversacionesAbierto] = useState(false); // mostrar/ocultar lista
+const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cuando se carga una conversación
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [modo, setModo] = useState("precisa");
@@ -2178,14 +2331,105 @@ useEffect(() => {
   const pendientesCount = 0; // TODO: cargar desde Supabase con un useEffect propio
 
  const handleLogout = async () => {
+  // Abrir una conversación existente (cargar sus mensajes)
+const abrirConversacion = async (conversacionId) => {
+  setLoadingConversaciones(true);
+  setPanelConversacionesAbierto(false);
+  
+  const result = await cargarMensajes(conversacionId);
+  if (result.ok) {
+    setMessages(result.mensajes);
+    setConversacionActual(conversacionId);
+  } else {
+    alert("Error al cargar la conversación: " + result.error);
+  }
+  setLoadingConversaciones(false);
+};
+
+// Empezar una nueva conversación (limpia el chat)
+const nuevaConversacion = () => {
+  setConversacionActual(null);
+  setPanelConversacionesAbierto(false);
+  if (currentUser) {
+    setMessages([{ 
+      role: "assistant", 
+      content: `Hola ${currentUser.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` 
+    }]);
+  } else {
+    setMessages([]);
+  }
+};
+
+// Eliminar una conversación
+const eliminarConv = async (conversacionId) => {
+  const result = await eliminarConversacion(conversacionId);
+  if (!result.ok) {
+    alert("Error al eliminar: " + result.error);
+    return;
+  }
+  
+  // Quitar de la lista local
+  setConversaciones(prev => prev.filter(c => c.id !== conversacionId));
+  
+  // Si era la conversación abierta, limpiar el chat
+  if (conversacionId === conversacionActual) {
+    nuevaConversacion();
+  }
+};
   await logoutUser();
   setCurrentUser(null);
   setSession(null);
   setMessages([]);
+  setConversaciones([]);
+  setConversacionActual(null);
+  setPanelConversacionesAbierto(false);
   setTab("chat");
   setMenuOpen(false);
   setMapaActual(null);
   setMapaTema("");
+};
+// Abrir una conversación existente (cargar sus mensajes)
+const abrirConversacion = async (conversacionId) => {
+  setLoadingConversaciones(true);
+  setPanelConversacionesAbierto(false);
+  
+  const result = await cargarMensajes(conversacionId);
+  if (result.ok) {
+    setMessages(result.mensajes);
+    setConversacionActual(conversacionId);
+  } else {
+    alert("Error al cargar la conversación: " + result.error);
+  }
+  setLoadingConversaciones(false);
+};
+
+// Empezar una nueva conversación (limpia el chat)
+const nuevaConversacion = () => {
+  setConversacionActual(null);
+  setPanelConversacionesAbierto(false);
+  if (currentUser) {
+    setMessages([{ 
+      role: "assistant", 
+      content: `Hola ${currentUser.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` 
+    }]);
+  } else {
+    setMessages([]);
+  }
+};
+
+// Eliminar una conversación
+const eliminarConv = async (conversacionId) => {
+  const result = await eliminarConversacion(conversacionId);
+  if (!result.ok) {
+    alert("Error al eliminar: " + result.error);
+    return;
+  }
+  
+  setConversaciones(prev => prev.filter(c => c.id !== conversacionId));
+  
+  if (conversacionId === conversacionActual) {
+    nuevaConversacion();
+  }
 };
 
 // Cargar el perfil del usuario cuando hay una sesión activa
@@ -2231,11 +2475,18 @@ const cargarPerfil = async (sessionData) => {
   };
   
   setCurrentUser(userAdaptado);
-  setTab(perfil.rol === "admin" ? "admin" : "chat");
-  
-  if (perfil.rol !== "admin") {
-    setMessages([{ role:"assistant", content:`Hola ${perfil.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` }]);
-  }
+setTab(perfil.rol === "admin" ? "admin" : "chat");
+
+// Cargar conversaciones del usuario
+const convResult = await listarConversaciones();
+if (convResult.ok) {
+  setConversaciones(convResult.conversaciones);
+}
+
+// Si no hay conversaciones, mostrar mensaje de bienvenida
+if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.length === 0)) {
+  setMessages([{ role:"assistant", content:`Hola ${perfil.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` }]);
+}
 };
 
   const userInitials = currentUser ? (currentUser.nombre.split(" ").map(p=>p[0]).filter(c=>c.match(/[A-Z]/i)).slice(0,2).join("").toUpperCase() || "U") : "";
@@ -2356,80 +2607,132 @@ const cargarPerfil = async (sessionData) => {
     return { pacientes: filtrados, totalMisPacientes: misPacientes.length, ningun: false };
   };
 
-  const sendMsg = async () => {
-    const txt = input.trim();
-    if (!txt || loading) return;
-    const newMsgs = [...messages, {role:"user", content:txt}];
-    setMessages(newMsgs); setInput(""); setLoading(true);
-    const videosRelevantes = buscarVideosRelevantes(txt);
-    const docsRelevantes = buscarEnConocimiento(txt, conocimiento, 3);
-    const tieneFuentes = docsRelevantes.length > 0;
-    const consultaCirugias = buscarCirugiasRelevantes(txt);
-    const consultaPacientes = buscarPacientesRelevantes(txt);
-
-    try {
-      const modoIns = modo === "precisa" ? "\n\nMODO PRECISA: máximo 3-4 líneas, sin advertencia." : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
-      let ctx = "";
-      if (tieneFuentes) {
-        ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo} ---\n${d.contenido.slice(0,3000)}`).join("\n\n");
-      }
-      if (consultaCirugias) {
-        ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
-        if (consultaCirugias.cirugias.length === 0) {
-          ctx += `No hay cirugías programadas en este rango.`;
-        } else {
-          ctx += consultaCirugias.cirugias.map(c => `- ${c.fecha} ${c.hora} | ${c.iniciales}${c.edad?` (${c.edad}a)`:""} | ${c.procedimiento}${c.lateralidad?` (${c.lateralidad})`:""} | Cirujano: ${c.cirujano} | Pabellón ${c.pabellon} | Estado: ${c.estado}`).join("\n");
-        }
-      }
-      if (consultaPacientes) {
-        ctx += "\n\n=== PACIENTES DEL USUARIO ===\nEl usuario está preguntando sobre sus pacientes. Responde con detalle. ";
-        if (consultaPacientes.ningun) {
-          ctx += "El usuario no tiene pacientes registrados aún.";
-        } else if (consultaPacientes.pacientes.length === 0) {
-          ctx += `El usuario tiene ${consultaPacientes.totalMisPacientes} pacientes en total, pero ninguno coincide con los filtros aplicados a la consulta.`;
-        } else {
-          ctx += `Total de pacientes del usuario: ${consultaPacientes.totalMisPacientes}. Coinciden con la consulta: ${consultaPacientes.pacientes.length}.\n\nDETALLE DE PACIENTES:\n`;
-          ctx += consultaPacientes.pacientes.map(p => {
-            let detalle = `- ${p.iniciales} (${p.edad}a ${p.sexo}) | Cama ${p.cama} | Servicio: ${p.servicio} | Estado: ${p.estado === "activo" ? "Hospitalizado" : "Alta"} | Ingreso: ${p.fechaIngreso}\n  Diagnóstico: ${p.diagnostico}`;
-            if (p.planManejo) detalle += `\n  Plan: ${p.planManejo}`;
-            if (p.evoluciones.length > 0) {
-              detalle += `\n  Última evolución (${p.evoluciones[0].fecha}): ${p.evoluciones[0].texto.slice(0,200)}${p.evoluciones[0].texto.length > 200 ? "..." : ""}`;
-            }
-            if (p.examenes.length > 0) {
-              detalle += `\n  Exámenes: ${p.examenes.slice(0,3).map(ex => `${ex.tipo} ${ex.nombre} (${ex.fecha})`).join(", ")}`;
-            }
-            return detalle;
-          }).join("\n\n");
-        }
-      }
-      const sysPrompt = SYSTEM_PROMPT + modoIns + ctx;
-      const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
-      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-  },
-  body: JSON.stringify({
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 1500,
-    system: sysPrompt,
-    messages: apiMsgs,
-  }),
-});
-      const data = await res.json();
-      const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
-      const respuesta = { role:"assistant", content:reply };
-      if (videosRelevantes.length > 0) respuesta.videos = videosRelevantes;
-      if (tieneFuentes) respuesta.fuentes = docsRelevantes.map(d => ({id:d.id, titulo:d.titulo, categoria:d.categoria}));
-      if (consultaCirugias && consultaCirugias.cirugias.length > 0) respuesta.cirugiasConsulta = { rango: consultaCirugias.rango, cantidad: consultaCirugias.cirugias.length };
-      if (consultaPacientes && !consultaPacientes.ningun && consultaPacientes.pacientes.length > 0) respuesta.pacientesConsulta = { cantidad: consultaPacientes.pacientes.length };
-      setMessages(prev => [...prev, respuesta]);
-    } catch(e) {
-      setMessages(prev => [...prev, {role:"assistant", content:"Error al conectar."}]);
+ const sendMsg = async () => {
+  const txt = input.trim();
+  if (!txt || loading) return;
+  
+  const newMsgs = [...messages, {role:"user", content:txt}];
+  setMessages(newMsgs); 
+  setInput(""); 
+  setLoading(true);
+  
+  // ============================================
+  // PERSISTENCIA: obtener sesión actual de Supabase
+  // ============================================
+  let conversacionId = conversacionActual;
+  const sesionResult = await getSession();
+  const sesionActiva = sesionResult.ok ? sesionResult.session : null;
+  
+  if (!conversacionId && currentUser && sesionActiva) {
+    // Es el primer mensaje de una nueva conversación
+    const titulo = generarTituloDesdeMensaje(txt);
+    const crearResult = await crearConversacion(sesionActiva.user.id, titulo, modo);
+    
+    if (crearResult.ok) {
+      conversacionId = crearResult.conversacion.id;
+      setConversacionActual(conversacionId);
+      // Agregar la nueva conversación al inicio de la lista
+      setConversaciones(prev => [crearResult.conversacion, ...prev]);
+    } else {
+      console.error("Error al crear conversación:", crearResult.error);
     }
-    setLoading(false);
-  };
+  }
+  
+  // Guardar mensaje del usuario en Supabase
+  if (conversacionId && sesionActiva) {
+    await agregarMensaje(conversacionId, sesionActiva.user.id, "usuario", txt, modo);
+  }
+  
+  // ============================================
+  // LÓGICA ORIGINAL DEL CHAT
+  // ============================================
+  const videosRelevantes = buscarVideosRelevantes(txt);
+  const docsRelevantes = buscarEnConocimiento(txt, conocimiento, 3);
+  const tieneFuentes = docsRelevantes.length > 0;
+  const consultaCirugias = buscarCirugiasRelevantes(txt);
+  const consultaPacientes = buscarPacientesRelevantes(txt);
+
+  try {
+    const modoIns = modo === "precisa" ? "\n\nMODO PRECISA: máximo 3-4 líneas, sin advertencia." : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
+    let ctx = "";
+    if (tieneFuentes) {
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo} ---\n${d.contenido.slice(0,3000)}`).join("\n\n");
+    }
+    if (consultaCirugias) {
+      ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
+      if (consultaCirugias.cirugias.length === 0) {
+        ctx += `No hay cirugías programadas en este rango.`;
+      } else {
+        ctx += consultaCirugias.cirugias.map(c => `- ${c.fecha} ${c.hora} | ${c.iniciales}${c.edad?` (${c.edad}a)`:""} | ${c.procedimiento}${c.lateralidad?` (${c.lateralidad})`:""} | Cirujano: ${c.cirujano} | Pabellón ${c.pabellon} | Estado: ${c.estado}`).join("\n");
+      }
+    }
+    if (consultaPacientes) {
+      ctx += "\n\n=== PACIENTES DEL USUARIO ===\nEl usuario está preguntando sobre sus pacientes. Responde con detalle. ";
+      if (consultaPacientes.ningun) {
+        ctx += "El usuario no tiene pacientes registrados aún.";
+      } else if (consultaPacientes.pacientes.length === 0) {
+        ctx += `El usuario tiene ${consultaPacientes.totalMisPacientes} pacientes en total, pero ninguno coincide con los filtros aplicados a la consulta.`;
+      } else {
+        ctx += `Total de pacientes del usuario: ${consultaPacientes.totalMisPacientes}. Coinciden con la consulta: ${consultaPacientes.pacientes.length}.\n\nDETALLE DE PACIENTES:\n`;
+        ctx += consultaPacientes.pacientes.map(p => {
+          let detalle = `- ${p.iniciales} (${p.edad}a ${p.sexo}) | Cama ${p.cama} | Servicio: ${p.servicio} | Estado: ${p.estado === "activo" ? "Hospitalizado" : "Alta"} | Ingreso: ${p.fechaIngreso}\n  Diagnóstico: ${p.diagnostico}`;
+          if (p.planManejo) detalle += `\n  Plan: ${p.planManejo}`;
+          if (p.evoluciones.length > 0) {
+            detalle += `\n  Última evolución (${p.evoluciones[0].fecha}): ${p.evoluciones[0].texto.slice(0,200)}${p.evoluciones[0].texto.length > 200 ? "..." : ""}`;
+          }
+          if (p.examenes.length > 0) {
+            detalle += `\n  Exámenes: ${p.examenes.slice(0,3).map(ex => `${ex.tipo} ${ex.nombre} (${ex.fecha})`).join(", ")}`;
+          }
+          return detalle;
+        }).join("\n\n");
+      }
+    }
+    const sysPrompt = SYSTEM_PROMPT + modoIns + ctx;
+    const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
+    const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 1500,
+        system: sysPrompt,
+        messages: apiMsgs,
+      }),
+    });
+    const data = await res.json();
+    const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
+    const respuesta = { role:"assistant", content:reply };
+    if (videosRelevantes.length > 0) respuesta.videos = videosRelevantes;
+    if (tieneFuentes) respuesta.fuentes = docsRelevantes.map(d => ({id:d.id, titulo:d.titulo, categoria:d.categoria}));
+    if (consultaCirugias && consultaCirugias.cirugias.length > 0) respuesta.cirugiasConsulta = { rango: consultaCirugias.rango, cantidad: consultaCirugias.cirugias.length };
+    if (consultaPacientes && !consultaPacientes.ningun && consultaPacientes.pacientes.length > 0) respuesta.pacientesConsulta = { cantidad: consultaPacientes.pacientes.length };
+    
+    setMessages(prev => [...prev, respuesta]);
+    
+    // ============================================
+    // PERSISTENCIA: guardar respuesta de Claude
+    // ============================================
+    if (conversacionId && sesionActiva) {
+      await agregarMensaje(conversacionId, sesionActiva.user.id, "asistente", reply, modo);
+      setConversaciones(prev => {
+        const actualizada = prev.map(c => 
+          c.id === conversacionId 
+            ? {...c, fecha_actualizacion: new Date().toISOString()} 
+            : c
+        );
+        return actualizada.sort((a, b) => 
+          new Date(b.fecha_actualizacion) - new Date(a.fecha_actualizacion)
+        );
+      });
+    }
+  } catch(e) {
+    setMessages(prev => [...prev, {role:"assistant", content:"Error al conectar."}]);
+  }
+  setLoading(false);
+};
 
   const generarMapa = async (tema) => {
     if (!tema) return;
@@ -2525,10 +2828,64 @@ if (!currentUser) {
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
-        <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:420}}>
-          <div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:320,maxHeight:400}}>
-            {messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"40px 16px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>Como admin puedes usar el chat. Escribe una consulta.</div>}
-            {messages.map((m,i) => <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>)}
+  <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:420, position:"relative"}}>
+    {panelConversacionesAbierto && currentUser?.rol !== "admin" && (
+      <PanelConversaciones
+        conversaciones={conversaciones}
+        conversacionActual={conversacionActual}
+        onSeleccionar={abrirConversacion}
+        onNueva={nuevaConversacion}
+        onEliminar={eliminarConv}
+        onCerrar={() => setPanelConversacionesAbierto(false)}
+      />
+    )}
+          {/* Barra superior con botón de conversaciones */}
+{!isAdmin && (
+  <div style={{padding:"8px 12px", borderBottom:"0.5px solid #e8f3fb", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#f8fbfd"}}>
+    <button 
+      onClick={() => setPanelConversacionesAbierto(!panelConversacionesAbierto)}
+      style={{
+        background:"#fff",
+        border:"0.5px solid #b8d8ef",
+        color:"#1a6fb5",
+        fontSize:12,
+        padding:"5px 12px",
+        borderRadius:6,
+        cursor:"pointer",
+        display:"flex",
+        alignItems:"center",
+        gap:6,
+        fontWeight:500,
+      }}
+      title="Mis conversaciones"
+    >
+      ☰ Conversaciones {conversaciones.length > 0 && `(${conversaciones.length})`}
+    </button>
+    {conversacionActual && (
+      <button
+        onClick={nuevaConversacion}
+        style={{
+          background:"#fff",
+          border:"0.5px solid #b8d8ef",
+          color:"#1a6fb5",
+          fontSize:11,
+          padding:"5px 10px",
+          borderRadius:6,
+          cursor:"pointer",
+          fontWeight:500,
+        }}
+      >+ Nueva</button>
+    )}
+  </div>
+)}
+<div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:320,maxHeight:400}}>
+  {loadingConversaciones && (
+    <div style={{textAlign:"center",padding:"40px 16px",color:"#7aa3c4",fontSize:13}}>
+      Cargando conversación...
+    </div>
+  )}
+  {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"40px 16px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>Como admin puedes usar el chat. Escribe una consulta.</div>}
+  {!loadingConversaciones && messages.map((m,i) => <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>)}
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <div style={{width:30,height:30,borderRadius:"50%",background:"#1a6fb5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"#fff"}}>U</div>
