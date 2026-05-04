@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
+import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
@@ -954,7 +955,7 @@ function CirugiasBiblioteca() {
   );
 }
 
-function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen }) {
+function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
   const [subTab, setSubTab] = useState("mapas");
   const tabsConocimiento = [["mapas","🗺 Mapas"],["videos","🎬 Videos"],["cirugias","🔪 Cirugías"]];
   if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
@@ -968,39 +969,123 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, videos, setVi
       </div>
 
       {subTab === "mapas" && (
-        <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:10}}>Mapas precargados</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>
-              {TOPICS.map(t => (
-                <div key={t.id}>
-                  <button onClick={() => setTopicOpen(topicOpen===t.id ? null : t.id)} style={{width:"100%",padding:"8px 10px",fontSize:12,fontWeight:500,textAlign:"left",background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,color:"#1a3a5c",cursor:"pointer",borderBottomLeftRadius:topicOpen===t.id?0:8,borderBottomRightRadius:topicOpen===t.id?0:8}}>{t.label} {topicOpen===t.id ? "▲" : "▼"}</button>
-                  {topicOpen===t.id && (
-                    <div style={{border:"0.5px solid #b8d8ef",borderTop:"none",borderRadius:"0 0 8px 8px",overflow:"hidden",background:"#fff"}}>
-                      {t.subtopics.map(s => <button key={s} onClick={() => { generarMapa(s); setTopicOpen(null); }} style={{display:"block",width:"100%",padding:"7px 12px",fontSize:12,textAlign:"left",background:"#fff",border:"none",borderTop:"0.5px solid #e8f3fb",color:"#4a7eab",cursor:"pointer"}}>{s}</button>)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+  <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
+    {/* MAPAS PRECARGADOS */}
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:10}}>Mapas precargados</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>
+        {TOPICS.map(t => (
+          <div key={t.id}>
+            <button onClick={() => setTopicOpen(topicOpen===t.id ? null : t.id)} style={{width:"100%",padding:"8px 10px",fontSize:12,fontWeight:500,textAlign:"left",background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,color:"#1a3a5c",cursor:"pointer",borderBottomLeftRadius:topicOpen===t.id ? 0 : 8,borderBottomRightRadius:topicOpen===t.id ? 0 : 8}}>{t.label} {topicOpen===t.id ? "▲" : "▼"}</button>
+            {topicOpen===t.id && (
+              <div style={{border:"0.5px solid #b8d8ef",borderTop:"none",borderRadius:"0 0 8px 8px",overflow:"hidden",background:"#fff"}}>
+                {t.subtopics.map(s => <button key={s} onClick={() => { generarMapa(s); setTopicOpen(null); }} style={{display:"block",width:"100%",padding:"7px 12px",fontSize:12,textAlign:"left",background:"#fff",border:"none",borderTop:"0.5px solid #e8f3fb",color:"#4a7eab",cursor:"pointer"}}>{s}</button>)}
+              </div>
+            )}
           </div>
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Generar mapa con IA</div>
-            <div style={{display:"flex",gap:8}}>
-              <input value={mapaTema} onChange={e=>setMapaTema(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")generarMapa(mapaTema);}} placeholder="Ej: Hematuria macroscópica..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none"}}/>
-              <button onClick={()=>generarMapa(mapaTema)} disabled={mapaLoading||!mapaTema.trim()} style={{padding:"9px 14px",borderRadius:8,border:"none",background:mapaLoading||!mapaTema.trim()?"#cdddec":"#1a6fb5",color:"#fff",fontSize:13,cursor:mapaLoading||!mapaTema.trim()?"default":"pointer",fontWeight:500}}>{mapaLoading ? "Generando..." : "Generar ↗"}</button>
-            </div>
-          </div>
-          {mapaLoading && <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>Generando mapa...</div>}
-          {mapaActual && !mapaLoading && (
-            <div style={{border:"0.5px solid #b8d8ef",borderRadius:12,overflow:"hidden",background:"#fff"}}>
-              <div style={{padding:"10px 14px",borderBottom:"0.5px solid #b8d8ef",fontSize:13,fontWeight:500,color:"#1a3a5c",background:"#f0f8fd"}}>{mapaActual.titulo}</div>
-              <MapaConceptual data={mapaActual}/>
-            </div>
-          )}
-          {!mapaActual && !mapaLoading && <div style={{textAlign:"center",padding:"32px 0",color:"#7aa3c4",fontSize:13}}>Selecciona un tema o escribe uno</div>}
+        ))}
+      </div>
+    </div>
+
+    {/* GENERAR MAPA CON IA */}
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Generar mapa con IA</div>
+      <div style={{display:"flex",gap:8}}>
+        <input value={mapaTema} onChange={e=>setMapaTema(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")generarMapa(mapaTema);}} placeholder="Ej: Hematuria macroscópica..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none"}}/>
+        <button onClick={()=>generarMapa(mapaTema)} disabled={mapaLoading||!mapaTema.trim()} style={{padding:"9px 14px",borderRadius:8,border:"none",background:mapaLoading||!mapaTema.trim()?"#cdddec":"#1a6fb5",color:"#fff",fontSize:13,cursor:mapaLoading||!mapaTema.trim()?"default":"pointer",fontWeight:500}}>{mapaLoading ? "Generando..." : "Generar ↗"}</button>
+      </div>
+    </div>
+
+    {mapaLoading && <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>Generando mapa...</div>}
+
+    {/* MAPA ACTUAL CON BOTÓN DE GUARDAR */}
+    {mapaActual && !mapaLoading && (
+      <div style={{border:"0.5px solid #b8d8ef",borderRadius:12,overflow:"hidden",background:"#fff",marginBottom:16}}>
+        <div style={{padding:"10px 14px",borderBottom:"0.5px solid #b8d8ef",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f0f8fd",gap:10}}>
+          <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c"}}>{mapaActual.titulo}</div>
+          <button 
+            onClick={onGuardarMapa} 
+            disabled={guardandoMapa}
+            style={{
+              padding:"5px 12px",
+              fontSize:11,
+              fontWeight:500,
+              background: guardandoMapa ? "#cdddec" : "#1a6fb5",
+              color:"#fff",
+              border:"none",
+              borderRadius:6,
+              cursor: guardandoMapa ? "default" : "pointer",
+              whiteSpace:"nowrap"
+            }}
+          >
+            {guardandoMapa ? "Guardando..." : "💾 Guardar mapa"}
+          </button>
         </div>
-      )}
+        <MapaConceptual data={mapaActual}/>
+      </div>
+    )}
+
+    {!mapaActual && !mapaLoading && <div style={{textAlign:"center",padding:"32px 0",color:"#7aa3c4",fontSize:13}}>Selecciona un tema o escribe uno</div>}
+
+    {/* MIS MAPAS GUARDADOS */}
+    {mapasGuardados && mapasGuardados.length > 0 && (
+      <div style={{marginTop:24, paddingTop:16, borderTop:"0.5px solid #b8d8ef"}}>
+        <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:10}}>
+          Mis mapas guardados ({mapasGuardados.length})
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
+          {mapasGuardados.map(mapa => (
+            <div 
+              key={mapa.id}
+              style={{
+                background:"#fff",
+                border:"0.5px solid #b8d8ef",
+                borderRadius:8,
+                padding:"10px 12px",
+                position:"relative",
+              }}
+            >
+              <button
+                onClick={() => onCargarMapaGuardado(mapa)}
+                style={{
+                  width:"100%",
+                  background:"none",
+                  border:"none",
+                  padding:0,
+                  textAlign:"left",
+                  cursor:"pointer",
+                  paddingRight:24,
+                }}
+              >
+                <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c",marginBottom:3, lineHeight:1.3}}>
+                  {mapa.titulo}
+                </div>
+                <div style={{fontSize:10,color:"#7aa3c4"}}>
+                  {new Date(mapa.fecha_creacion).toLocaleDateString("es-CL")}
+                </div>
+              </button>
+              <button
+                onClick={() => onEliminarMapa(mapa.id)}
+                style={{
+                  position:"absolute",
+                  top:6,
+                  right:6,
+                  background:"none",
+                  border:"none",
+                  color:"#c0392b",
+                  fontSize:13,
+                  cursor:"pointer",
+                  padding:2,
+                }}
+                title="Eliminar mapa"
+              >🗑</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
       {subTab === "videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
@@ -2299,6 +2384,8 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
   const [mapaTema, setMapaTema] = useState("");
   const [mapaActual, setMapaActual] = useState(null);
   const [mapaLoading, setMapaLoading] = useState(false);
+  const [mapasGuardados, setMapasGuardados] = useState([]);
+const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const bottomRef = useRef(null);
@@ -2387,6 +2474,7 @@ const eliminarConv = async (conversacionId) => {
   setMenuOpen(false);
   setMapaActual(null);
   setMapaTema("");
+  setMapasGuardados([]);
 };
 // Abrir una conversación existente (cargar sus mensajes)
 const abrirConversacion = async (conversacionId) => {
@@ -2482,7 +2570,11 @@ const convResult = await listarConversaciones();
 if (convResult.ok) {
   setConversaciones(convResult.conversaciones);
 }
-
+// Cargar mapas guardados del usuario
+const mapasResult = await listarMapas();
+if (mapasResult.ok) {
+  setMapasGuardados(mapasResult.mapas);
+}
 // Si no hay conversaciones, mostrar mensaje de bienvenida
 if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.length === 0)) {
   setMessages([{ role:"assistant", content:`Hola ${perfil.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` }]);
@@ -2761,7 +2853,56 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     }
     setMapaLoading(false);
   };
+// Guardar el mapa actual en Supabase
+const handleGuardarMapa = async () => {
+  if (!mapaActual) return;
+  
+  setGuardandoMapa(true);
+  
+  // Obtener sesión actual
+  const sesionResult = await getSession();
+  if (!sesionResult.ok || !sesionResult.session) {
+    alert("Error: no se pudo obtener tu sesión");
+    setGuardandoMapa(false);
+    return;
+  }
+  
+  const result = await guardarMapa(
+    sesionResult.session.user.id,
+    mapaActual.titulo,
+    mapaTema || mapaActual.titulo,
+    mapaActual
+  );
+  
+  if (result.ok) {
+    // Agregar al inicio de la lista local
+    setMapasGuardados(prev => [result.mapa, ...prev]);
+    alert("✓ Mapa guardado correctamente");
+  } else {
+    alert("Error al guardar el mapa: " + result.error);
+  }
+  
+  setGuardandoMapa(false);
+};
 
+// Eliminar un mapa guardado
+const handleEliminarMapa = async (mapaId) => {
+  if (!confirm("¿Eliminar este mapa?\n\nNo podrás recuperarlo después.")) return;
+  
+  const result = await eliminarMapa(mapaId);
+  if (!result.ok) {
+    alert("Error al eliminar: " + result.error);
+    return;
+  }
+  
+  setMapasGuardados(prev => prev.filter(m => m.id !== mapaId));
+};
+
+// Cargar un mapa guardado en la vista
+const cargarMapaGuardado = (mapa) => {
+  setMapaActual(mapa.contenido);
+  setMapaTema(mapa.tema || mapa.titulo);
+};
   // Pantalla de carga mientras se verifica la sesión inicial
 if (loadingSession) {
   return (
@@ -2824,7 +2965,7 @@ if (!currentUser) {
 
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} serviciosUsuario={serviciosUsuario} setServiciosUsuario={setServiciosUsuario} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitaciones={invitaciones} setInvitaciones={setInvitaciones} users={users}/>}
-      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen}/>}
+      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
