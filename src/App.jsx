@@ -47,7 +47,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.3.0 (beta)";
+const VERSION = "v0.4.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
@@ -2906,7 +2906,7 @@ const cargarMapaGuardado = (mapa) => {
   // Pantalla de carga mientras se verifica la sesión inicial
 if (loadingSession) {
   return (
-    <div style={{fontFamily:"var(--font-sans)",minHeight:540,background:"#e8f3fb",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{textAlign:"center",color:"#4a7eab",fontSize:14}}>
         <LogoUroSearch size={60}/>
         <div style={{marginTop:16}}>Cargando UroSearch...</div>
@@ -2917,7 +2917,7 @@ if (loadingSession) {
 
 if (!currentUser) {
   return (
-    <div style={{fontFamily:"var(--font-sans)",minHeight:540,background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
+    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
       <AuthScreen/>
     </div>
   );
@@ -2928,7 +2928,7 @@ if (!currentUser) {
     : [["chat","💬 Chat"],["hospital","🏥 Hospital"],["conocimiento","📖 Biblioteca"]];
 
   return (
-    <div style={{fontFamily:"var(--font-sans)",minHeight:540,display:"flex",flexDirection:"column",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
+    <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
       <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid #b8d8ef",background:"#d0e9f8",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -2969,7 +2969,7 @@ if (!currentUser) {
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
-  <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:420, position:"relative"}}>
+  <div style={{display:"flex",flexDirection:"column",flex:1,minHeight:0, position:"relative"}}>
     {panelConversacionesAbierto && currentUser?.rol !== "admin" && (
       <PanelConversaciones
         conversaciones={conversaciones}
@@ -3019,7 +3019,7 @@ if (!currentUser) {
     )}
   </div>
 )}
-<div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:320,maxHeight:400}}>
+<div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:0}}>
   {loadingConversaciones && (
     <div style={{textAlign:"center",padding:"40px 16px",color:"#7aa3c4",fontSize:13}}>
       Cargando conversación...
