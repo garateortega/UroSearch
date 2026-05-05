@@ -1364,7 +1364,10 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
 
 // Componente selector de contexto (mío vs equipo)
 function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrirEquipos }) {
-  const misEquipos = equipos.filter(e => e.miembros.includes(currentUser.correo));
+  const misEquipos = equipos.filter(e => 
+    e.dueno_id === currentUser.id || 
+    e.miembros_equipo?.some(m => m.user_id === currentUser.id)
+  );
   return (
     <div style={{padding:"8px 14px",background:"#fff",borderBottom:"0.5px solid #b8d8ef",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
       <span style={{fontSize:11,color:"#7aa3c4",marginRight:4}}>Viendo:</span>
@@ -1985,7 +1988,7 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, serviciosUsuario
   const misServicios = (serviciosUsuario && serviciosUsuario[currentUser.correo]) || [];
   const necesitaConfig = !esEquipo && misServicios.length === 0;
   // Para equipos, usar los servicios del dueño (o agrupados de todos los miembros)
-  const serviciosVista = esEquipo ? Array.from(new Set(equipoActual.miembros.flatMap(m => (serviciosUsuario && serviciosUsuario[m]) || []))) : misServicios;
+  const serviciosVista = esEquipo ? Array.from(new Set((equipoActual.miembros_equipo || []).flatMap(m => (serviciosUsuario && serviciosUsuario[m.user_id]) || []))) : misServicios;
 
   const [nuevoForm, setNuevoForm] = useState({ iniciales:"", edad:"", sexo:"M", cama:"", servicio: "Urología", diagnostico:"", planManejo:"", fechaIngreso: new Date().toISOString().split("T")[0] });
   const [evolucionTexto, setEvolucionTexto] = useState("");
