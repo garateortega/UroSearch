@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
-
+import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
   { id: "derivacion", label: "Derivaciones urinarias", subtopics: ["Nefrostomía percutánea", "Catéter ureteral", "Cistostomía", "Conducto ileal"] },
@@ -1114,79 +1114,122 @@ const SERVICIOS_SUGERIDOS = ["Medicina", "Urología", "Cirugía", "UTI", "UCI", 
 const PENDIENTES_SUGERIDOS = ["Pasar visita", "Revisar exámenes", "Llamar a familia", "Solicitar interconsulta", "Programar pabellón", "Indicar alta", "Revisar imágenes", "Curación de catéter", "Cambio de Foley", "Retirar drenaje", "Control de signos vitales", "Solicitar urocultivo"];
 
 // ---------- EQUIPOS ----------
-function EquiposPanel({ equipos, setEquipos, invitaciones, setInvitaciones, currentUser, users, pacientes, setPacientes, tablaCirugias, setTablaCirugias, pendientes, setPendientes, onCerrar }) {
-  const [vista, setVista] = useState("lista"); // lista | nuevo | detalle
+function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, currentUser, onCerrar }) {
+  const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
+  const [miembros, setMiembros] = useState([]);
+  const [invitacionesEquipo, setInvitacionesEquipo] = useState([]);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoDescripcion, setNuevoDescripcion] = useState("");
   const [invitarCorreo, setInvitarCorreo] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const misEquipos = equipos.filter(e => e.miembros.includes(currentUser.correo));
-  const misInvitaciones = invitaciones.filter(i => i.invitado === currentUser.correo && i.estado === "pendiente");
+  const recargarEquipos = async () => {
+    const result = await listarMisEquipos();
+    if (result.ok) setEquipos(result.equipos);
+  };
 
-  const crearEquipo = () => {
+  const recargarMiembros = async (equipoId) => {
+    const result = await listarMiembros(equipoId);
+    if (result.ok) setMiembros(result.miembros);
+    const invResult = await listarInvitacionesEquipo(equipoId);
+    if (invResult.ok) setInvitacionesEquipo(invResult.invitaciones);
+  };
+
+  const abrirDetalle = async (equipo) => {
+    setSeleccionado(equipo);
+    setVista("detalle");
+    await recargarMiembros(equipo.id);
+  };
+
+  const crearEquipoHandler = async () => {
     setError("");
     if (!nuevoNombre.trim()) return setError("Ingresa un nombre");
-    const nuevo = { id: "eq" + Date.now(), nombre: nuevoNombre, descripcion: nuevoDescripcion, dueño: currentUser.correo, miembros: [currentUser.correo], fechaCreacion: new Date().toISOString().split("T")[0] };
-    setEquipos([...equipos, nuevo]);
-    setNuevoNombre(""); setNuevoDescripcion("");
+    setLoading(true);
+    const sesionResult = await getSession();
+    if (!sesionResult.ok || !sesionResult.session) {
+      setError("Error de sesión");
+      setLoading(false);
+      return;
+    }
+    const result = await crearEquipo(sesionResult.session.user.id, nuevoNombre, nuevoDescripcion);
+    setLoading(false);
+    if (!result.ok) return setError(result.error);
+    await recargarEquipos();
+    setNuevoNombre("");
+    setNuevoDescripcion("");
     setVista("lista");
   };
 
-  const invitar = () => {
+  const invitar = async () => {
     setError("");
     const correo = invitarCorreo.trim().toLowerCase();
     if (!correo) return setError("Ingresa un correo");
-    const userInvitado = users.find(u => u.correo.toLowerCase() === correo && u.estado === "aprobado");
-    if (!userInvitado && correo !== ADMIN_ACCOUNT.correo) return setError("Usuario no encontrado o no aprobado");
-    if (seleccionado.miembros.includes(correo)) return setError("Ese usuario ya es miembro");
-    if (invitaciones.some(i => i.equipoId === seleccionado.id && i.invitado === correo && i.estado === "pendiente")) return setError("Ya hay una invitación pendiente para ese usuario");
-    const inv = { id: "inv" + Date.now(), equipoId: seleccionado.id, equipoNombre: seleccionado.nombre, invitado: correo, invitadoPor: currentUser.nombre, estado: "pendiente", fecha: new Date().toISOString().split("T")[0] };
-    setInvitaciones([...invitaciones, inv]);
+    setLoading(true);
+    const userResult = await buscarUsuarioPorCorreo(correo);
+    if (!userResult.ok) {
+      setLoading(false);
+      return setError(userResult.error);
+    }
+    if (userResult.usuario.estado !== "aprobado") {
+      setLoading(false);
+      return setError("Ese usuario aún no está aprobado en UroSearch");
+    }
+    if (miembros.some(m => m.user_id === userResult.usuario.id)) {
+      setLoading(false);
+      return setError("Ese usuario ya es miembro");
+    }
+    if (invitacionesEquipo.some(i => i.invitado_id === userResult.usuario.id)) {
+      setLoading(false);
+      return setError("Ya hay una invitación pendiente para ese usuario");
+    }
+    const sesionResult = await getSession();
+    const result = await crearInvitacion(seleccionado.id, userResult.usuario.id, sesionResult.session.user.id);
+    setLoading(false);
+    if (!result.ok) return setError(result.error);
     setInvitarCorreo("");
+    await recargarMiembros(seleccionado.id);
   };
 
-  const expulsar = (correo) => {
-    if (correo === seleccionado.dueño) return alert("No puedes expulsar al dueño del equipo");
+  const expulsar = async (userId) => {
     if (!confirm("¿Expulsar a este miembro del equipo?")) return;
-    const actualizado = {...seleccionado, miembros: seleccionado.miembros.filter(m => m !== correo)};
-    setEquipos(equipos.map(e => e.id === seleccionado.id ? actualizado : e));
-    setSeleccionado(actualizado);
+    const result = await expulsarMiembro(seleccionado.id, userId);
+    if (!result.ok) return alert("Error: " + result.error);
+    await recargarMiembros(seleccionado.id);
   };
 
-  const aceptarInvitacion = (inv) => {
-    const equipo = equipos.find(e => e.id === inv.equipoId);
-    if (!equipo) return;
-    setEquipos(equipos.map(e => e.id === equipo.id ? {...e, miembros: [...e.miembros, currentUser.correo]} : e));
-    setInvitaciones(invitaciones.map(i => i.id === inv.id ? {...i, estado: "aceptada"} : i));
+  const aceptar = async (inv) => {
+    const sesionResult = await getSession();
+    const result = await aceptarInvitacion(inv.id, inv.equipo_id, sesionResult.session.user.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setInvitacionesPendientes(prev => prev.filter(i => i.id !== inv.id));
+    await recargarEquipos();
   };
 
-  const rechazarInvitacion = (inv) => {
-    setInvitaciones(invitaciones.map(i => i.id === inv.id ? {...i, estado: "rechazada"} : i));
+  const rechazar = async (inv) => {
+    const result = await rechazarInvitacion(inv.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setInvitacionesPendientes(prev => prev.filter(i => i.id !== inv.id));
   };
 
-  const salirEquipo = (equipo) => {
-    if (equipo.dueño === currentUser.correo) return alert("Como dueño no puedes salir, debes eliminar el equipo");
+  const salir = async (equipo) => {
+    if (equipo.dueno_id === currentUser.id) return alert("Como dueño no puedes salir, debes eliminar el equipo");
     if (!confirm("¿Salir del equipo?")) return;
-    setEquipos(equipos.map(e => e.id === equipo.id ? {...e, miembros: e.miembros.filter(m => m !== currentUser.correo)} : e));
+    const result = await salirDelEquipo(equipo.id, currentUser.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    await recargarEquipos();
+    setSeleccionado(null);
+    setVista("lista");
   };
 
-  const eliminarEquipo = (equipo) => {
-    if (equipo.dueño !== currentUser.correo) return;
-    if (!confirm(`¿Eliminar definitivamente "${equipo.nombre}"? Los pacientes, cirugías y pendientes del equipo quedarán sin propietario.`)) return;
-    setEquipos(equipos.filter(e => e.id !== equipo.id));
-    // Limpiar referencias
-    setPacientes(pacientes.filter(p => p.equipoId !== equipo.id));
-    setTablaCirugias(tablaCirugias.filter(c => c.equipoId !== equipo.id));
-    setPendientes(pendientes.filter(p => p.equipoId !== equipo.id));
-    if (seleccionado?.id === equipo.id) { setSeleccionado(null); setVista("lista"); }
-  };
-
-  const nombreUsuario = (correo) => {
-    if (correo === ADMIN_ACCOUNT.correo) return ADMIN_ACCOUNT.nombre;
-    const u = users.find(u => u.correo === correo);
-    return u ? u.nombre : correo;
+  const eliminarEquipoHandler = async (equipo) => {
+    if (!confirm(`¿Eliminar definitivamente "${equipo.nombre}"?\n\nEsto borrará el equipo, sus miembros y sus invitaciones.`)) return;
+    const result = await eliminarEquipo(equipo.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    await recargarEquipos();
+    setSeleccionado(null);
+    setVista("lista");
   };
 
   // VISTA: NUEVO EQUIPO
@@ -1196,40 +1239,47 @@ function EquiposPanel({ equipos, setEquipos, invitaciones, setInvitaciones, curr
         <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Crear nuevo equipo</div>
         <label style={labelStyle}>Nombre del equipo</label>
-        <input value={nuevoNombre} onChange={e=>setNuevoNombre(e.target.value)} placeholder="Ej: Equipo Urología HBV" style={inputStyle}/>
+        <input value={nuevoNombre} onChange={e=>setNuevoNombre(e.target.value)} placeholder="Ej: Equipo Urología HBV" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Descripción (opcional)</label>
-        <textarea value={nuevoDescripcion} onChange={e=>setNuevoDescripcion(e.target.value)} placeholder="Para qué se usará este equipo" rows={3} style={{...inputStyle,resize:"none"}}/>
+        <textarea value={nuevoDescripcion} onChange={e=>setNuevoDescripcion(e.target.value)} placeholder="Para qué se usará este equipo" rows={3} style={{...inputStyle,resize:"none"}} disabled={loading}/>
         {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
-        <button onClick={crearEquipo} style={{...btnPrimary, marginTop:0}}>Crear equipo</button>
+        <button onClick={crearEquipoHandler} disabled={loading} style={{...btnPrimary, marginTop:0, opacity: loading ? 0.6 : 1}}>{loading ? "Creando..." : "Crear equipo"}</button>
       </div>
     );
   }
 
-  // VISTA: DETALLE DE EQUIPO
+  // VISTA: DETALLE
   if (vista === "detalle" && seleccionado) {
-    const esDueño = seleccionado.dueño === currentUser.correo;
+    const esDueño = seleccionado.dueno_id === currentUser.id;
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
         <button onClick={()=>{setVista("lista");setSeleccionado(null);setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a equipos</button>
         <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
           <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:4}}>{seleccionado.nombre}</div>
           {seleccionado.descripcion && <div style={{fontSize:12,color:"#4a7eab",marginBottom:6}}>{seleccionado.descripcion}</div>}
-          <div style={{fontSize:11,color:"#7aa3c4"}}>Creado: {seleccionado.fechaCreacion} · {seleccionado.miembros.length} miembros</div>
+          <div style={{fontSize:11,color:"#7aa3c4"}}>{miembros.length} miembros</div>
         </div>
 
         <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
           <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>👥 Miembros</div>
-          {seleccionado.miembros.map(m => (
-            <div key={m} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#f0f8fd",borderRadius:6,marginBottom:5}}>
-              <div>
-                <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c"}}>{nombreUsuario(m)}{m === seleccionado.dueño && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4}}>DUEÑO</span>}{m === currentUser.correo && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"#1a6f5c",color:"#fff",borderRadius:4}}>TÚ</span>}</div>
-                <div style={{fontSize:10,color:"#7aa3c4"}}>{m}</div>
+          {miembros.map(m => {
+            const perfil = m.perfiles;
+            return (
+              <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#f0f8fd",borderRadius:6,marginBottom:5}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c"}}>
+                    {perfil?.nombre || "Sin nombre"}
+                    {m.user_id === seleccionado.dueno_id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4}}>DUEÑO</span>}
+                    {m.user_id === currentUser.id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"#1a6f5c",color:"#fff",borderRadius:4}}>TÚ</span>}
+                  </div>
+                  <div style={{fontSize:10,color:"#7aa3c4"}}>{perfil?.correo}</div>
+                </div>
+                {esDueño && m.user_id !== currentUser.id && (
+                  <button onClick={()=>expulsar(m.user_id)} style={{padding:"4px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Expulsar</button>
+                )}
               </div>
-              {esDueño && m !== currentUser.correo && (
-                <button onClick={()=>expulsar(m)} style={{padding:"4px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Expulsar</button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {esDueño && (
@@ -1237,16 +1287,18 @@ function EquiposPanel({ equipos, setEquipos, invitaciones, setInvitaciones, curr
             <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>+ Invitar miembro</div>
             <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Solo puedes invitar usuarios ya aprobados en UroSearch</div>
             <div style={{display:"flex",gap:6}}>
-              <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}}/>
-              <button onClick={invitar} disabled={!invitarCorreo.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:invitarCorreo.trim()?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>Invitar</button>
+              <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}} disabled={loading}/>
+              <button onClick={invitar} disabled={!invitarCorreo.trim() || loading} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:invitarCorreo.trim() && !loading ?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>{loading ? "..." : "Invitar"}</button>
             </div>
             {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginTop:8}}>{error}</div>}
 
-            {invitaciones.filter(i => i.equipoId === seleccionado.id && i.estado === "pendiente").length > 0 && (
+            {invitacionesEquipo.length > 0 && (
               <div style={{marginTop:12}}>
                 <div style={{fontSize:11,fontWeight:500,color:"#7aa3c4",marginBottom:4}}>Invitaciones pendientes</div>
-                {invitaciones.filter(i => i.equipoId === seleccionado.id && i.estado === "pendiente").map(i => (
-                  <div key={i.id} style={{padding:"6px 10px",background:"#fff8e1",borderRadius:6,fontSize:11,color:"#8a6610",marginBottom:4}}>📨 {i.invitado}</div>
+                {invitacionesEquipo.map(i => (
+                  <div key={i.id} style={{padding:"6px 10px",background:"#fff8e1",borderRadius:6,fontSize:11,color:"#8a6610",marginBottom:4}}>
+                    📨 {i.perfiles?.nombre} ({i.perfiles?.correo})
+                  </div>
                 ))}
               </div>
             )}
@@ -1255,9 +1307,9 @@ function EquiposPanel({ equipos, setEquipos, invitaciones, setInvitaciones, curr
 
         <div style={{display:"flex",gap:6}}>
           {esDueño ? (
-            <button onClick={()=>eliminarEquipo(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar equipo</button>
+            <button onClick={()=>eliminarEquipoHandler(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar equipo</button>
           ) : (
-            <button onClick={()=>salirEquipo(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>Salir del equipo</button>
+            <button onClick={()=>salir(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>Salir del equipo</button>
           )}
         </div>
       </div>
@@ -1272,16 +1324,16 @@ function EquiposPanel({ equipos, setEquipos, invitaciones, setInvitaciones, curr
         <button onClick={onCerrar} style={{background:"none",border:"none",fontSize:18,color:"#7aa3c4",cursor:"pointer"}}>✕</button>
       </div>
 
-      {misInvitaciones.length > 0 && (
+      {invitacionesPendientes.length > 0 && (
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:500,color:"#a06b1a",marginBottom:6}}>📨 Invitaciones pendientes ({misInvitaciones.length})</div>
-          {misInvitaciones.map(inv => (
+          <div style={{fontSize:12,fontWeight:500,color:"#a06b1a",marginBottom:6}}>📨 Invitaciones pendientes ({invitacionesPendientes.length})</div>
+          {invitacionesPendientes.map(inv => (
             <div key={inv.id} style={{background:"#fff8e1",border:"0.5px solid #f0d896",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-              <div style={{fontSize:13,fontWeight:500,color:"#8a6610",marginBottom:2}}>{inv.equipoNombre}</div>
-              <div style={{fontSize:11,color:"#a06b1a",marginBottom:8}}>Invitado por {inv.invitadoPor}</div>
+              <div style={{fontSize:13,fontWeight:500,color:"#8a6610",marginBottom:2}}>{inv.equipos?.nombre}</div>
+              <div style={{fontSize:11,color:"#a06b1a",marginBottom:8}}>Invitado por {inv.invitador?.nombre}</div>
               <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>aceptarInvitacion(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aceptar</button>
-                <button onClick={()=>rechazarInvitacion(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Rechazar</button>
+                <button onClick={()=>aceptar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aceptar</button>
+                <button onClick={()=>rechazar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Rechazar</button>
               </div>
             </div>
           ))}
@@ -1290,18 +1342,18 @@ function EquiposPanel({ equipos, setEquipos, invitaciones, setInvitaciones, curr
 
       <button onClick={()=>setVista("nuevo")} style={{...btnPrimary, marginTop:0, marginBottom:14}}>+ Crear nuevo equipo</button>
 
-      {misEquipos.length === 0 ? (
+      {equipos.length === 0 ? (
         <div style={{textAlign:"center",padding:"30px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>No perteneces a ningún equipo.<br/>Crea uno o espera invitación.</div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {misEquipos.map(eq => (
-            <div key={eq.id} onClick={()=>{setSeleccionado(eq);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
+          {equipos.map(eq => (
+            <div key={eq.id} onClick={()=>abrirDetalle(eq)} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:10}}>
                 <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c"}}>{eq.nombre}</div>
-                {eq.dueño === currentUser.correo && <span style={{fontSize:9,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4,fontWeight:500}}>DUEÑO</span>}
+                {eq.dueno_id === currentUser.id && <span style={{fontSize:9,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4,fontWeight:500}}>DUEÑO</span>}
               </div>
               {eq.descripcion && <div style={{fontSize:11,color:"#4a7eab",marginBottom:4}}>{eq.descripcion}</div>}
-              <div style={{fontSize:10,color:"#7aa3c4"}}>{eq.miembros.length} miembros</div>
+              <div style={{fontSize:10,color:"#7aa3c4"}}>{eq.miembros_equipo?.length || 0} miembros</div>
             </div>
           ))}
         </div>
@@ -1325,7 +1377,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   );
 }
 
-function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, serviciosUsuario, setServiciosUsuario, pendientes, setPendientes, equipos, setEquipos, invitaciones, setInvitaciones, users }) {
+function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, serviciosUsuario, setServiciosUsuario, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
   const [subTab, setSubTab] = useState("pacientes");
   const [contexto, setContexto] = useState("personal");
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
@@ -1335,7 +1387,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
 
   if (mostrarEquipos) {
     return (
-      <EquiposPanel equipos={equipos} setEquipos={setEquipos} invitaciones={invitaciones} setInvitaciones={setInvitaciones} currentUser={currentUser} users={users} pacientes={pacientes} setPacientes={setPacientes} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} pendientes={pendientes} setPendientes={setPendientes} onCerrar={()=>setMostrarEquipos(false)}/>
+      <EquiposPanel equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} currentUser={currentUser} onCerrar={()=>setMostrarEquipos(false)}/>
     );
   }
 
@@ -2369,6 +2421,7 @@ export default function App() {
   const [serviciosUsuario, setServiciosUsuario] = useState({});
   const [pendientes, setPendientes] = useState([]);
   const [equipos, setEquipos] = useState([]);
+  const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
   const [invitaciones, setInvitaciones] = useState([]);
   const [playingVideo, setPlayingVideo] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
@@ -2475,6 +2528,7 @@ const eliminarConv = async (conversacionId) => {
   setMapaActual(null);
   setMapaTema("");
   setMapasGuardados([]);
+  setInvitacionesPendientes([]);
 };
 // Abrir una conversación existente (cargar sus mensajes)
 const abrirConversacion = async (conversacionId) => {
@@ -2555,12 +2609,13 @@ const cargarPerfil = async (sessionData) => {
   
   // Adaptar el perfil al formato que espera el resto del código
   const userAdaptado = {
-    nombre: perfil.nombre,
-    correo: perfil.correo,
-    especialidad: perfil.especialidad,
-    rol: perfil.rol,
-    estado: perfil.estado,
-  };
+  id: perfil.id,
+  nombre: perfil.nombre,
+  correo: perfil.correo,
+  especialidad: perfil.especialidad,
+  rol: perfil.rol,
+  estado: perfil.estado,
+};
   
   setCurrentUser(userAdaptado);
 setTab(perfil.rol === "admin" ? "admin" : "chat");
@@ -2574,6 +2629,17 @@ if (convResult.ok) {
 const mapasResult = await listarMapas();
 if (mapasResult.ok) {
   setMapasGuardados(mapasResult.mapas);
+}
+// Cargar equipos del usuario
+const equiposResult = await listarMisEquipos();
+if (equiposResult.ok) {
+  setEquipos(equiposResult.equipos);
+}
+
+// Cargar invitaciones pendientes
+const invitResult = await listarMisInvitaciones();
+if (invitResult.ok) {
+  setInvitacionesPendientes(invitResult.invitaciones);
 }
 // Si no hay conversaciones, mostrar mensaje de bienvenida
 if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.length === 0)) {
@@ -2964,7 +3030,7 @@ if (!currentUser) {
       </div>
 
       {tab==="admin" && isAdmin && <AdminPanel/>}
-      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} serviciosUsuario={serviciosUsuario} setServiciosUsuario={setServiciosUsuario} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitaciones={invitaciones} setInvitaciones={setInvitaciones} users={users}/>}
+      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} serviciosUsuario={serviciosUsuario} setServiciosUsuario={setServiciosUsuario} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
       {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
