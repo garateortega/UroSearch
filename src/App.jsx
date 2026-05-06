@@ -4,6 +4,7 @@ import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje
 import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
+import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
   { id: "derivacion", label: "Derivaciones urinarias", subtopics: ["Nefrostomía percutánea", "Catéter ureteral", "Cistostomía", "Conducto ileal"] },
@@ -48,7 +49,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.5.0 (beta)";
+const VERSION = "v0.6.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
@@ -1381,7 +1382,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   );
 }
 
-function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
+function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
   const [subTab, setSubTab] = useState("pacientes");
   const [contexto, setContexto] = useState("personal");
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
@@ -1404,96 +1405,167 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
         ))}
       </div>
       {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes}/>}
-      {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipoActual={equipoActual}/>}
-      {subTab === "pendientes" && <PendientesPanel pendientes={pendientes} setPendientes={setPendientes} currentUser={currentUser} contexto={contexto} equipoActual={equipoActual}/>}
+      {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias}/>}
+      {subTab === "pendientes" && <PendientesPanel pendientes={pendientes} setPendientes={setPendientes} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes}/>}
     </div>
   );
 }
 
 // ---------- PENDIENTES DEL DÍA ----------
-function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equipoActual }) {
-  const esEquipo = !!equipoActual;
-  const [nuevo, setNuevo] = useState("");
-  const [filtro, setFiltro] = useState("hoy");
-  const hoy = new Date().toISOString().split("T")[0];
-  const misPendientes = esEquipo
-    ? pendientes.filter(p => p.equipoId === equipoActual.id)
-    : pendientes.filter(p => p.userId === currentUser.correo && !p.equipoId);
+function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equipos, loadingPendientes, setLoadingPendientes }) {
+  const [nuevo, setNuevo] = useState({ texto: "", prioridad: "normal", fecha_objetivo: "" });
+  const [filtroEstado, setFiltroEstado] = useState("pendiente");
+  const [filtroPrioridad, setFiltroPrioridad] = useState("todas");
 
-  const agregar = (texto) => {
-    const t = texto.trim();
-    if (!t) return;
-    const nuevoP = { id: "pen" + Date.now() + Math.random().toString(36).slice(2,6), userId: currentUser.correo, userNombre: currentUser.nombre, equipoId: esEquipo ? equipoActual.id : null, texto: t, fecha: hoy, completado: false, fechaCreacion: new Date().toISOString() };
-    setPendientes([nuevoP, ...pendientes]);
-    setNuevo("");
+  const esEquipo = contexto !== "personal";
+  const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
+
+  const cargar = async () => {
+    setLoadingPendientes(true);
+    const result = await listarPendientes(currentUser.id, contexto);
+    setLoadingPendientes(false);
+    if (result.ok) setPendientes(result.pendientes);
   };
 
-  const toggle = (id) => {
-    setPendientes(pendientes.map(p => p.id === id ? {...p, completado: !p.completado, fechaCompletado: !p.completado ? new Date().toISOString() : null, completadoPor: !p.completado ? currentUser.nombre : null} : p));
-  };
+  useEffect(() => { cargar(); }, [contexto]);
 
-  const eliminar = (id) => setPendientes(pendientes.filter(p => p.id !== id));
+  // Sugerencias rápidas
+  const sugerencias = [
+    "Revisar exámenes de laboratorio",
+    "Llamar a familia",
+    "Solicitar interconsulta",
+    "Actualizar plan de manejo",
+    "Coordinar alta",
+    "Programar control",
+  ];
 
-  const filtrados = misPendientes.filter(p => {
-    if (filtro === "hoy") return p.fecha === hoy;
-    if (filtro === "pendientes") return !p.completado;
-    if (filtro === "completados") return p.completado;
+  const filtrados = pendientes.filter(p => {
+    if (filtroEstado !== "todos" && p.estado !== filtroEstado) return false;
+    if (filtroPrioridad !== "todas" && p.prioridad !== filtroPrioridad) return false;
     return true;
-  }).sort((a,b) => {
-    if (a.completado !== b.completado) return a.completado ? 1 : -1;
-    return new Date(b.fechaCreacion) - new Date(a.fechaCreacion);
   });
 
-  const counts = {
-    hoy: misPendientes.filter(p => p.fecha === hoy).length,
-    pendientes: misPendientes.filter(p => !p.completado).length,
-    completados: misPendientes.filter(p => p.completado).length
+  // ============================================================
+  // CRUD
+  // ============================================================
+
+  const guardar = async () => {
+    if (!nuevo.texto.trim()) return alert("Escribe algo");
+    const datos = {
+      autor_id: currentUser.id,
+      equipo_id: esEquipo ? contexto : null,
+      texto: nuevo.texto.trim(),
+      prioridad: nuevo.prioridad,
+      fecha_objetivo: nuevo.fecha_objetivo || null,
+    };
+    const result = await crearPendiente(datos);
+    if (!result.ok) return alert("Error: " + result.error);
+    setPendientes(prev => [result.pendiente, ...prev]);
+    setNuevo({ texto: "", prioridad: "normal", fecha_objetivo: "" });
+  };
+
+  const toggleCompletar = async (p) => {
+    const nuevoEstado = p.estado === "completado" ? "pendiente" : "completado";
+    const result = await actualizarPendiente(p.id, { estado: nuevoEstado });
+    if (!result.ok) return alert("Error: " + result.error);
+    setPendientes(prev => prev.map(x => x.id === p.id ? result.pendiente : x));
+  };
+
+  const eliminar = async (p) => {
+    if (!confirm("¿Eliminar este pendiente?")) return;
+    const result = await eliminarPendiente(p.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setPendientes(prev => prev.filter(x => x.id !== p.id));
+  };
+
+  const usarSugerencia = (texto) => {
+    setNuevo({...nuevo, texto});
   };
 
   return (
-    <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:2}}>✅ Pendientes del día</div>
-        <div style={{fontSize:11,color:"#4a7eab"}}>{counts.pendientes} pendientes · {counts.completados} completados</div>
+    <div style={{padding:"16px",overflowY:"auto"}}>
+      <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>
+        {esEquipo ? `📋 Pendientes - ${equipoActual?.nombre}` : "📋 Mis pendientes"}
       </div>
 
+      {/* Form */}
       <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px",marginBottom:14}}>
-        <div style={{fontSize:12,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Sugerencias rápidas</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
-          {PENDIENTES_SUGERIDOS.map(s => (
-            <button key={s} onClick={()=>agregar(s)} style={{padding:"5px 10px",fontSize:11,borderRadius:14,cursor:"pointer",border:"0.5px dashed #1a6fb5",background:"#fff",color:"#1a6fb5"}}>+ {s}</button>
-          ))}
+        <textarea value={nuevo.texto} onChange={e=>setNuevo({...nuevo,texto:e.target.value})} placeholder="¿Qué hay que hacer?" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+        
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+          <select value={nuevo.prioridad} onChange={e=>setNuevo({...nuevo,prioridad:e.target.value})} style={{...inputStyle,marginBottom:0}}>
+            <option value="alta">🔴 Alta</option>
+            <option value="normal">🟡 Normal</option>
+            <option value="baja">🟢 Baja</option>
+          </select>
+          <input type="date" value={nuevo.fecha_objetivo} onChange={e=>setNuevo({...nuevo,fecha_objetivo:e.target.value})} placeholder="Fecha objetivo" style={{...inputStyle,marginBottom:0}}/>
         </div>
-        <div style={{display:"flex",gap:6}}>
-          <input value={nuevo} onChange={e=>setNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregar(nuevo);}} placeholder="O escribe una tarea personalizada..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none"}}/>
-          <button onClick={()=>agregar(nuevo)} disabled={!nuevo.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:nuevo.trim()?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:nuevo.trim()?"pointer":"default"}}>Agregar</button>
+
+        <button onClick={guardar} disabled={!nuevo.texto.trim()} style={{...btnPrimary, marginTop:0, opacity: nuevo.texto.trim() ? 1 : 0.6}}>+ Agregar pendiente</button>
+
+        {/* Sugerencias */}
+        <div style={{marginTop:10}}>
+          <div style={{fontSize:10,color:"#7aa3c4",marginBottom:4}}>Sugerencias rápidas:</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {sugerencias.map(s => (
+              <button key={s} onClick={()=>usarSugerencia(s)} style={{padding:"3px 8px",fontSize:10,background:"#f0f8fd",border:"0.5px solid #b8d8ef",color:"#4a7eab",borderRadius:12,cursor:"pointer"}}>{s}</button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {[["hoy",`Hoy (${counts.hoy})`],["pendientes",`Pendientes (${counts.pendientes})`],["completados",`Completados (${counts.completados})`],["todos","Todos"]].map(([id,label]) => (
-          <button key={id} onClick={()=>setFiltro(id)} style={{padding:"5px 10px",fontSize:11,fontWeight:filtro===id?500:400,borderRadius:14,cursor:"pointer",border:filtro===id?"none":"0.5px solid #b8d8ef",background:filtro===id?"#1a6fb5":"#fff",color:filtro===id?"#fff":"#4a7eab"}}>{label}</button>
-        ))}
+      {/* Filtros */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#7aa3c4"}}>Filtrar:</span>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+          <option value="pendiente">Pendientes</option>
+          <option value="completado">Completados</option>
+          <option value="todos">Todos</option>
+        </select>
+        <select value={filtroPrioridad} onChange={e=>setFiltroPrioridad(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+          <option value="todas">Todas las prioridades</option>
+          <option value="alta">🔴 Alta</option>
+          <option value="normal">🟡 Normal</option>
+          <option value="baja">🟢 Baja</option>
+        </select>
+        <span style={{fontSize:11,color:"#7aa3c4",marginLeft:"auto"}}>{filtrados.length}</span>
       </div>
 
-      {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>{misPendientes.length === 0 ? "No tienes pendientes aún.\nUsa las sugerencias o escribe la tarea." : "No hay pendientes en esta categoría"}</div>
-      ) : (
+      {loadingPendientes && (
+        <div style={{textAlign:"center",padding:"20px",color:"#7aa3c4",fontSize:13}}>Cargando...</div>
+      )}
+
+      {!loadingPendientes && filtrados.length === 0 && (
+        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13}}>
+          No hay pendientes en este filtro
+        </div>
+      )}
+
+      {!loadingPendientes && filtrados.length > 0 && (
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {filtrados.map(p => (
-            <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"10px 12px",opacity:p.completado?0.55:1}}>
-              <div onClick={()=>toggle(p.id)} style={{width:20,height:20,borderRadius:5,border:p.completado?"none":"1.5px solid #b8d8ef",background:p.completado?"#1a6f5c":"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:13,color:"#fff"}}>{p.completado ? "✓" : ""}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,color:"#1a3a5c",textDecoration:p.completado?"line-through":"none",lineHeight:1.4}}>{p.texto}</div>
-                <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>
-                  {p.fecha === hoy ? "Hoy" : p.fecha}
-                  {esEquipo && p.userNombre && ` · creado por ${p.userNombre.split(" ")[0]}`}
-                  {p.completado && p.completadoPor && ` · completado por ${p.completadoPor.split(" ")[0]}`}
+          {filtrados.map(p => {
+            const colorPrioridad = p.prioridad === "alta" ? "#c0392b" : p.prioridad === "normal" ? "#a06b1a" : "#1a6f5c";
+            const completado = p.estado === "completado";
+            const esAutor = p.autor_id === currentUser.id;
+            return (
+              <div key={p.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px",borderLeft:`3px solid ${colorPrioridad}`,opacity:completado?0.6:1}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                  <input type="checkbox" checked={completado} onChange={()=>toggleCompletar(p)} style={{marginTop:2,cursor:"pointer"}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:"#1a3a5c",textDecoration:completado?"line-through":"none",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{p.texto}</div>
+                    <div style={{fontSize:10,color:"#7aa3c4",marginTop:4,display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <span>{p.autor?.nombre || "Anónimo"}</span>
+                      {p.fecha_objetivo && <span>📅 {p.fecha_objetivo}</span>}
+                      <span style={{color:colorPrioridad,fontWeight:500}}>● {p.prioridad}</span>
+                    </div>
+                  </div>
+                  {esAutor && (
+                    <button onClick={()=>eliminar(p)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:13,padding:0}}>🗑</button>
+                  )}
                 </div>
               </div>
-              <button onClick={()=>eliminar(p.id)} style={{background:"none",border:"none",fontSize:14,color:"#cdddec",cursor:"pointer",padding:4}}>✕</button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -1554,431 +1626,476 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
   );
 }
 
-function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipoActual }) {
-  const esEquipo = !!equipoActual;
-  const cirugiasFiltradas = esEquipo
-    ? tablaCirugias.filter(c => c.equipoId === equipoActual.id)
-    : tablaCirugias.filter(c => c.creadoPor === currentUser.correo && !c.equipoId);
-  const [vista, setVista] = useState("semana");
+function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias }) {
+  const [vista, setVista] = useState("tabla");
   const [seleccionado, setSeleccionado] = useState(null);
-  const [semanaOffset, setSemanaOffset] = useState(0);
-  const [nuevoForm, setNuevoForm] = useState({ fecha: new Date().toISOString().split("T")[0], hora:"08:00", iniciales:"", edad:"", procedimiento:"", cirujano: currentUser.nombre, ayudante:"", anestesia:"General", pabellon:"1", duracionEstimada:"", observaciones:"", lateralidad:"" });
-  const [errorForm, setErrorForm] = useState("");
-  const [importPreview, setImportPreview] = useState(null);
-  const [importError, setImportError] = useState("");
-  const [importLoading, setImportLoading] = useState(false);
-  const importFileRef = useRef(null);
+  const [error, setError] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [filtroFecha, setFiltroFecha] = useState("semana");
 
-  // Calcular el lunes de la semana actual con offset
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
-  const diaSemana = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1; // 0=lunes, 6=domingo
-  const lunes = new Date(hoy);
-  lunes.setDate(hoy.getDate() - diaSemana + (semanaOffset * 7));
-
-  const diasSemana = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(lunes);
-    d.setDate(lunes.getDate() + i);
-    diasSemana.push(d);
-  }
-
-  const formatFecha = (d) => d.toISOString().split("T")[0];
-  const hoyStr = formatFecha(hoy);
-  const nombresDias = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-  const nombreMes = lunes.toLocaleDateString("es-CL",{month:"long", year:"numeric"});
-
-  // Cirugías agrupadas por día - SOLO las del contexto actual
-  const cirugiasPorDia = {};
-  diasSemana.forEach(d => { cirugiasPorDia[formatFecha(d)] = []; });
-  cirugiasFiltradas.forEach(c => {
-    if (cirugiasPorDia[c.fecha]) cirugiasPorDia[c.fecha].push(c);
+  const [nuevo, setNuevo] = useState({
+    fecha: new Date().toISOString().slice(0,10), hora: "08:00",
+    iniciales: "", edad: "", procedimiento: "", lateralidad: "",
+    cirujano: currentUser.nombre, pabellon: "1", estado: "programada", observaciones: ""
   });
-  Object.keys(cirugiasPorDia).forEach(k => cirugiasPorDia[k].sort((a,b) => a.hora.localeCompare(b.hora)));
 
-  const totalSemana = Object.values(cirugiasPorDia).reduce((sum,arr)=>sum+arr.length, 0);
+  const esEquipo = contexto !== "personal";
+  const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
 
-  const crear = () => {
-    setErrorForm("");
-    if (!nuevoForm.fecha) return setErrorForm("Selecciona una fecha");
-    if (!nuevoForm.hora) return setErrorForm("Selecciona una hora");
-    if (!nuevoForm.iniciales.trim()) return setErrorForm("Ingresa las iniciales");
-    if (!nuevoForm.procedimiento.trim()) return setErrorForm("Ingresa el procedimiento");
-    if (!nuevoForm.cirujano.trim()) return setErrorForm("Ingresa el cirujano");
-    const nueva = { id: "c" + Date.now(), ...nuevoForm, iniciales: nuevoForm.iniciales.toUpperCase(), edad: nuevoForm.edad ? parseInt(nuevoForm.edad) : null, estado: "programada", creadoPor: currentUser.correo, equipoId: esEquipo ? equipoActual.id : null, creadoPorNombre: currentUser.nombre, fechaCreacion: new Date().toISOString().split("T")[0] };
-    setTablaCirugias([nueva, ...tablaCirugias]);
-    setNuevoForm({ fecha: new Date().toISOString().split("T")[0], hora:"08:00", iniciales:"", edad:"", procedimiento:"", cirujano: currentUser.nombre, ayudante:"", anestesia:"General", pabellon:"1", duracionEstimada:"", observaciones:"", lateralidad:"" });
-    setVista("semana");
+  const cargar = async () => {
+    setLoadingCirugias(true);
+    const result = await listarCirugias(currentUser.id, contexto);
+    setLoadingCirugias(false);
+    if (result.ok) setTablaCirugias(result.cirugias);
   };
 
-  const cambiarEstado = (e) => {
-    setTablaCirugias(tablaCirugias.map(c => c.id === seleccionado.id ? {...c, estado: e} : c));
-    setSeleccionado({...seleccionado, estado: e});
+  useEffect(() => { cargar(); }, [contexto]);
+
+  // Filtrar por fecha
+  const ahora = new Date();
+  const finDeSemana = new Date(ahora);
+  finDeSemana.setDate(ahora.getDate() + 7);
+  const finDeMes = new Date(ahora);
+  finDeMes.setDate(ahora.getDate() + 30);
+
+  const cirugiasFiltradas = tablaCirugias.filter(c => {
+    if (filtroEstado !== "todos" && c.estado !== filtroEstado) return false;
+    const fechaC = new Date(c.fecha + "T00:00:00");
+    if (filtroFecha === "hoy") return c.fecha === ahora.toISOString().slice(0,10);
+    if (filtroFecha === "semana") return fechaC >= ahora && fechaC <= finDeSemana;
+    if (filtroFecha === "mes") return fechaC >= ahora && fechaC <= finDeMes;
+    return true;
+  });
+
+  // Agrupar por fecha
+  const porFecha = {};
+  cirugiasFiltradas.forEach(c => {
+    if (!porFecha[c.fecha]) porFecha[c.fecha] = [];
+    porFecha[c.fecha].push(c);
+  });
+
+  // ============================================================
+  // CRUD
+  // ============================================================
+
+  const guardar = async () => {
+    setError("");
+    if (!nuevo.iniciales.trim()) return setError("Ingresa las iniciales");
+    if (nuevo.iniciales.length > 8) return setError("Máximo 8 caracteres");
+    if (!nuevo.procedimiento.trim()) return setError("Ingresa el procedimiento");
+
+    const datos = {
+      cirujano_id: currentUser.id,
+      equipo_id: esEquipo ? contexto : null,
+      fecha: nuevo.fecha,
+      hora: nuevo.hora,
+      iniciales: nuevo.iniciales.trim().toUpperCase(),
+      edad: nuevo.edad ? parseInt(nuevo.edad) : null,
+      procedimiento: nuevo.procedimiento.trim(),
+      lateralidad: nuevo.lateralidad || null,
+      cirujano: nuevo.cirujano.trim() || null,
+      pabellon: nuevo.pabellon.trim() || null,
+      estado: nuevo.estado,
+      observaciones: nuevo.observaciones.trim() || null,
+    };
+
+    const result = await crearCirugia(datos);
+    if (!result.ok) return setError(result.error);
+
+    setTablaCirugias(prev => [...prev, result.cirugia].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
+    setNuevo({ fecha: new Date().toISOString().slice(0,10), hora: "08:00", iniciales: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, pabellon: "1", estado: "programada", observaciones: "" });
+    setVista("tabla");
   };
 
-  const eliminar = (id) => {
-    if (confirm("¿Eliminar esta cirugía?")) {
-      setTablaCirugias(tablaCirugias.filter(c => c.id !== id));
-      if (seleccionado?.id === id) { setSeleccionado(null); setVista("semana"); }
-    }
+  const cambiarEstado = async (cirugia, nuevoEstado) => {
+    const result = await actualizarCirugia(cirugia.id, { estado: nuevoEstado });
+    if (!result.ok) return alert("Error: " + result.error);
+    setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
+    if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
   };
 
-  // ---- IMPORTAR EXCEL ----
-  const handleImportExcel = async (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    setImportError(""); setImportLoading(true); setImportPreview(null);
-    try {
-      // Cargar SheetJS (xlsx) desde CDN
-      if (!window.XLSX) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-          script.onload = resolve; script.onerror = reject;
-          document.head.appendChild(script);
+  const eliminar = async (cirugia) => {
+    if (!confirm(`¿Eliminar cirugía de ${cirugia.iniciales}?`)) return;
+    const result = await eliminarCirugia(cirugia.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setTablaCirugias(prev => prev.filter(c => c.id !== cirugia.id));
+    setSeleccionado(null);
+    setVista("tabla");
+  };
+
+  // ============================================================
+  // IMPORTAR EXCEL
+  // ============================================================
+
+  const importarExcel = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const XLSX = await import('xlsx');
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      
+      // Leer como matriz de filas (sin asumir headers)
+      const matriz = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+      
+      if (matriz.length === 0) {
+        alert("El archivo está vacío");
+        return;
+      }
+
+      // ====================================================================
+      // BUSCAR FILA DE ENCABEZADOS
+      // ====================================================================
+      // Buscar la fila que contenga "FECHA" en la columna A o "DIAGNOSTICO"
+      let filaHeaders = -1;
+      let mapaColumnas = {};
+      
+      for (let i = 0; i < Math.min(matriz.length, 15); i++) {
+        const fila = matriz[i].map(c => String(c || "").toUpperCase().trim());
+        const idxFecha = fila.findIndex(c => c === "FECHA");
+        const idxDiagnostico = fila.findIndex(c => c.includes("DIAGNOSTICO") || c.includes("DIAGNÓSTICO"));
+        
+        if (idxFecha !== -1 && idxDiagnostico !== -1) {
+          filaHeaders = i;
+          // Mapear cada columna a su índice
+          fila.forEach((nombre, idx) => {
+            const limpio = nombre.replace(/[^A-Z]/g, "");
+            if (limpio === "FECHA") mapaColumnas.fecha = idx;
+            if (limpio === "HORARIO" || limpio === "HORA") mapaColumnas.horario = idx;
+            if (limpio === "NOMBRE" || limpio === "PACIENTE" || limpio === "NOMBRES") mapaColumnas.nombre = idx;
+            if (limpio === "EDAD") mapaColumnas.edad = idx;
+            if (limpio === "DIAGNOSTICO" || nombre.includes("DIAGN")) mapaColumnas.diagnostico = idx;
+            if (limpio === "CIRUGIA" || nombre.includes("CIRUG")) mapaColumnas.cirugia = idx;
+            if (limpio === "ABORDAJE") mapaColumnas.abordaje = idx;
+            if (limpio === "LADO" || limpio === "LATERALIDAD") mapaColumnas.lado = idx;
+            if (limpio === "TOP" || limpio === "DURACION" || nombre.includes("DURAC")) mapaColumnas.duracion = idx;
+            if (limpio === "OBSESPECIALES" || limpio === "OBSERVACIONES" || nombre.includes("OBS")) mapaColumnas.obs = idx;
+            if (limpio === "CIRUJANO" || limpio === "MEDICO" || nombre.includes("MÉDIC")) mapaColumnas.cirujano = idx;
+          });
+          break;
+        }
+      }
+
+      if (filaHeaders === -1) {
+        alert("No se encontraron encabezados válidos. El Excel debe tener una fila con FECHA y DIAGNOSTICO.");
+        return;
+      }
+
+      // ====================================================================
+      // PROCESAR FILAS DE DATOS
+      // ====================================================================
+      const filas = [];
+      let fechaActual = null;
+      let horarioActual = "AM"; // AM o PM
+      
+      for (let i = filaHeaders + 1; i < matriz.length; i++) {
+        const fila = matriz[i];
+        if (!fila || fila.every(c => !c || String(c).trim() === "")) continue;
+
+        // Detectar fila de día (ej: "LUNES 04" en columna A)
+        const colA = String(fila[0] || "").toUpperCase().trim();
+        const matchDia = colA.match(/(LUNES|MARTES|MIERCOLES|MIÉRCOLES|JUEVES|VIERNES|SABADO|SÁBADO|DOMINGO)\s*(\d{1,2})/);
+        if (matchDia) {
+          const diaNum = matchDia[2].padStart(2, "0");
+          // Detectar mes y año del título principal o del nombre del archivo
+          const ahora = new Date();
+          const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+          const anio = ahora.getFullYear();
+          fechaActual = `${anio}-${mes}-${diaNum}`;
+          continue;
+        }
+
+        // Detectar horario (AM/PM/PC en col B)
+        const colB = String(fila[1] || "").toUpperCase().trim();
+        if (colB === "AM" || colB === "PM" || colB === "PC") {
+          horarioActual = colB;
+        }
+
+        // Si no hay fecha actual, no se puede importar
+        if (!fechaActual) continue;
+
+        // Extraer datos de la fila
+        const nombreCompleto = String(fila[mapaColumnas.nombre] || "").trim();
+        const diagnostico = String(fila[mapaColumnas.diagnostico] || "").trim();
+        const cirugia = String(fila[mapaColumnas.cirugia] || "").trim();
+        
+        // Solo importar si hay diagnóstico Y cirugía
+        if (!diagnostico || !cirugia) continue;
+        if (nombreCompleto === "" || nombreCompleto.toUpperCase() === "NOMBRE") continue;
+
+        // Anonimizar: convertir nombre completo a iniciales
+        const iniciales = nombreCompleto
+          .split(/\s+/)
+          .filter(p => p.length > 1)
+          .map(p => p[0].toUpperCase())
+          .join("")
+          .slice(0, 8) || "??";
+
+        // Edad
+        const edadStr = String(fila[mapaColumnas.edad] || "").trim();
+        const edad = edadStr && !isNaN(parseInt(edadStr)) ? parseInt(edadStr) : null;
+
+        // Lateralidad
+        const ladoRaw = String(fila[mapaColumnas.lado] || "").trim().toUpperCase();
+        let lateralidad = null;
+        if (ladoRaw.includes("D") || ladoRaw === "DER") lateralidad = "Derecha";
+        else if (ladoRaw.includes("I") || ladoRaw === "IZQ") lateralidad = "Izquierda";
+        else if (ladoRaw.includes("BIL")) lateralidad = "Bilateral";
+
+        // Cirujano (anonimizar también si tiene nombres completos)
+        const cirujanoRaw = String(fila[mapaColumnas.cirujano] || "").trim();
+        const cirujano = cirujanoRaw || null;
+
+        // Hora estimada según horario
+        const hora = horarioActual === "AM" ? "08:00" : horarioActual === "PM" ? "14:00" : "08:00";
+
+        filas.push({
+          cirujano_id: currentUser.id,
+          equipo_id: esEquipo ? contexto : null,
+          fecha: fechaActual,
+          hora: hora,
+          iniciales: iniciales,
+          edad: edad,
+          procedimiento: cirugia.slice(0, 200),
+          lateralidad: lateralidad,
+          cirujano: cirujano ? cirujano.slice(0, 100) : null,
+          pabellon: "1",
+          estado: 'programada',
+          observaciones: String(fila[mapaColumnas.obs] || "").trim().slice(0, 500) || `Diagnóstico: ${diagnostico}`,
         });
       }
-      const arrayBuffer = await f.arrayBuffer();
-      const workbook = window.XLSX.read(arrayBuffer, { type:"array", cellDates:true });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = window.XLSX.utils.sheet_to_json(firstSheet, { defval:"", raw:false });
 
-      if (rows.length === 0) {
-        setImportError("El archivo no contiene datos");
-        setImportLoading(false);
+      if (filas.length === 0) {
+        alert("No se pudo extraer ninguna cirugía válida del Excel.");
         return;
       }
 
-      // Función para encontrar el valor de una columna probando varios nombres alternativos
-      const buscarCampo = (row, posibles) => {
-        const claves = Object.keys(row);
-        for (const p of posibles) {
-          const pNorm = p.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
-          const found = claves.find(k => {
-            const kNorm = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
-            return kNorm === pNorm || kNorm.includes(pNorm) || pNorm.includes(kNorm);
-          });
-          if (found && row[found] !== "" && row[found] != null) return String(row[found]).trim();
-        }
-        return "";
-      };
-
-      const parseFecha = (val) => {
-        if (!val) return "";
-        // Si ya es Date object
-        if (val instanceof Date) return val.toISOString().split("T")[0];
-        const s = String(val).trim();
-        // Formato yyyy-mm-dd
-        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.split("T")[0].split(" ")[0];
-        // Formato dd/mm/yyyy o dd-mm-yyyy
-        const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-        if (m1) {
-          let yr = m1[3];
-          if (yr.length === 2) yr = "20" + yr;
-          return `${yr}-${m1[2].padStart(2,"0")}-${m1[1].padStart(2,"0")}`;
-        }
-        // Formato yyyy/mm/dd
-        const m2 = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-        if (m2) return `${m2[1]}-${m2[2].padStart(2,"0")}-${m2[3].padStart(2,"0")}`;
-        return s;
-      };
-
-      const parseHora = (val) => {
-        if (!val) return "08:00";
-        const s = String(val).trim();
-        // Formato HH:MM o HH:MM:SS
-        const m = s.match(/(\d{1,2})[:.](\d{2})/);
-        if (m) return `${m[1].padStart(2,"0")}:${m[2]}`;
-        // Solo número (hora)
-        if (/^\d{1,2}$/.test(s)) return `${s.padStart(2,"0")}:00`;
-        return "08:00";
-      };
-
-      const cirugiasParseadas = rows.map((row, idx) => {
-        const fecha = parseFecha(buscarCampo(row, ["fecha","date","día","dia"]));
-        const hora = parseHora(buscarCampo(row, ["hora","hour","time","horario"]));
-        const iniciales = buscarCampo(row, ["iniciales","paciente","nombre","name","patient"]).toUpperCase().slice(0,15);
-        const edadStr = buscarCampo(row, ["edad","age","años"]);
-        const edad = edadStr && !isNaN(parseInt(edadStr)) ? parseInt(edadStr) : null;
-        const procedimiento = buscarCampo(row, ["procedimiento","cirugía","cirugia","intervencion","intervención","operacion","operación","surgery","procedure"]);
-        const lateralidad = buscarCampo(row, ["lateralidad","lado","side"]);
-        const cirujano = buscarCampo(row, ["cirujano","surgeon","doctor","médico","medico"]) || currentUser.nombre;
-        const ayudante = buscarCampo(row, ["ayudante","asistente","assistant"]);
-        const pabellon = buscarCampo(row, ["pabellón","pabellon","sala","room","quirófano","quirofano"]) || "1";
-        const anestesia = buscarCampo(row, ["anestesia","anesthesia"]) || "General";
-        const observaciones = buscarCampo(row, ["observaciones","obs","notas","notes","comentarios"]);
-
-        return {
-          fila: idx + 2, // +2 porque la fila 1 es el header y los índices empiezan en 0
-          fecha, hora, iniciales, edad, procedimiento, lateralidad, cirujano, ayudante, pabellon, anestesia, observaciones,
-          valido: !!(fecha && iniciales && procedimiento)
-        };
-      });
-
-      const validas = cirugiasParseadas.filter(c => c.valido);
-      const invalidas = cirugiasParseadas.filter(c => !c.valido);
-
-      if (validas.length === 0) {
-        setImportError(`No se pudo extraer ninguna cirugía válida de las ${rows.length} filas. Verifica que tu Excel tenga columnas para fecha, paciente y procedimiento.`);
-        setImportLoading(false);
+      // Confirmar antes de insertar
+      if (!confirm(`Se importarán ${filas.length} cirugías (con nombres convertidos a iniciales). ¿Continuar?`)) {
+        e.target.value = "";
         return;
       }
 
-      setImportPreview({ validas, invalidas, total: rows.length });
-      setImportLoading(false);
-    } catch (err) {
-      console.error(err);
-      setImportError("Error al leer el archivo: " + (err.message || "desconocido"));
-      setImportLoading(false);
-    }
-    // Limpiar input para que se pueda volver a subir el mismo archivo
-    if (importFileRef.current) importFileRef.current.value = "";
-  };
+      const result = await crearCirugiasBulk(filas);
+      if (!result.ok) {
+        alert("Error al importar: " + result.error);
+        return;
+      }
 
-  const confirmarImportacion = () => {
-    if (!importPreview) return;
-    const nuevas = importPreview.validas.map(c => ({
-      id: "c" + Date.now() + Math.random().toString(36).slice(2,8),
-      fecha: c.fecha,
-      hora: c.hora,
-      iniciales: c.iniciales,
-      edad: c.edad,
-      procedimiento: c.procedimiento,
-      lateralidad: c.lateralidad,
-      cirujano: c.cirujano,
-      ayudante: c.ayudante,
-      pabellon: c.pabellon,
-      anestesia: c.anestesia,
-      duracionEstimada: "",
-      observaciones: c.observaciones,
-      estado: "programada",
-      creadoPor: currentUser.correo,
-      equipoId: esEquipo ? equipoActual.id : null,
-      creadoPorNombre: currentUser.nombre,
-      fechaCreacion: new Date().toISOString().split("T")[0],
-      importado: true
-    }));
-    setTablaCirugias([...nuevas, ...tablaCirugias]);
-    setImportPreview(null);
-    setVista("semana");
-  };
+      setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
+      alert(`✓ ${result.cirugias.length} cirugías importadas y anonimizadas`);
+      e.target.value = "";
+    };
+    reader.readAsArrayBuffer(file);
+  } catch (err) {
+    alert("Error al leer Excel: " + err.message);
+    console.error(err);
+  }
+};
 
-  const colorEstado = (e) => e === "realizada" ? {bg:"#d4f0e0",fg:"#1a6f5c",bd:"#a8d4be"} : e === "suspendida" ? {bg:"#fde8e6",fg:"#c0392b",bd:"#f0c5c0"} : e === "en_curso" ? {bg:"#fdf0d0",fg:"#a06b1a",bd:"#e8d09a"} : {bg:"#e0e9f5",fg:"#1a4a7c",bd:"#b8c8de"};
-  const labelEstado = (e) => e === "realizada" ? "Realizada" : e === "suspendida" ? "Suspendida" : e === "en_curso" ? "En curso" : "Programada";
+  // ============================================================
+  // RENDER: NUEVO
+  // ============================================================
 
-  // VISTA: NUEVO
   if (vista === "nuevo") {
     return (
-      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("semana");setErrorForm("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Programar cirugía</div>
-        <div style={{background:"#fff8e1",border:"0.5px solid #f0d896",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:11,color:"#8a6610",lineHeight:1.5}}>⚠️ Usa <strong>iniciales</strong>, no nombres completos.</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div><label style={labelStyle}>Fecha</label><input type="date" value={nuevoForm.fecha} onChange={e=>setNuevoForm({...nuevoForm,fecha:e.target.value})} style={inputStyle}/></div>
-          <div><label style={labelStyle}>Hora</label><input type="time" value={nuevoForm.hora} onChange={e=>setNuevoForm({...nuevoForm,hora:e.target.value})} style={inputStyle}/></div>
+      <div style={{padding:"20px",overflowY:"auto"}}>
+        <button onClick={()=>{setVista("tabla");setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nueva cirugía {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Fecha</label>
+            <input type="date" value={nuevo.fecha} onChange={e=>setNuevo({...nuevo,fecha:e.target.value})} style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Hora</label>
+            <input type="time" value={nuevo.hora} onChange={e=>setNuevo({...nuevo,hora:e.target.value})} style={inputStyle}/>
+          </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div><label style={labelStyle}>Iniciales paciente</label><input value={nuevoForm.iniciales} onChange={e=>setNuevoForm({...nuevoForm,iniciales:e.target.value})} placeholder="J.P.M." maxLength={8} style={inputStyle}/></div>
-          <div><label style={labelStyle}>Edad</label><input type="number" value={nuevoForm.edad} onChange={e=>setNuevoForm({...nuevoForm,edad:e.target.value})} placeholder="65" style={inputStyle}/></div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Iniciales (máx 8)</label>
+            <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,8)})} placeholder="JPM" style={inputStyle} maxLength={8}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Edad</label>
+            <input type="number" value={nuevo.edad} onChange={e=>setNuevo({...nuevo,edad:e.target.value})} placeholder="65" style={inputStyle}/>
+          </div>
         </div>
+
         <label style={labelStyle}>Procedimiento</label>
-        <input value={nuevoForm.procedimiento} onChange={e=>setNuevoForm({...nuevoForm,procedimiento:e.target.value})} placeholder="Ej: URS flexible + láser holmium" style={inputStyle}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div><label style={labelStyle}>Lateralidad</label>
-            <select value={nuevoForm.lateralidad} onChange={e=>setNuevoForm({...nuevoForm,lateralidad:e.target.value})} style={inputStyle}><option value="">No aplica</option><option value="Derecho">Derecho</option><option value="Izquierdo">Izquierdo</option><option value="Bilateral">Bilateral</option></select>
+        <input value={nuevo.procedimiento} onChange={e=>setNuevo({...nuevo,procedimiento:e.target.value})} placeholder="RTU-V, Nefrectomía..." style={inputStyle}/>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Lateralidad</label>
+            <select value={nuevo.lateralidad} onChange={e=>setNuevo({...nuevo,lateralidad:e.target.value})} style={inputStyle}>
+              <option value="">N/A</option>
+              <option value="Derecha">Derecha</option>
+              <option value="Izquierda">Izquierda</option>
+              <option value="Bilateral">Bilateral</option>
+            </select>
           </div>
-          <div><label style={labelStyle}>Pabellón</label><input value={nuevoForm.pabellon} onChange={e=>setNuevoForm({...nuevoForm,pabellon:e.target.value})} placeholder="1" style={inputStyle}/></div>
-        </div>
-        <label style={labelStyle}>Cirujano principal</label>
-        <input value={nuevoForm.cirujano} onChange={e=>setNuevoForm({...nuevoForm,cirujano:e.target.value})} placeholder="Dr. ..." style={inputStyle}/>
-        <label style={labelStyle}>Ayudante (opcional)</label>
-        <input value={nuevoForm.ayudante} onChange={e=>setNuevoForm({...nuevoForm,ayudante:e.target.value})} placeholder="Dr. ..." style={inputStyle}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div><label style={labelStyle}>Anestesia</label>
-            <select value={nuevoForm.anestesia} onChange={e=>setNuevoForm({...nuevoForm,anestesia:e.target.value})} style={inputStyle}><option>General</option><option>Espinal</option><option>Epidural</option><option>Sedación</option><option>Local</option><option>Combinada</option></select>
+          <div>
+            <label style={labelStyle}>Pabellón</label>
+            <input value={nuevo.pabellon} onChange={e=>setNuevo({...nuevo,pabellon:e.target.value})} placeholder="1" style={inputStyle}/>
           </div>
-          <div><label style={labelStyle}>Duración estimada</label><input value={nuevoForm.duracionEstimada} onChange={e=>setNuevoForm({...nuevoForm,duracionEstimada:e.target.value})} placeholder="90 min" style={inputStyle}/></div>
         </div>
+
+        <label style={labelStyle}>Cirujano</label>
+        <input value={nuevo.cirujano} onChange={e=>setNuevo({...nuevo,cirujano:e.target.value})} style={inputStyle}/>
+
         <label style={labelStyle}>Observaciones (opcional)</label>
-        <textarea value={nuevoForm.observaciones} onChange={e=>setNuevoForm({...nuevoForm,observaciones:e.target.value})} placeholder="Material especial, alergias, comorbilidades..." rows={3} style={{...inputStyle,resize:"none"}}/>
-        {errorForm && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
-        <button onClick={crear} style={{...btnPrimary, marginTop:0}}>Programar cirugía</button>
+        <textarea value={nuevo.observaciones} onChange={e=>setNuevo({...nuevo,observaciones:e.target.value})} rows={2} style={{...inputStyle,resize:"vertical"}}/>
+
+        {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+
+        <button onClick={guardar} style={{...btnPrimary, marginTop:0}}>Guardar cirugía</button>
       </div>
     );
   }
 
-  // VISTA: FICHA
-  if (vista === "ficha" && seleccionado) {
-    const col = colorEstado(seleccionado.estado);
+  // ============================================================
+  // RENDER: DETALLE
+  // ============================================================
+
+  if (vista === "detalle" && seleccionado) {
+    const esCirujano = seleccionado.cirujano_id === currentUser.id;
     return (
-      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("semana");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver al planner</button>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,gap:10}}>
+      <div style={{padding:"16px",overflowY:"auto"}}>
+        <button onClick={()=>{setVista("tabla");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la tabla</button>
+
+        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
             <div>
-              <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c",marginBottom:2}}>{seleccionado.procedimiento}</div>
-              {seleccionado.lateralidad && <div style={{fontSize:11,color:"#1a6fb5",fontWeight:500,marginBottom:2}}>● {seleccionado.lateralidad}</div>}
-              <div style={{fontSize:13,color:"#4a7eab"}}>📅 {seleccionado.fecha} a las {seleccionado.hora} · Pabellón {seleccionado.pabellon}</div>
+              <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}{seleccionado.edad && ` (${seleccionado.edad}a)`}</div>
+              <div style={{fontSize:13,color:"#4a7eab",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
+              <div style={{fontSize:11,color:"#7aa3c4",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | Pabellón {seleccionado.pabellon}</div>
+              {seleccionado.cirujano && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>👨‍⚕️ {seleccionado.cirujano}</div>}
             </div>
-            <span style={{fontSize:10,fontWeight:500,padding:"3px 10px",borderRadius:10,background:col.bg,color:col.fg,whiteSpace:"nowrap"}}>{labelEstado(seleccionado.estado)}</span>
           </div>
-          <div style={{borderTop:"0.5px solid #e8f3fb",paddingTop:8,marginTop:8,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:12}}>
-            <div><div style={{fontSize:10,fontWeight:500,color:"#7aa3c4",marginBottom:2}}>PACIENTE</div><div style={{color:"#1a3a5c"}}>{seleccionado.iniciales}{seleccionado.edad ? ` · ${seleccionado.edad}a` : ""}</div></div>
-            <div><div style={{fontSize:10,fontWeight:500,color:"#7aa3c4",marginBottom:2}}>ANESTESIA</div><div style={{color:"#1a3a5c"}}>{seleccionado.anestesia}</div></div>
-            <div><div style={{fontSize:10,fontWeight:500,color:"#7aa3c4",marginBottom:2}}>CIRUJANO</div><div style={{color:"#1a3a5c"}}>{seleccionado.cirujano}</div></div>
-            {seleccionado.ayudante && <div><div style={{fontSize:10,fontWeight:500,color:"#7aa3c4",marginBottom:2}}>AYUDANTE</div><div style={{color:"#1a3a5c"}}>{seleccionado.ayudante}</div></div>}
-            {seleccionado.duracionEstimada && <div><div style={{fontSize:10,fontWeight:500,color:"#7aa3c4",marginBottom:2}}>DURACIÓN</div><div style={{color:"#1a3a5c"}}>{seleccionado.duracionEstimada}</div></div>}
+
+          <div style={{fontSize:12,color:"#1a3a5c",marginBottom:10,padding:"6px 10px",background:"#f0f8fd",borderRadius:6}}>
+            <strong>Estado actual:</strong> {seleccionado.estado}
           </div>
+
           {seleccionado.observaciones && (
-            <div style={{borderTop:"0.5px solid #e8f3fb",paddingTop:8,marginTop:10}}>
-              <div style={{fontSize:10,fontWeight:500,color:"#7aa3c4",marginBottom:3}}>OBSERVACIONES</div>
-              <div style={{fontSize:13,color:"#1a3a5c",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{seleccionado.observaciones}</div>
+            <div style={{fontSize:12,color:"#1a3a5c",marginBottom:10,padding:"8px 10px",background:"#fff8e1",borderRadius:6}}>
+              <strong>Observaciones:</strong> {seleccionado.observaciones}
             </div>
           )}
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:12,paddingTop:10,borderTop:"0.5px solid #e8f3fb"}}>
-            {seleccionado.estado !== "realizada" && <button onClick={()=>cambiarEstado("realizada")} style={{flex:"1 1 auto",padding:"6px 10px",fontSize:11,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Realizada</button>}
-            {seleccionado.estado === "programada" && <button onClick={()=>cambiarEstado("en_curso")} style={{flex:"1 1 auto",padding:"6px 10px",fontSize:11,background:"#a06b1a",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>▶ En curso</button>}
-            {seleccionado.estado !== "suspendida" && seleccionado.estado !== "realizada" && <button onClick={()=>cambiarEstado("suspendida")} style={{flex:"1 1 auto",padding:"6px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
-            {seleccionado.estado !== "programada" && <button onClick={()=>cambiarEstado("programada")} style={{flex:"1 1 auto",padding:"6px 10px",fontSize:11,background:"#fff",color:"#1a4a7c",border:"0.5px solid #1a4a7c",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reprogramar</button>}
-            <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"6px 10px",fontSize:11,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>Eliminar</button>
+
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14}}>
+            {["programada","en_curso","completada","suspendida","cancelada"].map(estado => (
+              <button 
+                key={estado} 
+                onClick={()=>cambiarEstado(seleccionado, estado)}
+                disabled={seleccionado.estado === estado}
+                style={{padding:"5px 10px",fontSize:11,background:seleccionado.estado === estado ? "#1a6fb5" : "#fff",color:seleccionado.estado === estado ? "#fff" : "#4a7eab",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:seleccionado.estado === estado ? "default" : "pointer",fontWeight:500}}
+              >{estado.replace("_"," ")}</button>
+            ))}
           </div>
+
+          {esCirujano && (
+            <button onClick={()=>eliminar(seleccionado)} style={{marginTop:14,width:"100%",padding:"10px",fontSize:12,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar cirugía</button>
+          )}
         </div>
       </div>
     );
   }
 
-  // VISTA: PLANNER SEMANAL
-  // Modal de importación
-  const importModal = (importPreview || importError || importLoading) && (
-    <div onClick={()=>{if(!importLoading){setImportPreview(null);setImportError("");}}} style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.85)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",borderRadius:"var(--border-radius-lg)"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:600,width:"100%",maxHeight:"90%",overflow:"auto",padding:18}}>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>📊 Importar Excel</div>
-        {importLoading && <div style={{textAlign:"center",padding:"30px 0",color:"#7aa3c4",fontSize:13}}>Procesando archivo...</div>}
-        {importError && (
-          <div style={{padding:"10px 12px",background:"#fde8e6",border:"0.5px solid #f0c5c0",borderRadius:8,fontSize:12,color:"#c0392b",lineHeight:1.5,marginBottom:10}}>
-            <strong>Error:</strong> {importError}
-          </div>
-        )}
-        {importPreview && (
-          <>
-            <div style={{padding:"10px 12px",background:"#e0f5ec",border:"0.5px solid #a8d4be",borderRadius:8,fontSize:12,color:"#1a6f5c",lineHeight:1.5,marginBottom:12}}>
-              ✓ Se detectaron <strong>{importPreview.validas.length} cirugías válidas</strong> de {importPreview.total} filas leídas{importPreview.invalidas.length > 0 ? `. ${importPreview.invalidas.length} filas se omitirán por datos faltantes.` : "."}
-            </div>
-            <div style={{maxHeight:300,overflowY:"auto",border:"0.5px solid #b8d8ef",borderRadius:8,marginBottom:12}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                <thead style={{position:"sticky",top:0,background:"#f0f8fd"}}>
-                  <tr>
-                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"0.5px solid #b8d8ef",color:"#4a7eab",fontWeight:500}}>Fecha</th>
-                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"0.5px solid #b8d8ef",color:"#4a7eab",fontWeight:500}}>Hora</th>
-                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"0.5px solid #b8d8ef",color:"#4a7eab",fontWeight:500}}>Paciente</th>
-                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"0.5px solid #b8d8ef",color:"#4a7eab",fontWeight:500}}>Procedimiento</th>
-                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"0.5px solid #b8d8ef",color:"#4a7eab",fontWeight:500}}>Cirujano</th>
-                    <th style={{padding:"6px 8px",textAlign:"left",borderBottom:"0.5px solid #b8d8ef",color:"#4a7eab",fontWeight:500}}>Pab.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importPreview.validas.map((c,i) => (
-                    <tr key={i} style={{borderBottom:"0.5px solid #e8f3fb"}}>
-                      <td style={{padding:"6px 8px",color:"#1a3a5c"}}>{c.fecha}</td>
-                      <td style={{padding:"6px 8px",color:"#1a3a5c"}}>{c.hora}</td>
-                      <td style={{padding:"6px 8px",color:"#1a3a5c",fontWeight:500}}>{c.iniciales}{c.edad?` · ${c.edad}a`:""}</td>
-                      <td style={{padding:"6px 8px",color:"#1a3a5c"}}>{c.procedimiento}{c.lateralidad?` (${c.lateralidad})`:""}</td>
-                      <td style={{padding:"6px 8px",color:"#4a7eab"}}>{c.cirujano}</td>
-                      <td style={{padding:"6px 8px",color:"#4a7eab"}}>{c.pabellon}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {importPreview.invalidas.length > 0 && (
-              <div style={{padding:"8px 10px",background:"#fff8e1",border:"0.5px solid #f0d896",borderRadius:6,fontSize:11,color:"#8a6610",marginBottom:12,lineHeight:1.5}}>
-                <strong>Filas omitidas:</strong> {importPreview.invalidas.map(c=>`fila ${c.fila}`).join(", ")}. Falta fecha, paciente o procedimiento.
-              </div>
-            )}
-            <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>{setImportPreview(null);setImportError("");}} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#4a7eab",border:"1px solid #b8d8ef",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
-              <button onClick={confirmarImportacion} style={{flex:2,padding:"10px",fontSize:13,fontWeight:500,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>Importar {importPreview.validas.length} cirugías</button>
-            </div>
-          </>
-        )}
-        {importError && !importLoading && !importPreview && (
-          <button onClick={()=>{setImportError("");}} style={{...btnPrimary, marginTop:0}}>Cerrar</button>
-        )}
-      </div>
-    </div>
-  );
+  // ============================================================
+  // RENDER: TABLA
+  // ============================================================
 
   return (
-    <div style={{padding:"14px",flex:1,overflowY:"auto",position:"relative"}}>
-      {importModal}
-      {/* Header con navegación de semana */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:8,flexWrap:"wrap"}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={()=>setSemanaOffset(semanaOffset-1)} style={{padding:"6px 10px",fontSize:14,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",color:"#1a4a7c"}}>‹</button>
-          <button onClick={()=>setSemanaOffset(0)} disabled={semanaOffset===0} style={{padding:"6px 10px",fontSize:11,fontWeight:500,background: semanaOffset===0?"#cdddec":"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:semanaOffset===0?"default":"pointer"}}>Hoy</button>
-          <button onClick={()=>setSemanaOffset(semanaOffset+1)} style={{padding:"6px 10px",fontSize:14,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",color:"#1a4a7c"}}>›</button>
+    <div style={{padding:"16px",overflowY:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c"}}>
+          {esEquipo ? `🔪 Tabla - ${equipoActual?.nombre}` : "🔪 Mi tabla quirúrgica"}
         </div>
         <div style={{display:"flex",gap:6}}>
-          <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportExcel} style={{display:"none"}}/>
-          <button onClick={()=>importFileRef.current?.click()} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"#fff",color:"#1a6fb5",border:"1px solid #1a6fb5",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>📊 Importar Excel</button>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Programar</button>
+          <label style={{padding:"6px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500}}>
+            📊 Importar Excel
+            <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
+          </label>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
         </div>
       </div>
 
-      <div style={{textAlign:"center",marginBottom:14}}>
-        <div style={{fontSize:14,fontWeight:600,color:"#1a3a5c",textTransform:"capitalize"}}>{nombreMes}</div>
-        <div style={{fontSize:11,color:"#4a7eab"}}>{totalSemana} {totalSemana === 1 ? "cirugía" : "cirugías"} esta semana</div>
+      {/* Filtros */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#7aa3c4"}}>Filtrar:</span>
+        <select value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+          <option value="hoy">Hoy</option>
+          <option value="semana">Próxima semana</option>
+          <option value="mes">Próximo mes</option>
+          <option value="todos">Todas</option>
+        </select>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+          <option value="todos">Todos los estados</option>
+          <option value="programada">Programadas</option>
+          <option value="en_curso">En curso</option>
+          <option value="completada">Completadas</option>
+          <option value="suspendida">Suspendidas</option>
+          <option value="cancelada">Canceladas</option>
+        </select>
+        <span style={{fontSize:11,color:"#7aa3c4",marginLeft:"auto"}}>{cirugiasFiltradas.length} cirugías</span>
       </div>
 
-      {/* Grilla semanal */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:6}}>
-        {diasSemana.map((d, idx) => {
-          const fechaStr = formatFecha(d);
-          const cirugias = cirugiasPorDia[fechaStr];
-          const esHoy = fechaStr === hoyStr;
-          const esFinde = idx >= 5;
-          return (
-            <div key={fechaStr} style={{background: esHoy ? "#fff" : esFinde ? "#f0f4f8" : "#fff",border: esHoy ? "1.5px solid #1a6fb5" : "0.5px solid #b8d8ef",borderRadius:8,padding:"6px 4px",minHeight:120,display:"flex",flexDirection:"column"}}>
-              <div style={{textAlign:"center",paddingBottom:6,marginBottom:6,borderBottom:"0.5px solid #e8f3fb"}}>
-                <div style={{fontSize:9,fontWeight:500,color: esHoy ? "#1a6fb5" : "#7aa3c4",textTransform:"uppercase",letterSpacing:"0.5px"}}>{nombresDias[idx]}</div>
-                <div style={{fontSize:16,fontWeight:600,color: esHoy ? "#1a6fb5" : "#1a3a5c",marginTop:2}}>{d.getDate()}</div>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:3,flex:1}}>
-                {cirugias.length === 0 ? (
-                  <div onClick={()=>{setNuevoForm({...nuevoForm, fecha: fechaStr}); setVista("nuevo");}} style={{flex:1,minHeight:60,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",borderRadius:4,fontSize:18,color:"#cdddec"}}>+</div>
-                ) : (
-                  cirugias.map(c => {
-                    const col = colorEstado(c.estado);
-                    return (
-                      <div key={c.id} onClick={()=>{setSeleccionado(c); setVista("ficha");}} style={{padding:"4px 5px",background: col.bg,border:`0.5px solid ${col.bd}`,borderRadius:4,cursor:"pointer",borderLeft:`3px solid ${col.fg}`}}>
-                        <div style={{fontSize:9,fontWeight:600,color:col.fg,marginBottom:1}}>{c.hora}</div>
-                        <div style={{fontSize:9,color:"#1a3a5c",lineHeight:1.2,fontWeight:500,wordBreak:"break-word"}}>{c.procedimiento.length > 28 ? c.procedimiento.slice(0,28) + "…" : c.procedimiento}</div>
-                        <div style={{fontSize:8,color:"#4a7eab",marginTop:1}}>{c.iniciales} · P{c.pabellon}</div>
+      {loadingCirugias && (
+        <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>Cargando tabla...</div>
+      )}
+
+      {!loadingCirugias && cirugiasFiltradas.length === 0 && (
+        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+          No hay cirugías en el filtro seleccionado.<br/>
+          Agrega manualmente con + Nueva o importa un Excel.
+        </div>
+      )}
+
+      {!loadingCirugias && Object.keys(porFecha).sort().map(fecha => (
+        <div key={fecha} style={{marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c",marginBottom:8,padding:"4px 10px",background:"#e0e9f5",borderRadius:6}}>
+            📅 {new Date(fecha + "T00:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})} ({porFecha[fecha].length})
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {porFecha[fecha].sort((a,b)=>(a.hora||"").localeCompare(b.hora||"")).map(c => {
+              const colores = {
+                programada: "#1a6fb5", en_curso: "#a06b1a", completada: "#1a6f5c",
+                suspendida: "#999", cancelada: "#c0392b"
+              };
+              return (
+                <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${colores[c.estado]}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,color:"#1a3a5c",fontWeight:500}}>
+                        {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Leyenda */}
-      <div style={{marginTop:14,padding:"8px 10px",background:"#f0f8fd",borderRadius:8,display:"flex",flexWrap:"wrap",gap:10,justifyContent:"center"}}>
-        {[["programada","Programada"],["en_curso","En curso"],["realizada","Realizada"],["suspendida","Suspendida"]].map(([id,label]) => {
-          const col = colorEstado(id);
-          return (
-            <div key={id} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#4a7eab"}}>
-              <div style={{width:10,height:10,borderRadius:2,background:col.bg,border:`1px solid ${col.bd}`,borderLeft:`3px solid ${col.fg}`}}/>
-              <span>{label}</span>
-            </div>
-          );
-        })}
-      </div>
+                      <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>
+                        Pabellón {c.pabellon} {c.cirujano && `| ${c.cirujano}`}
+                      </div>
+                    </div>
+                    <span style={{fontSize:9,padding:"2px 8px",background:colores[c.estado],color:"#fff",borderRadius:10,whiteSpace:"nowrap"}}>{c.estado.replace("_"," ")}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
-}
+  }
+
+ 
 
 function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes }) {
   const [vista, setVista] = useState("lista");
@@ -2594,10 +2711,12 @@ export default function App() {
   const [videos, setVideos] = useState(VIDEOS_INICIALES);
   const [pacientes, setPacientes] = useState([]);
   const [tablaCirugias, setTablaCirugias] = useState([]);
+const [pendientes, setPendientes] = useState([]);
+const [loadingCirugias, setLoadingCirugias] = useState(false);
+const [loadingPendientes, setLoadingPendientes] = useState(false);
   const [conocimiento, setConocimiento] = useState([]);
   const [misServiciosLista, setMisServiciosLista] = useState([]); // array de {id, nombre, ...}
 const [loadingPacientes, setLoadingPacientes] = useState(false);
-  const [pendientes, setPendientes] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
   const [invitaciones, setInvitaciones] = useState([]);
@@ -3215,7 +3334,7 @@ if (!currentUser) {
       </div>
 
       {tab==="admin" && isAdmin && <AdminPanel/>}
-      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
+      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
       {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
