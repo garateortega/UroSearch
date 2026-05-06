@@ -3,6 +3,7 @@ import { register as registerUser, login as loginUser, logout as logoutUser, get
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
+import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
   { id: "derivacion", label: "Derivaciones urinarias", subtopics: ["Nefrostomía percutánea", "Catéter ureteral", "Cistostomía", "Conducto ileal"] },
@@ -1380,7 +1381,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   );
 }
 
-function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, serviciosUsuario, setServiciosUsuario, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
+function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
   const [subTab, setSubTab] = useState("pacientes");
   const [contexto, setContexto] = useState("personal");
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
@@ -1402,7 +1403,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
           <button key={id} onClick={()=>setSubTab(id)} style={{padding:"10px 14px",fontSize:12,fontWeight:subTab===id?500:400,background:"transparent",border:"none",borderBottom:subTab===id?"2px solid #1a6fb5":"2px solid transparent",color:subTab===id?"#1a6fb5":"#4a7eab",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
-      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} serviciosUsuario={serviciosUsuario} setServiciosUsuario={setServiciosUsuario} contexto={contexto} equipoActual={equipoActual}/>}
+      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes}/>}
       {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipoActual={equipoActual}/>}
       {subTab === "pendientes" && <PendientesPanel pendientes={pendientes} setPendientes={setPendientes} currentUser={currentUser} contexto={contexto} equipoActual={equipoActual}/>}
     </div>
@@ -1979,270 +1980,437 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   );
 }
 
-function PacientesPanel({ pacientes, setPacientes, currentUser, serviciosUsuario, setServiciosUsuario, contexto, equipoActual }) {
-  const esEquipo = !!equipoActual;
-  const [vista, setVista] = useState("kanban");
+function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes }) {
+  const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
-  const [busqueda, setBusqueda] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("activos");
-  const misServicios = (serviciosUsuario && serviciosUsuario[currentUser.correo]) || [];
-  const necesitaConfig = !esEquipo && misServicios.length === 0;
-  // Para equipos, usar los servicios del dueño (o agrupados de todos los miembros)
-  const serviciosVista = esEquipo ? Array.from(new Set((equipoActual.miembros_equipo || []).flatMap(m => (serviciosUsuario && serviciosUsuario[m.user_id]) || []))) : misServicios;
+  const [evoluciones, setEvoluciones] = useState([]);
+  const [examenes, setExamenes] = useState([]);
+  const [filtroServicio, setFiltroServicio] = useState("todos");
+  const [filtroEstado, setFiltroEstado] = useState("activo");
+  const [error, setError] = useState("");
 
-  const [nuevoForm, setNuevoForm] = useState({ iniciales:"", edad:"", sexo:"M", cama:"", servicio: "Urología", diagnostico:"", planManejo:"", fechaIngreso: new Date().toISOString().split("T")[0] });
-  const [evolucionTexto, setEvolucionTexto] = useState("");
-  const [modoEvolucion, setModoEvolucion] = useState("libre");
-  const [evolEstr, setEvolEstr] = useState({ estadoGeneral:"", diuresis:"", dolor:"", fiebre:"", deambulacion:"", tolerancia:"", catetereres:"", examenFisico:"", plan:"" });
-  const [examenForm, setExamenForm] = useState({ tipo:"Laboratorio", nombre:"", resultado:"", fecha: new Date().toISOString().split("T")[0] });
-  const [errorForm, setErrorForm] = useState("");
-  const [servicioPersonalizado, setServicioPersonalizado] = useState("");
-
-  // Filtrar pacientes según contexto
-  const misPacientes = esEquipo
-    ? pacientes.filter(p => p.equipoId === equipoActual.id)
-    : pacientes.filter(p => p.medicoId === currentUser.correo && !p.equipoId);
-  const filtrados = misPacientes.filter(p => {
-    const matchEstado = filtroEstado === "todos" || p.estado === filtroEstado;
-    const q = busqueda.toLowerCase().trim();
-    const matchQ = !q || p.iniciales.toLowerCase().includes(q) || p.cama.toLowerCase().includes(q) || p.diagnostico.toLowerCase().includes(q);
-    return matchEstado && matchQ;
+  // Form de nuevo paciente
+  const [nuevo, setNuevo] = useState({
+    iniciales: "", edad: "", sexo: "M", cama: "", servicio: "",
+    diagnostico: "", plan_manejo: "", fecha_ingreso: new Date().toISOString().slice(0, 10)
   });
-  const counts = { activos: misPacientes.filter(p => p.estado==="activo").length, alta: misPacientes.filter(p => p.estado==="alta").length };
 
-  // Configuración inicial de servicios
-  if (necesitaConfig) {
-    return (
-      <ConfiguracionServiciosModal
-        currentUser={currentUser}
-        onConfigurar={(servicios) => {
-          setServiciosUsuario({...serviciosUsuario, [currentUser.correo]: servicios});
-          setNuevoForm({...nuevoForm, servicio: servicios[0]});
-        }}
-      />
-    );
-  }
+  // Form de evoluciones
+  const [evoLibre, setEvoLibre] = useState("");
+  const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
+  const [tipoEvo, setTipoEvo] = useState("libre");
 
-  const crear = () => {
-    setErrorForm("");
-    if (!nuevoForm.iniciales.trim()) return setErrorForm("Ingresa las iniciales");
-    if (!nuevoForm.edad || nuevoForm.edad < 0 || nuevoForm.edad > 120) return setErrorForm("Edad inválida");
-    if (!nuevoForm.cama.trim()) return setErrorForm("Ingresa la cama");
-    if (!nuevoForm.diagnostico.trim()) return setErrorForm("Ingresa el diagnóstico");
-    const nuevo = { id: "p" + Date.now(), medicoId: currentUser.correo, equipoId: esEquipo ? equipoActual.id : null, creadoPor: currentUser.nombre, iniciales: nuevoForm.iniciales.toUpperCase(), edad: parseInt(nuevoForm.edad), sexo: nuevoForm.sexo, cama: nuevoForm.cama, servicio: nuevoForm.servicio, diagnostico: nuevoForm.diagnostico, planManejo: nuevoForm.planManejo, fechaIngreso: nuevoForm.fechaIngreso, estado: "activo", evoluciones: [], examenes: [] };
-    setPacientes([nuevo, ...pacientes]);
-    setNuevoForm({ iniciales:"", edad:"", sexo:"M", cama:"", servicio: misServicios[0], diagnostico:"", planManejo:"", fechaIngreso: new Date().toISOString().split("T")[0] });
-    setVista("kanban");
+  // Form de exámenes
+  const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10) });
+
+  // Servicios
+  const [nuevoServicio, setNuevoServicio] = useState("");
+  const [serviciosEquipo, setServiciosEquipo] = useState([]);
+
+  const esEquipo = contexto !== "personal";
+  const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
+
+  // Cargar pacientes según contexto
+  const cargarPacientes = async () => {
+    setLoadingPacientes(true);
+    const result = await listarPacientes(currentUser.id, contexto);
+    setLoadingPacientes(false);
+    if (result.ok) setPacientes(result.pacientes);
   };
 
-  const agregarServicio = () => {
-    const s = servicioPersonalizado.trim();
-    if (!s || misServicios.includes(s)) return;
-    setServiciosUsuario({...serviciosUsuario, [currentUser.correo]: [...misServicios, s]});
-    setServicioPersonalizado("");
-  };
-
-  const eliminarServicio = (s) => {
-    if (misPacientes.some(p => p.servicio === s && p.estado === "activo")) {
-      alert("No puedes eliminar un servicio que tiene pacientes activos");
-      return;
+  // Cargar servicios del equipo si estoy en contexto equipo
+  const cargarServiciosEquipo = async () => {
+    if (esEquipo) {
+      const result = await listarServiciosEquipo(contexto);
+      if (result.ok) setServiciosEquipo(result.servicios);
     }
-    setServiciosUsuario({...serviciosUsuario, [currentUser.correo]: misServicios.filter(x => x !== s)});
   };
 
-  const agregarEvolucion = () => {
-    let textoFinal = "";
-    if (modoEvolucion === "libre") {
-      if (!evolucionTexto.trim()) return;
-      textoFinal = evolucionTexto;
+  useEffect(() => {
+    cargarPacientes();
+    cargarServiciosEquipo();
+  }, [contexto]);
+
+  // Servicios disponibles según contexto
+  const serviciosDisponibles = esEquipo 
+    ? serviciosEquipo 
+    : misServiciosLista.map(s => s.nombre);
+
+  // Filtrar pacientes
+  const pacientesFiltrados = pacientes.filter(p => {
+    if (filtroEstado !== "todos" && p.estado !== filtroEstado) return false;
+    if (filtroServicio !== "todos" && p.servicio !== filtroServicio) return false;
+    return true;
+  });
+
+  // Agrupar por servicio para vista kanban
+  const porServicio = {};
+  pacientesFiltrados.forEach(p => {
+    if (!porServicio[p.servicio]) porServicio[p.servicio] = [];
+    porServicio[p.servicio].push(p);
+  });
+
+  // ============================================================
+  // CRUD PACIENTES
+  // ============================================================
+
+  const guardarNuevo = async () => {
+    setError("");
+    if (!nuevo.iniciales.trim()) return setError("Ingresa las iniciales");
+    if (nuevo.iniciales.length > 8) return setError("Máximo 8 caracteres en iniciales");
+    if (!nuevo.cama.trim()) return setError("Ingresa la cama");
+    if (!nuevo.servicio.trim()) return setError("Ingresa el servicio");
+    if (!nuevo.diagnostico.trim()) return setError("Ingresa el diagnóstico");
+
+    const datos = {
+      medico_id: currentUser.id,
+      equipo_id: esEquipo ? contexto : null,
+      iniciales: nuevo.iniciales.trim().toUpperCase(),
+      edad: nuevo.edad ? parseInt(nuevo.edad) : null,
+      sexo: nuevo.sexo,
+      cama: nuevo.cama.trim(),
+      servicio: nuevo.servicio.trim(),
+      diagnostico: nuevo.diagnostico.trim(),
+      plan_manejo: nuevo.plan_manejo.trim() || null,
+      fecha_ingreso: nuevo.fecha_ingreso,
+      estado: 'activo'
+    };
+
+    const result = await crearPaciente(datos);
+    if (!result.ok) return setError(result.error);
+
+    setPacientes(prev => [result.paciente, ...prev]);
+    setNuevo({ iniciales: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", fecha_ingreso: new Date().toISOString().slice(0, 10) });
+    setVista("lista");
+  };
+
+  const cambiarEstado = async (paciente, nuevoEstado) => {
+    const result = await actualizarPaciente(paciente.id, { estado: nuevoEstado });
+    if (!result.ok) return alert("Error: " + result.error);
+    setPacientes(prev => prev.map(p => p.id === paciente.id ? result.paciente : p));
+    if (seleccionado?.id === paciente.id) setSeleccionado(result.paciente);
+  };
+
+  const eliminarPacienteHandler = async (paciente) => {
+    if (!confirm(`¿Eliminar paciente ${paciente.iniciales}?\n\nEsto borra evoluciones y exámenes asociados.`)) return;
+    const result = await eliminarPaciente(paciente.id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setPacientes(prev => prev.filter(p => p.id !== paciente.id));
+    setSeleccionado(null);
+    setVista("lista");
+  };
+
+  // ============================================================
+  // ABRIR FICHA
+  // ============================================================
+
+  const abrirFicha = async (paciente) => {
+    setSeleccionado(paciente);
+    setVista("ficha");
+    const evoResult = await listarEvoluciones(paciente.id);
+    if (evoResult.ok) setEvoluciones(evoResult.evoluciones);
+    const exResult = await listarExamenes(paciente.id);
+    if (exResult.ok) setExamenes(exResult.examenes);
+  };
+
+  // ============================================================
+  // CRUD EVOLUCIONES
+  // ============================================================
+
+  const guardarEvolucion = async () => {
+    let texto = "";
+    if (tipoEvo === "libre") {
+      if (!evoLibre.trim()) return alert("Escribe la evolución");
+      texto = evoLibre.trim();
     } else {
       const partes = [];
-      if (evolEstr.estadoGeneral) partes.push(`Estado general: ${evolEstr.estadoGeneral}`);
-      if (evolEstr.dolor) partes.push(`Dolor: ${evolEstr.dolor}`);
-      if (evolEstr.fiebre) partes.push(`Fiebre: ${evolEstr.fiebre}`);
-      if (evolEstr.diuresis) partes.push(`Diuresis: ${evolEstr.diuresis}`);
-      if (evolEstr.tolerancia) partes.push(`Tolerancia oral: ${evolEstr.tolerancia}`);
-      if (evolEstr.deambulacion) partes.push(`Deambulación: ${evolEstr.deambulacion}`);
-      if (evolEstr.catetereres) partes.push(`Catéteres/drenajes: ${evolEstr.catetereres}`);
-      if (evolEstr.examenFisico.trim()) partes.push(`Examen físico: ${evolEstr.examenFisico}`);
-      if (evolEstr.plan.trim()) partes.push(`Plan: ${evolEstr.plan}`);
-      if (partes.length === 0) return;
-      textoFinal = partes.join("\n");
+      if (evoEstructurada.subjetivo.trim()) partes.push(`SUBJETIVO:\n${evoEstructurada.subjetivo.trim()}`);
+      if (evoEstructurada.objetivo.trim()) partes.push(`OBJETIVO:\n${evoEstructurada.objetivo.trim()}`);
+      if (evoEstructurada.examen.trim()) partes.push(`EXAMEN FÍSICO:\n${evoEstructurada.examen.trim()}`);
+      if (evoEstructurada.indicaciones.trim()) partes.push(`INDICACIONES:\n${evoEstructurada.indicaciones.trim()}`);
+      if (partes.length === 0) return alert("Completa al menos una sección");
+      texto = partes.join("\n\n");
     }
-    const ev = { id: "e" + Date.now(), fecha: new Date().toISOString().split("T")[0], hora: new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}), texto: textoFinal, tipo: modoEvolucion, autor: currentUser.nombre };
-    setPacientes(pacientes.map(p => p.id === seleccionado.id ? {...p, evoluciones: [ev, ...p.evoluciones]} : p));
-    setSeleccionado({...seleccionado, evoluciones: [ev, ...seleccionado.evoluciones]});
-    setEvolucionTexto("");
-    setEvolEstr({ estadoGeneral:"", diuresis:"", dolor:"", fiebre:"", deambulacion:"", tolerancia:"", catetereres:"", examenFisico:"", plan:"" });
+
+    const result = await crearEvolucion(seleccionado.id, currentUser.id, texto, tipoEvo);
+    if (!result.ok) return alert("Error: " + result.error);
+    setEvoluciones(prev => [result.evolucion, ...prev]);
+    setEvoLibre("");
+    setEvoEstructurada({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
   };
 
-  const agregarExamen = () => {
-    if (!examenForm.nombre.trim()) return;
-    const ex = { id: "x" + Date.now(), ...examenForm };
-    setPacientes(pacientes.map(p => p.id === seleccionado.id ? {...p, examenes: [ex, ...p.examenes]} : p));
-    setSeleccionado({...seleccionado, examenes: [ex, ...seleccionado.examenes]});
-    setExamenForm({ tipo:"Laboratorio", nombre:"", resultado:"", fecha: new Date().toISOString().split("T")[0] });
+  const eliminarEvo = async (evoId) => {
+    if (!confirm("¿Eliminar esta evolución?")) return;
+    const result = await eliminarEvolucion(evoId);
+    if (!result.ok) return alert("Error: " + result.error);
+    setEvoluciones(prev => prev.filter(e => e.id !== evoId));
   };
 
-  const cambiarEstado = (e) => {
-    setPacientes(pacientes.map(p => p.id === seleccionado.id ? {...p, estado: e} : p));
-    setSeleccionado({...seleccionado, estado: e});
+  // ============================================================
+  // CRUD EXAMENES
+  // ============================================================
+
+  const guardarExamen = async () => {
+    if (!nuevoEx.nombre.trim()) return alert("Ingresa el nombre del examen");
+    if (!nuevoEx.fecha_examen) return alert("Ingresa la fecha");
+
+    const datos = {
+      tipo: nuevoEx.tipo,
+      nombre: nuevoEx.nombre.trim(),
+      resultado: nuevoEx.resultado.trim() || null,
+      fecha_examen: nuevoEx.fecha_examen,
+    };
+
+    const result = await crearExamen(seleccionado.id, currentUser.id, datos);
+    if (!result.ok) return alert("Error: " + result.error);
+    setExamenes(prev => [result.examen, ...prev]);
+    setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10) });
   };
 
-  const eliminarPaciente = (id) => {
-    if (confirm("¿Eliminar paciente?")) {
-      setPacientes(pacientes.filter(p => p.id !== id));
-      if (seleccionado?.id === id) { setSeleccionado(null); setVista("kanban"); }
-    }
+  const eliminarEx = async (exId) => {
+    if (!confirm("¿Eliminar este examen?")) return;
+    const result = await eliminarExamen(exId);
+    if (!result.ok) return alert("Error: " + result.error);
+    setExamenes(prev => prev.filter(e => e.id !== exId));
   };
 
-  // VISTA: GESTIÓN DE SERVICIOS
-  if (vista === "servicios") {
-    return (
-      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>setVista("kanban")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Mis servicios / pisos</div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px",marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Servicios actuales</div>
-          {misServicios.map(s => {
-            const cantidadPac = misPacientes.filter(p => p.servicio === s && p.estado === "activo").length;
-            return (
-              <div key={s} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#f0f8fd",borderRadius:6,marginBottom:5}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c"}}>{s}</div>
-                  <div style={{fontSize:10,color:"#7aa3c4"}}>{cantidadPac} paciente{cantidadPac === 1 ? "" : "s"} activo{cantidadPac === 1 ? "" : "s"}</div>
-                </div>
-                <button onClick={()=>eliminarServicio(s)} disabled={cantidadPac > 0} style={{padding:"4px 10px",fontSize:11,background:"#fff",color:cantidadPac>0?"#cdddec":"#c0392b",border:`0.5px solid ${cantidadPac>0?"#cdddec":"#f0c5c0"}`,borderRadius:6,cursor:cantidadPac>0?"not-allowed":"pointer"}}>Eliminar</button>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px"}}>
-          <div style={{fontSize:12,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Agregar servicio</div>
-          <div style={{display:"flex",gap:6,marginBottom:10}}>
-            <input value={servicioPersonalizado} onChange={e=>setServicioPersonalizado(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Nombre del servicio" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}}/>
-            <button onClick={agregarServicio} disabled={!servicioPersonalizado.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:servicioPersonalizado.trim()?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>+ Agregar</button>
-          </div>
-          <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Sugerencias rápidas:</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-            {SERVICIOS_SUGERIDOS.filter(s => !misServicios.includes(s)).map(s => (
-              <button key={s} onClick={()=>{setServiciosUsuario({...serviciosUsuario, [currentUser.correo]: [...misServicios, s]});}} style={{padding:"4px 10px",fontSize:11,borderRadius:14,cursor:"pointer",border:"0.5px dashed #1a6fb5",background:"#fff",color:"#1a6fb5"}}>+ {s}</button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // ============================================================
+  // CRUD SERVICIOS
+  // ============================================================
 
-  // VISTA: NUEVO PACIENTE
+  const agregarServicio = async () => {
+    if (!nuevoServicio.trim()) return;
+    const result = await crearServicio(currentUser.id, nuevoServicio.trim());
+    if (!result.ok) return alert(result.error);
+    setMisServiciosLista(prev => [...prev, result.servicio]);
+    setNuevoServicio("");
+  };
+
+  const quitarServicio = async (servicioId) => {
+    const result = await eliminarServicio(servicioId);
+    if (!result.ok) return alert("Error: " + result.error);
+    setMisServiciosLista(prev => prev.filter(s => s.id !== servicioId));
+  };
+
+  // ============================================================
+  // RENDER: VISTA NUEVO PACIENTE
+  // ============================================================
+
   if (vista === "nuevo") {
     return (
-      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("kanban");setErrorForm("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nuevo paciente</div>
-        <div style={{background:"#fff8e1",border:"0.5px solid #f0d896",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:11,color:"#8a6610",lineHeight:1.5}}>⚠️ Usa <strong>iniciales</strong>, no nombres completos.</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div><label style={labelStyle}>Iniciales</label><input value={nuevoForm.iniciales} onChange={e=>setNuevoForm({...nuevoForm,iniciales:e.target.value})} placeholder="J.P.M." style={inputStyle} maxLength={8}/></div>
-          <div><label style={labelStyle}>Edad</label><input type="number" value={nuevoForm.edad} onChange={e=>setNuevoForm({...nuevoForm,edad:e.target.value})} placeholder="65" style={inputStyle}/></div>
+      <div style={{padding:"20px",overflowY:"auto"}}>
+        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nuevo paciente {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
+        
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Iniciales (máx 8 chars)</label>
+            <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,8)})} placeholder="JPM" style={inputStyle} maxLength={8}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Edad</label>
+            <input type="number" value={nuevo.edad} onChange={e=>setNuevo({...nuevo,edad:e.target.value})} placeholder="65" style={inputStyle}/>
+          </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <div><label style={labelStyle}>Sexo</label><select value={nuevoForm.sexo} onChange={e=>setNuevoForm({...nuevoForm,sexo:e.target.value})} style={inputStyle}><option value="M">Masculino</option><option value="F">Femenino</option></select></div>
-          <div><label style={labelStyle}>Cama</label><input value={nuevoForm.cama} onChange={e=>setNuevoForm({...nuevoForm,cama:e.target.value})} placeholder="412B" style={inputStyle}/></div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Sexo</label>
+            <select value={nuevo.sexo} onChange={e=>setNuevo({...nuevo,sexo:e.target.value})} style={inputStyle}>
+              <option value="M">Masculino</option>
+              <option value="F">Femenino</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Cama</label>
+            <input value={nuevo.cama} onChange={e=>setNuevo({...nuevo,cama:e.target.value})} placeholder="3-12" style={inputStyle}/>
+          </div>
         </div>
-        <label style={labelStyle}>Servicio</label>
-        <select value={nuevoForm.servicio} onChange={e=>setNuevoForm({...nuevoForm,servicio:e.target.value})} style={inputStyle}>
-          {misServicios.map(s => <option key={s}>{s}</option>)}
-        </select>
-        <label style={labelStyle}>Fecha de ingreso</label>
-        <input type="date" value={nuevoForm.fechaIngreso} onChange={e=>setNuevoForm({...nuevoForm,fechaIngreso:e.target.value})} style={inputStyle}/>
+
+        <label style={labelStyle}>Servicio / Piso</label>
+        {serviciosDisponibles.length > 0 ? (
+          <select value={nuevo.servicio} onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} style={inputStyle}>
+            <option value="">Selecciona...</option>
+            {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        ) : (
+          <div style={{fontSize:11,color:"#a06b1a",background:"#fff8e1",padding:"8px 10px",borderRadius:6,marginBottom:8}}>
+            No tienes servicios configurados. Ve a "⚙️ Servicios" antes de crear pacientes.
+          </div>
+        )}
+
+        <label style={labelStyle}>Fecha ingreso</label>
+        <input type="date" value={nuevo.fecha_ingreso} onChange={e=>setNuevo({...nuevo,fecha_ingreso:e.target.value})} style={inputStyle}/>
+
         <label style={labelStyle}>Diagnóstico</label>
-        <textarea value={nuevoForm.diagnostico} onChange={e=>setNuevoForm({...nuevoForm,diagnostico:e.target.value})} placeholder="Ej: Litiasis renal obstructiva" rows={2} style={{...inputStyle,resize:"none"}}/>
-        <label style={labelStyle}>Plan de manejo</label>
-        <textarea value={nuevoForm.planManejo} onChange={e=>setNuevoForm({...nuevoForm,planManejo:e.target.value})} placeholder="Ej: NPC + ATB" rows={3} style={{...inputStyle,resize:"none"}}/>
-        {errorForm && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
-        <button onClick={crear} style={{...btnPrimary, marginTop:0}}>Guardar paciente</button>
+        <textarea value={nuevo.diagnostico} onChange={e=>setNuevo({...nuevo,diagnostico:e.target.value})} placeholder="Diagnóstico principal" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+
+        <label style={labelStyle}>Plan de manejo (opcional)</label>
+        <textarea value={nuevo.plan_manejo} onChange={e=>setNuevo({...nuevo,plan_manejo:e.target.value})} placeholder="Plan inicial" rows={3} style={{...inputStyle,resize:"vertical"}}/>
+
+        {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+
+        <button onClick={guardarNuevo} style={{...btnPrimary, marginTop:0}}>Guardar paciente</button>
       </div>
     );
   }
 
-  // VISTA: FICHA DEL PACIENTE
-  if (vista === "ficha" && seleccionado) {
+  // ============================================================
+  // RENDER: VISTA SERVICIOS
+  // ============================================================
+
+  if (vista === "servicios") {
     return (
-      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("kanban");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-            <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}</div>
-            <span style={{fontSize:10,fontWeight:500,padding:"2px 8px",borderRadius:10,background: seleccionado.estado==="activo"?"#d4f0e0":"#e0e0e0",color: seleccionado.estado==="activo"?"#1a6f5c":"#666"}}>{seleccionado.estado === "activo" ? "Hospitalizado" : "Alta"}</span>
-          </div>
-          <div style={{fontSize:12,color:"#4a7eab"}}>{seleccionado.edad}a · {seleccionado.sexo} · Cama {seleccionado.cama} · {seleccionado.servicio}</div>
-          <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Ingreso: {seleccionado.fechaIngreso}</div>
-          <div style={{borderTop:"0.5px solid #e8f3fb",paddingTop:8,marginTop:8}}>
-            <div style={{fontSize:11,fontWeight:500,color:"#4a7eab",marginBottom:3}}>DIAGNÓSTICO</div>
-            <div style={{fontSize:13,color:"#1a3a5c",marginBottom:8}}>{seleccionado.diagnostico}</div>
-            <div style={{fontSize:11,fontWeight:500,color:"#4a7eab",marginBottom:3}}>PLAN DE MANEJO</div>
-            <div style={{fontSize:13,color:"#1a3a5c",whiteSpace:"pre-wrap"}}>{seleccionado.planManejo || "Sin plan registrado"}</div>
-          </div>
-          <div style={{display:"flex",gap:6,marginTop:12,paddingTop:10,borderTop:"0.5px solid #e8f3fb"}}>
-            {seleccionado.estado === "activo" ? <button onClick={()=>cambiarEstado("alta")} style={{flex:1,padding:"6px",fontSize:12,background:"#fff",color:"#1a6f5c",border:"0.5px solid #1a6f5c",borderRadius:6,cursor:"pointer",fontWeight:500}}>Dar de alta</button> : <button onClick={()=>cambiarEstado("activo")} style={{flex:1,padding:"6px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #1a6fb5",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
-            <button onClick={()=>eliminarPaciente(seleccionado.id)} style={{padding:"6px 12px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Eliminar</button>
-          </div>
+      <div style={{padding:"20px",overflowY:"auto"}}>
+        <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:6}}>⚙️ Mis servicios</div>
+        <div style={{fontSize:12,color:"#7aa3c4",marginBottom:14}}>Configura los servicios/pisos del hospital donde atiendes</div>
+
+        <div style={{display:"flex",gap:6,marginBottom:14}}>
+          <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}}/>
+          <button onClick={agregarServicio} disabled={!nuevoServicio.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:nuevoServicio.trim()?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>Agregar</button>
         </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>📋 Evoluciones diarias</div>
-          <div style={{display:"flex",gap:6,marginBottom:12,background:"#f0f8fd",padding:4,borderRadius:8}}>
-            {[["libre","✏️ Libre"],["estructurada","☑️ Estructurada"]].map(([id,label])=><button key={id} onClick={()=>setModoEvolucion(id)} style={{flex:1,padding:"6px",fontSize:12,fontWeight:modoEvolucion===id?500:400,borderRadius:6,cursor:"pointer",border:"none",background:modoEvolucion===id?"#1a6fb5":"transparent",color:modoEvolucion===id?"#fff":"#4a7eab"}}>{label}</button>)}
+
+        {misServiciosLista.length === 0 ? (
+          <div style={{textAlign:"center",padding:"30px 16px",color:"#7aa3c4",fontSize:13}}>No tienes servicios configurados.</div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {misServiciosLista.map(s => (
+              <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontSize:13,color:"#1a3a5c"}}>{s.nombre}</div>
+                <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:14}}>🗑</button>
+              </div>
+            ))}
           </div>
-          {modoEvolucion === "libre" ? (
-            <>
-              <textarea value={evolucionTexto} onChange={e=>setEvolucionTexto(e.target.value)} placeholder="Ej: Día 2 post-NPC. Afebril..." rows={4} style={{...inputStyle,resize:"none"}}/>
-              <button onClick={agregarEvolucion} disabled={!evolucionTexto.trim()} style={{...btnPrimary, marginTop:0, padding:"8px", fontSize:13, opacity: evolucionTexto.trim()?1:0.5}}>+ Agregar evolución</button>
-            </>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <CampoAlt label="Estado general" opciones={["Excelente","Bueno","Regular","Malo","Crítico"]} value={evolEstr.estadoGeneral} onChange={v=>setEvolEstr({...evolEstr,estadoGeneral:v})}/>
-              <CampoAlt label="Dolor" opciones={["Sin dolor","Leve (EVA 1-3)","Moderado (EVA 4-6)","Severo (EVA 7-10)"]} value={evolEstr.dolor} onChange={v=>setEvolEstr({...evolEstr,dolor:v})}/>
-              <CampoAlt label="Fiebre" opciones={["Afebril","Febrícula","Fiebre","Fiebre alta"]} value={evolEstr.fiebre} onChange={v=>setEvolEstr({...evolEstr,fiebre:v})}/>
-              <CampoAlt label="Diuresis" opciones={["Conservada","Disminuida","Oliguria","Anuria","Por sonda Foley","Hematuria"]} value={evolEstr.diuresis} onChange={v=>setEvolEstr({...evolEstr,diuresis:v})}/>
-              <CampoAlt label="Tolerancia oral" opciones={["Buena","Regular","Mala","Régimen cero","Náuseas/vómitos"]} value={evolEstr.tolerancia} onChange={v=>setEvolEstr({...evolEstr,tolerancia:v})}/>
-              <CampoAlt label="Deambulación" opciones={["Independiente","Asistida","Reposo relativo","Reposo absoluto"]} value={evolEstr.deambulacion} onChange={v=>setEvolEstr({...evolEstr,deambulacion:v})}/>
-              <CampoAlt label="Catéteres/drenajes" opciones={["Sin dispositivos","Foley","Doble J","Nefrostomía","Drenaje quirúrgico","VVC","Múltiples"]} value={evolEstr.catetereres} onChange={v=>setEvolEstr({...evolEstr,catetereres:v})}/>
-              <div><label style={labelStyle}>Examen físico (opcional)</label><textarea value={evolEstr.examenFisico} onChange={e=>setEvolEstr({...evolEstr,examenFisico:e.target.value})} rows={2} style={{...inputStyle,resize:"none",marginBottom:0}}/></div>
-              <div><label style={labelStyle}>Plan / indicaciones (opcional)</label><textarea value={evolEstr.plan} onChange={e=>setEvolEstr({...evolEstr,plan:e.target.value})} rows={2} style={{...inputStyle,resize:"none",marginBottom:0}}/></div>
-              <button onClick={agregarEvolucion} style={{...btnPrimary, marginTop:0, padding:"8px", fontSize:13}}>+ Agregar evolución</button>
+        )}
+      </div>
+    );
+  }
+
+  // ============================================================
+  // RENDER: VISTA FICHA PACIENTE
+  // ============================================================
+
+  if (vista === "ficha" && seleccionado) {
+    const esCreador = seleccionado.medico_id === currentUser.id;
+    return (
+      <div style={{padding:"16px",overflowY:"auto"}}>
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
+
+        {/* Cabecera */}
+        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}</div>
+              <div style={{fontSize:12,color:"#4a7eab",marginTop:2}}>
+                {seleccionado.edad}a {seleccionado.sexo} | Cama {seleccionado.cama} | {seleccionado.servicio}
+              </div>
+              <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Ingreso: {seleccionado.fecha_ingreso}</div>
+            </div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {seleccionado.estado === "activo" ? (
+                <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
+              ) : (
+                <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>↻ Reactivar</button>
+              )}
+              {esCreador && (
+                <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>🗑</button>
+              )}
+            </div>
+          </div>
+          <div style={{fontSize:12,color:"#1a3a5c",marginTop:8,padding:"8px 10px",background:"#f0f8fd",borderRadius:6}}>
+            <strong>Diagnóstico:</strong> {seleccionado.diagnostico}
+          </div>
+          {seleccionado.plan_manejo && (
+            <div style={{fontSize:12,color:"#1a3a5c",marginTop:6,padding:"8px 10px",background:"#f0f8fd",borderRadius:6,whiteSpace:"pre-wrap"}}>
+              <strong>Plan:</strong> {seleccionado.plan_manejo}
             </div>
           )}
-          {seleccionado.evoluciones.length > 0 && (
-            <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:8}}>
-              {seleccionado.evoluciones.map(e => (
-                <div key={e.id} style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:8,borderLeft:"3px solid #1a6fb5"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:4}}>
-                    <span>{e.fecha} · {e.hora}</span>
-                    {e.tipo === "estructurada" && <span style={{fontSize:9,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:8}}>ESTRUCTURADA</span>}
+        </div>
+
+        {/* EVOLUCIONES */}
+        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>📝 Evoluciones</div>
+
+          {/* Selector tipo */}
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <button onClick={()=>setTipoEvo("libre")} style={{padding:"5px 12px",fontSize:11,background:tipoEvo==="libre"?"#1a6fb5":"#fff",color:tipoEvo==="libre"?"#fff":"#4a7eab",border:tipoEvo==="libre"?"none":"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500}}>Libre</button>
+            <button onClick={()=>setTipoEvo("estructurada")} style={{padding:"5px 12px",fontSize:11,background:tipoEvo==="estructurada"?"#1a6fb5":"#fff",color:tipoEvo==="estructurada"?"#fff":"#4a7eab",border:tipoEvo==="estructurada"?"none":"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500}}>Estructurada (SOAP)</button>
+          </div>
+
+          {tipoEvo === "libre" ? (
+            <textarea value={evoLibre} onChange={e=>setEvoLibre(e.target.value)} placeholder="Escribe la evolución..." rows={4} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:6}}>
+              <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+              <textarea value={evoEstructurada.objetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,objetivo:e.target.value})} placeholder="O - Objetivo (signos vitales, laboratorio)" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+              <textarea value={evoEstructurada.examen} onChange={e=>setEvoEstructurada({...evoEstructurada,examen:e.target.value})} placeholder="A - Examen físico/análisis" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+              <textarea value={evoEstructurada.indicaciones} onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})} placeholder="P - Plan/indicaciones" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+            </div>
+          )}
+
+          <button onClick={guardarEvolucion} style={{...btnPrimary, marginTop:0, marginBottom:12}}>+ Guardar evolución</button>
+
+          {/* Lista de evoluciones */}
+          {evoluciones.length === 0 ? (
+            <div style={{fontSize:11,color:"#7aa3c4",fontStyle:"italic",padding:"10px 0"}}>No hay evoluciones registradas</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {evoluciones.map(e => (
+                <div key={e.id} style={{background:"#f0f8fd",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid #1a6fb5"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <div style={{fontSize:11,color:"#7aa3c4"}}>
+                      {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"#1a6f5c":"#4a7eab"}}>{e.tipo}</span>
+                    </div>
+                    {e.autor_id === currentUser.id && (
+                      <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                    )}
                   </div>
-                  <div style={{fontSize:13,color:"#1a3a5c",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{e.texto}</div>
+                  <div style={{fontSize:12,color:"#1a3a5c",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* EXÁMENES */}
         <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px"}}>
           <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>🧪 Exámenes</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <div><label style={labelStyle}>Tipo</label><select value={examenForm.tipo} onChange={e=>setExamenForm({...examenForm,tipo:e.target.value})} style={inputStyle}><option>Laboratorio</option><option>Imagen</option><option>Cultivo</option><option>Anatomía patológica</option><option>Otro</option></select></div>
-            <div><label style={labelStyle}>Fecha</label><input type="date" value={examenForm.fecha} onChange={e=>setExamenForm({...examenForm,fecha:e.target.value})} style={inputStyle}/></div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+            <select value={nuevoEx.tipo} onChange={e=>setNuevoEx({...nuevoEx,tipo:e.target.value})} style={{...inputStyle,marginBottom:0}}>
+              <option>Laboratorio</option>
+              <option>Imagen</option>
+              <option>Cultivo</option>
+              <option>Anatomía patológica</option>
+              <option>Otro</option>
+            </select>
+            <input type="date" value={nuevoEx.fecha_examen} onChange={e=>setNuevoEx({...nuevoEx,fecha_examen:e.target.value})} style={{...inputStyle,marginBottom:0}}/>
           </div>
-          <label style={labelStyle}>Nombre del examen</label>
-          <input value={examenForm.nombre} onChange={e=>setExamenForm({...examenForm,nombre:e.target.value})} placeholder="Ej: Urocultivo..." style={inputStyle}/>
-          <label style={labelStyle}>Resultado</label>
-          <textarea value={examenForm.resultado} onChange={e=>setExamenForm({...examenForm,resultado:e.target.value})} rows={2} style={{...inputStyle,resize:"none"}}/>
-          <button onClick={agregarExamen} disabled={!examenForm.nombre.trim()} style={{...btnPrimary, marginTop:0, padding:"8px", fontSize:13, opacity: examenForm.nombre.trim()?1:0.5}}>+ Agregar examen</button>
-          {seleccionado.examenes.length > 0 && (
-            <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:8}}>
-              {seleccionado.examenes.map(ex => (
-                <div key={ex.id} style={{padding:"10px 12px",background:"#f5f0fd",borderRadius:8,borderLeft:"3px solid #8a5cb5"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:500,color:"#8a5cb5",marginBottom:4}}><span>{ex.tipo} · {ex.nombre}</span><span>{ex.fecha}</span></div>
-                  {ex.resultado && <div style={{fontSize:13,color:"#1a3a5c",whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
+          <input value={nuevoEx.nombre} onChange={e=>setNuevoEx({...nuevoEx,nombre:e.target.value})} placeholder="Nombre del examen (ej: Creatinina)" style={inputStyle}/>
+          <textarea value={nuevoEx.resultado} onChange={e=>setNuevoEx({...nuevoEx,resultado:e.target.value})} placeholder="Resultado (opcional)" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+          <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0, marginBottom:12}}>+ Guardar examen</button>
+
+          {examenes.length === 0 ? (
+            <div style={{fontSize:11,color:"#7aa3c4",fontStyle:"italic",padding:"10px 0"}}>No hay exámenes registrados</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {examenes.map(ex => (
+                <div key={ex.id} style={{background:"#f0f8fd",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid #1a6f5c"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c"}}>
+                        <span style={{fontSize:9,padding:"1px 6px",background:"#1a6f5c",color:"#fff",borderRadius:3,marginRight:6}}>{ex.tipo}</span>
+                        {ex.nombre}
+                      </div>
+                      <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>{ex.fecha_examen} | {ex.autor?.nombre || "Anónimo"}</div>
+                    </div>
+                    {ex.autor_id === currentUser.id && (
+                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                    )}
+                  </div>
+                  {ex.resultado && <div style={{fontSize:12,color:"#1a3a5c",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
                 </div>
               ))}
             </div>
@@ -2252,65 +2420,71 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, serviciosUsuario
     );
   }
 
-  // VISTA: KANBAN (por servicios)
+  // ============================================================
+  // RENDER: VISTA LISTA (KANBAN)
+  // ============================================================
+
   return (
-    <div style={{padding:"14px",flex:1,overflowY:"auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:8,flexWrap:"wrap"}}>
-        <div>
-          <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:2}}>Mis pacientes</div>
-          <div style={{fontSize:11,color:"#4a7eab"}}>{counts.activos} hospitalizados · {counts.alta} alta</div>
+    <div style={{padding:"16px",overflowY:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:8,flexWrap:"wrap"}}>
+        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c"}}>
+          {esEquipo ? `🏥 Pacientes - ${equipoActual?.nombre}` : "🏥 Mis pacientes"}
         </div>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setVista("servicios")} style={{padding:"7px 10px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #1a6fb5",borderRadius:8,cursor:"pointer"}}>⚙️ Servicios</button>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo paciente</button>
+          <button onClick={()=>setVista("servicios")} style={{padding:"6px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios</button>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>
         </div>
       </div>
 
-      <div style={{background:"#fff8e1",border:"0.5px solid #f0d896",borderRadius:8,padding:"7px 10px",marginBottom:10,fontSize:11,color:"#8a6610"}}>🔒 Solo tú ves tus pacientes. Usa iniciales.</div>
-
-      <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar por iniciales, cama, diagnóstico..." style={{...inputStyle, marginBottom:8}}/>
-
-      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
-        {[["activos",`Activos (${counts.activos})`],["alta",`Alta (${counts.alta})`],["todos","Todos"]].map(([id,label])=><button key={id} onClick={()=>setFiltroEstado(id)} style={{padding:"5px 10px",fontSize:11,fontWeight:filtroEstado===id?500:400,borderRadius:14,cursor:"pointer",border:filtroEstado===id?"none":"0.5px solid #b8d8ef",background:filtroEstado===id?"#1a6fb5":"#fff",color:filtroEstado===id?"#fff":"#4a7eab"}}>{label}</button>)}
+      {/* Filtros */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#7aa3c4"}}>Filtrar:</span>
+        <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none",cursor:"pointer"}}>
+          <option value="todos">Todos los servicios</option>
+          {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none",cursor:"pointer"}}>
+          <option value="activo">Solo activos</option>
+          <option value="alta">Solo dados de alta</option>
+          <option value="todos">Todos</option>
+        </select>
+        <span style={{fontSize:11,color:"#7aa3c4",marginLeft:"auto"}}>{pacientesFiltrados.length} pacientes</span>
       </div>
 
-      {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13}}>{misPacientes.length === 0 ? "No tienes pacientes aún." : "Ningún paciente coincide"}</div>
-      ) : (
-        <div style={{overflowX:"auto",paddingBottom:8}}>
-          <div style={{display:"flex",gap:10,minWidth:"max-content"}}>
-            {misServicios.map(serv => {
-              const pacsServicio = filtrados.filter(p => p.servicio === serv);
-              return (
-                <div key={serv} style={{minWidth:200,maxWidth:240,flex:"0 0 220px",background:"#f0f8fd",borderRadius:10,padding:10}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid #b8d8ef"}}>
-                    <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c"}}>{serv}</div>
-                    <span style={{fontSize:10,padding:"1px 7px",background:"#1a6fb5",color:"#fff",borderRadius:8,fontWeight:500}}>{pacsServicio.length}</span>
-                  </div>
-                  {pacsServicio.length === 0 ? (
-                    <div style={{fontSize:11,color:"#7aa3c4",textAlign:"center",padding:"16px 8px",fontStyle:"italic"}}>Sin pacientes</div>
-                  ) : (
-                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                      {pacsServicio.map(p => (
-                        <div key={p.id} onClick={()=>{setSeleccionado(p);setVista("ficha");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"8px 10px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"#1a6fb5":"#b8b8b8"}`}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:3}}>
-                            <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c"}}>{p.iniciales}</div>
-                            <span style={{fontSize:9,padding:"1px 6px",borderRadius:8,background:p.estado==="activo"?"#d4f0e0":"#e8e8e8",color:p.estado==="activo"?"#1a6f5c":"#666",fontWeight:500}}>{p.estado === "activo" ? "Hosp." : "Alta"}</span>
-                          </div>
-                          <div style={{fontSize:11,color:"#4a7eab",marginBottom:3}}>{p.edad}a {p.sexo} · 🛏 {p.cama}</div>
-                          <div style={{fontSize:11,color:"#7aa3c4",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
-                          <div style={{fontSize:9,color:"#7aa3c4",marginTop:4,display:"flex",gap:8}}>
-                            <span>📋 {p.evoluciones.length}</span>
-                            <span>🧪 {p.examenes.length}</span>
-                          </div>
-                        </div>
-                      ))}
+      {loadingPacientes && (
+        <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>Cargando pacientes...</div>
+      )}
+
+      {!loadingPacientes && pacientesFiltrados.length === 0 && (
+        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+          No hay pacientes en este contexto.<br/>
+          {esEquipo ? "Agrega uno con el botón + Nuevo" : "Crea tu primer paciente con + Nuevo"}
+        </div>
+      )}
+
+      {/* Vista kanban por servicio */}
+      {!loadingPacientes && pacientesFiltrados.length > 0 && (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12}}>
+          {Object.keys(porServicio).sort().map(servicio => (
+            <div key={servicio} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px"}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid #e8f3fb"}}>
+                {servicio} <span style={{color:"#7aa3c4",fontWeight:400}}>({porServicio[servicio].length})</span>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {porServicio[servicio].map(p => (
+                  <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"#f0f8fd":"#f5f5f5",borderRadius:6,padding:"8px 10px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"#1a6fb5":"#999"}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c"}}>{p.iniciales}</div>
+                      <div style={{fontSize:10,color:"#7aa3c4"}}>Cama {p.cama}</div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    <div style={{fontSize:10,color:"#4a7eab",marginBottom:2}}>{p.edad}a {p.sexo}</div>
+                    <div style={{fontSize:11,color:"#1a3a5c",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
+                    {p.estado === "alta" && <div style={{fontSize:9,color:"#999",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -2421,7 +2595,8 @@ export default function App() {
   const [pacientes, setPacientes] = useState([]);
   const [tablaCirugias, setTablaCirugias] = useState([]);
   const [conocimiento, setConocimiento] = useState([]);
-  const [serviciosUsuario, setServiciosUsuario] = useState({});
+  const [misServiciosLista, setMisServiciosLista] = useState([]); // array de {id, nombre, ...}
+const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [pendientes, setPendientes] = useState([]);
   const [equipos, setEquipos] = useState([]);
   const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
@@ -2532,6 +2707,8 @@ const eliminarConv = async (conversacionId) => {
   setMapaTema("");
   setMapasGuardados([]);
   setInvitacionesPendientes([]);
+  setMisServiciosLista([]);
+  setPacientes([]);
 };
 // Abrir una conversación existente (cargar sus mensajes)
 const abrirConversacion = async (conversacionId) => {
@@ -2643,6 +2820,11 @@ if (equiposResult.ok) {
 const invitResult = await listarMisInvitaciones();
 if (invitResult.ok) {
   setInvitacionesPendientes(invitResult.invitaciones);
+}
+// Cargar mis servicios (pisos/áreas del hospital)
+const serviciosResult = await listarMisServicios(perfil.id);
+if (serviciosResult.ok) {
+  setMisServiciosLista(serviciosResult.servicios);
 }
 // Si no hay conversaciones, mostrar mensaje de bienvenida
 if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.length === 0)) {
@@ -3033,7 +3215,7 @@ if (!currentUser) {
       </div>
 
       {tab==="admin" && isAdmin && <AdminPanel/>}
-      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} serviciosUsuario={serviciosUsuario} setServiciosUsuario={setServiciosUsuario} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
+      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
       {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
