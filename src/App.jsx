@@ -2094,6 +2094,71 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
  
 
 function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes }) {
+  // Plantillas SOAP completas
+const PLANTILLAS_SOAP = {
+  "Post-operatorio sin complicaciones": {
+    subjetivo: "Paciente refiere dolor controlado con analgesia habitual. Sin náuseas ni vómitos. Tolera vía oral. Diuresis espontánea conservada.",
+    objetivo: "Hemodinámicamente estable. Afebril. Signos vitales: PA __/__, FC __, FR __, SatO2 __%. Diuresis __ ml en últimas 24h.",
+    examen: "Conciente, orientado, cooperador. Mucosas húmedas y rosadas. Cardiopulmonar sin alteraciones. Abdomen blando, depresible, indoloro. Herida operatoria limpia, sin signos de infección. Catéter urinario permeable con orina clara.",
+    indicaciones: "1. Continuar régimen liviano.\n2. Analgesia con paracetamol 1g c/8h + ketoprofeno SOS.\n3. Hidratación oral según tolerancia.\n4. Movilización precoz.\n5. Curación diaria de herida operatoria.\n6. Control de evolución mañana."
+  },
+  "Sepsis urinaria en evolución": {
+    subjetivo: "Paciente refiere mejoría sintomática parcial. Disminución de fiebre. Sin disuria ni poliaquiuria actualmente.",
+    objetivo: "Tendencia a mejoría. Tº máxima en últimas 24h: __°C. PCR/leucocitos en descenso. Diuresis adecuada.",
+    examen: "Conciente, orientado. Mucosas húmedas. Cardiopulmonar sin alteraciones. Abdomen blando, sin signos peritoneales. Puño percusión renal negativa bilateral.",
+    indicaciones: "1. Continuar antibioticoterapia EV según pauta.\n2. Hidratación parenteral.\n3. Control de signos vitales c/4h.\n4. Solicitar control de exámenes en 24h.\n5. Reevaluar continuación EV vs paso a oral."
+  },
+  "Litiasis ureteral con catéter doble J": {
+    subjetivo: "Paciente refiere mejoría del dolor lumbar. Disuria leve persistente. Sin fiebre. Diuresis conservada.",
+    objetivo: "Hemodinámicamente estable. Afebril. Sin alteraciones electrolíticas. Función renal conservada.",
+    examen: "Conciente, cooperador. Cardiopulmonar sin alteraciones. Abdomen blando, depresible. Puño percusión renal levemente sensible en lado afectado.",
+    indicaciones: "1. Tamsulosina 0,4 mg/día.\n2. Analgesia con AINEs SOS.\n3. Hidratación oral abundante.\n4. Control en consultorio en 4 semanas para retiro de doble J.\n5. Imagen de control."
+  },
+  "Hematuria en estudio": {
+    subjetivo: "Paciente refiere persistencia de hematuria macroscópica. Sin dolor lumbar ni cólico. Diuresis conservada.",
+    objetivo: "Hemodinámicamente estable. Hb estable. Función renal conservada.",
+    examen: "Conciente, orientado. Mucosas algo pálidas. Cardiopulmonar normal. Abdomen blando, indoloro. Sin globo vesical.",
+    indicaciones: "1. Mantener hidratación abundante.\n2. Solicitar cistoscopia.\n3. Solicitar UroTAC con contraste.\n4. Citología urinaria seriada x3.\n5. Control con urocultivo."
+  }
+};
+
+// Sugerencias breves por sección
+const SUGERENCIAS_SOAP = {
+  subjetivo: [
+    "Paciente refiere dolor lumbar moderado",
+    "Asintomático, sin molestias",
+    "Refiere disuria y poliaquiuria",
+    "Náuseas, sin vómitos",
+    "Tolera vía oral, diuresis conservada",
+    "Refiere fiebre nocturna",
+  ],
+  objetivo: [
+    "Hemodinámicamente estable, afebril",
+    "PA __/__, FC __, FR __, T° __, SatO2 __%",
+    "Diuresis __ ml en últimas 24h",
+    "Hb estable, función renal conservada",
+    "PCR en descenso, leucocitos normales",
+  ],
+  examen: [
+    "Conciente, orientado, cooperador",
+    "Mucosas húmedas y rosadas",
+    "Cardiopulmonar sin alteraciones",
+    "Abdomen blando, depresible, indoloro",
+    "Puño percusión renal negativa bilateral",
+    "Herida operatoria limpia, sin signos de infección",
+    "Catéter urinario permeable con orina clara",
+  ],
+  indicaciones: [
+    "Continuar tratamiento actual",
+    "Analgesia con paracetamol 1g c/8h",
+    "Hidratación abundante (>2L/día)",
+    "Régimen liviano",
+    "Movilización precoz",
+    "Curación diaria de herida",
+    "Control en 24h",
+    "Solicitar exámenes de control",
+  ]
+};
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   const [evoluciones, setEvoluciones] = useState([]);
@@ -2455,12 +2520,63 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipo
           {tipoEvo === "libre" ? (
             <textarea value={evoLibre} onChange={e=>setEvoLibre(e.target.value)} placeholder="Escribe la evolución..." rows={4} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
           ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:6}}>
-              <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo" rows={2} style={{...inputStyle,resize:"vertical"}}/>
-              <textarea value={evoEstructurada.objetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,objetivo:e.target.value})} placeholder="O - Objetivo (signos vitales, laboratorio)" rows={2} style={{...inputStyle,resize:"vertical"}}/>
-              <textarea value={evoEstructurada.examen} onChange={e=>setEvoEstructurada({...evoEstructurada,examen:e.target.value})} placeholder="A - Examen físico/análisis" rows={2} style={{...inputStyle,resize:"vertical"}}/>
-              <textarea value={evoEstructurada.indicaciones} onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})} placeholder="P - Plan/indicaciones" rows={2} style={{...inputStyle,resize:"vertical"}}/>
-            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:6}}>
+  
+  {/* PLANTILLAS COMPLETAS */}
+  <div style={{padding:"8px 10px",background:"#f0f8fd",borderRadius:6,border:"0.5px dashed #b8d8ef"}}>
+    <div style={{fontSize:10,fontWeight:500,color:"#4a7eab",marginBottom:5}}>📋 Plantillas completas (rellenan todo el SOAP):</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+      {Object.keys(PLANTILLAS_SOAP).map(nombre => (
+        <button 
+          key={nombre} 
+          onClick={()=>setEvoEstructurada(PLANTILLAS_SOAP[nombre])}
+          style={{padding:"4px 9px",fontSize:10,background:"#fff",border:"0.5px solid #b8d8ef",color:"#1a6fb5",borderRadius:10,cursor:"pointer"}}
+        >{nombre}</button>
+      ))}
+    </div>
+  </div>
+
+  {/* SUBJETIVO */}
+  <div>
+    <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo (lo que refiere el paciente)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
+    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+      {SUGERENCIAS_SOAP.subjetivo.map(s => (
+        <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"2px 7px",fontSize:9,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ {s.slice(0,30)}{s.length > 30 ? "..." : ""}</button>
+      ))}
+    </div>
+  </div>
+
+  {/* OBJETIVO */}
+  <div>
+    <textarea value={evoEstructurada.objetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,objetivo:e.target.value})} placeholder="O - Objetivo (signos vitales, laboratorio)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
+    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+      {SUGERENCIAS_SOAP.objetivo.map(s => (
+        <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"2px 7px",fontSize:9,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ {s.slice(0,30)}{s.length > 30 ? "..." : ""}</button>
+      ))}
+    </div>
+  </div>
+
+  {/* EXAMEN FÍSICO */}
+  <div>
+    <textarea value={evoEstructurada.examen} onChange={e=>setEvoEstructurada({...evoEstructurada,examen:e.target.value})} placeholder="A - Examen físico/análisis" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
+    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+      {SUGERENCIAS_SOAP.examen.map(s => (
+        <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"2px 7px",fontSize:9,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ {s.slice(0,30)}{s.length > 30 ? "..." : ""}</button>
+      ))}
+    </div>
+  </div>
+
+  {/* INDICACIONES */}
+  <div>
+    <textarea value={evoEstructurada.indicaciones} onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})} placeholder="P - Plan/indicaciones" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
+    <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+      {SUGERENCIAS_SOAP.indicaciones.map(s => (
+        <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"2px 7px",fontSize:9,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ {s.slice(0,30)}{s.length > 30 ? "..." : ""}</button>
+      ))}
+    </div>
+  </div>
+
+</div>
           )}
 
           <button onClick={guardarEvolucion} style={{...btnPrimary, marginTop:0, marginBottom:12}}>+ Guardar evolución</button>
