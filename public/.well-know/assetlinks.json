@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.urosearch.twa",
+        "sha256_cert_fingerprints": ["40:A8:FE:FC:3F:A7:CD:24:BF:E3:11:B6:0A:6A:14:68:99:C8:7A:29:5A:6F:BF:00:F5:51:BB:44:6F:F9:6A:18"]
+      }
+    }]
