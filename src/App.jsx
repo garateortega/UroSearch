@@ -5,6 +5,7 @@ import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
+import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase } from "./biblioteca";
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
   { id: "derivacion", label: "Derivaciones urinarias", subtopics: ["Nefrostomía percutánea", "Catéter ureteral", "Cistostomía", "Conducto ileal"] },
@@ -49,21 +50,11 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.7.0 (beta)";
+const VERSION = "v0.8.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
 
-const VIDEOS_INICIALES = [
-  { id:"v1", titulo:"Prostatectomía radical robótica", categoria:"Oncología", url:"https://www.youtube.com/watch?v=4w8pY7C3FpQ", autor:"AUA University", keywords:["prostatectomía","próstata","radical","robótica"], descripcion:"Técnica paso a paso de prostatectomía radical asistida por robot." },
-  { id:"v2", titulo:"Nefrectomía parcial laparoscópica", categoria:"Oncología", url:"https://www.youtube.com/watch?v=6WdBgBHqNqI", autor:"EAU", keywords:["nefrectomía","parcial","riñón","laparoscópica"], descripcion:"Resección de tumor renal con preservación del parénquima." },
-  { id:"v3", titulo:"NLP - Nefrolitotomía percutánea", categoria:"Litiasis", url:"https://www.youtube.com/watch?v=1oH_d9GZmjA", autor:"Endourology Society", keywords:["nlp","nefrolitotomía","litiasis","percutánea","cálculo"], descripcion:"Acceso percutáneo y fragmentación de cálculo coraliforme." },
-  { id:"v4", titulo:"URS flexible con láser holmium", categoria:"Litiasis", url:"https://www.youtube.com/watch?v=KS8t9xRr0Pg", autor:"AUA", keywords:["urs","ureteroscopía","láser","holmium","cálculo"], descripcion:"Litotricia intracorpórea con ureteroscopía flexible." },
-  { id:"v5", titulo:"Trasplante renal - anastomosis ureterovesical", categoria:"Trasplante", url:"https://www.youtube.com/watch?v=9Y3OVF5gEjE", autor:"Sociedad Chilena Trasplante", keywords:["trasplante","ureterovesical","lich-gregoir","anastomosis"], descripcion:"Técnica de Lich-Gregoir en trasplante renal." },
-  { id:"v6", titulo:"Instalación de catéter doble J", categoria:"Derivaciones", url:"https://www.youtube.com/watch?v=6kSCqK1Cj_E", autor:"Urology Care", keywords:["doble j","catéter","ureteral","derivación"], descripcion:"Instalación endoscópica de catéter ureteral doble J." },
-  { id:"v7", titulo:"Nefrostomía percutánea ecoguiada", categoria:"Derivaciones", url:"https://www.youtube.com/watch?v=Vv_PEJiQbPo", autor:"HBV", keywords:["nefrostomía","percutánea","npc","ecoguiada"], descripcion:"Técnica de nefrostomía bajo guía ecográfica." },
-  { id:"v8", titulo:"Cistectomía radical con neovejiga", categoria:"Oncología", url:"https://www.youtube.com/watch?v=RtJq3pTU5HQ", autor:"EAU", keywords:["cistectomía","vejiga","neovejiga","derivación urinaria"], descripcion:"Cistectomía radical con reconstrucción ortotópica." }
-];
 
 const CATEGORIAS_VIDEO = ["Todas", "Oncología", "Litiasis", "Derivaciones", "Trasplante", "Funcional", "Otros"];
 const CATEGORIAS_KB = ["Guías clínicas", "Protocolos HBV", "Apuntes propios", "Papers", "Casos clínicos", "Otro"];
@@ -690,23 +681,28 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
     }
   };
 
-  const guardar = () => {
-    setErrorForm("");
-    if (!nuevoForm.titulo.trim()) return setErrorForm("Ingresa un título");
-    if (!nuevoForm.contenido.trim()) return setErrorForm("Ingresa o sube el contenido");
-    if (nuevoForm.contenido.length < 50) return setErrorForm("Contenido muy corto (mínimo 50 caracteres)");
-    const nuevo = { id: "k" + Date.now(), titulo: nuevoForm.titulo, categoria: nuevoForm.categoria, contenido: nuevoForm.contenido, tags: nuevoForm.tags.split(",").map(t=>t.trim()).filter(Boolean), fechaCreacion: new Date().toISOString().split("T")[0], caracteres: nuevoForm.contenido.length };
-    setConocimiento([nuevo, ...conocimiento]);
-    setNuevoForm({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"" });
-    setVista("lista");
-  };
-
-  const eliminar = (id) => {
-    if (confirm("¿Eliminar este documento?")) {
-      setConocimiento(conocimiento.filter(d => d.id !== id));
-      if (seleccionado?.id === id) { setSeleccionado(null); setVista("lista"); }
-    }
-  };
+ const guardar = async () => {
+  setErrorForm("");
+  if (!nuevoForm.titulo.trim()) return setErrorForm("Ingresa un título");
+  if (!nuevoForm.contenido.trim()) return setErrorForm("Ingresa o sube el contenido");
+  if (nuevoForm.contenido.length < 50) return setErrorForm("Contenido muy corto (mínimo 50 caracteres)");
+  
+  const sesionResult = await getSession();
+  if (!sesionResult.ok || !sesionResult.session) return setErrorForm("Error de sesión");
+  
+  const result = await crearConocimiento(sesionResult.session.user.id, {
+    titulo: nuevoForm.titulo,
+    categoria: nuevoForm.categoria,
+    contenido: nuevoForm.contenido,
+    tags: nuevoForm.tags,
+  });
+  
+  if (!result.ok) return setErrorForm("Error al guardar: " + result.error);
+  
+  setConocimiento([result.item, ...conocimiento]);
+  setNuevoForm({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"" });
+  setVista("lista");
+};
 
   if (vista === "nuevo") {
     return (
@@ -741,7 +737,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
         <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
           <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:4}}>{seleccionado.categoria}</div>
           <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:6}}>{seleccionado.titulo}</div>
-          <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8}}>Agregado: {seleccionado.fechaCreacion} · {seleccionado.caracteres.toLocaleString()} caracteres</div>
+          <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {seleccionado.caracteres.toLocaleString()} caracteres</div>
           {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
         </div>
         <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",fontSize:13,color:"#1a3a5c",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{seleccionado.contenido}</div>
@@ -772,7 +768,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
             <div key={d.id} onClick={()=>{setSeleccionado(d); setVista("ver");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:3}}>{d.categoria}</div>
               <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c",marginBottom:4}}>{d.titulo}</div>
-              <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>{d.fechaCreacion} · {d.caracteres.toLocaleString()} caracteres</div>
+              <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")} · {d.contenido?.length?.toLocaleString() || 0} caracteres</div>
               <div style={{fontSize:12,color:"#4a7eab",lineHeight:1.4}}>{d.contenido.slice(0,150)}{d.contenido.length>150?"...":""}</div>
             </div>
           ))}
@@ -2634,20 +2630,38 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
   const filtrados = videos.filter(v => {
     const matchCat = filtro === "Todas" || v.categoria === filtro;
     const q = busqueda.toLowerCase().trim();
-    const matchQ = !q || v.titulo.toLowerCase().includes(q) || v.descripcion.toLowerCase().includes(q) || v.keywords.some(k=>k.toLowerCase().includes(q));
+   const matchQ = !q || v.titulo.toLowerCase().includes(q) || (v.descripcion || "").toLowerCase().includes(q);
     return matchCat && matchQ;
   });
-  const agregarVideo = () => {
-    setErrorAdd("");
-    if (!nuevo.titulo.trim()) return setErrorAdd("Ingresa un título");
-    if (!nuevo.url.trim()) return setErrorAdd("Ingresa la URL");
-    if (!getYouTubeId(nuevo.url)) return setErrorAdd("URL de YouTube inválida");
-    const newVid = { id: "v" + Date.now(), titulo: nuevo.titulo, categoria: nuevo.categoria, url: nuevo.url, autor: nuevo.autor || "Sin especificar", descripcion: nuevo.descripcion || "Sin descripción", keywords: nuevo.keywords.split(",").map(k=>k.trim()).filter(Boolean) };
-    setVideos([newVid, ...videos]);
-    setNuevo({ titulo:"", categoria:"Oncología", url:"", autor:"", descripcion:"", keywords:"" });
-    setAgregando(false);
-  };
-  const eliminarVideo = (id) => { if (confirm("¿Eliminar?")) setVideos(videos.filter(v => v.id !== id)); };
+  const agregarVideo = async () => {
+  setErrorAdd("");
+  if (!nuevo.titulo.trim()) return setErrorAdd("Ingresa un título");
+  if (!nuevo.url.trim()) return setErrorAdd("Ingresa la URL");
+  if (!getYouTubeId(nuevo.url)) return setErrorAdd("URL de YouTube inválida");
+  
+  const sesionResult = await getSession();
+  if (!sesionResult.ok || !sesionResult.session) return setErrorAdd("Error de sesión");
+  
+  const result = await crearVideo(sesionResult.session.user.id, {
+    titulo: nuevo.titulo,
+    url: nuevo.url,
+    categoria: nuevo.categoria,
+    descripcion: nuevo.descripcion || null,
+  });
+  
+  if (!result.ok) return setErrorAdd("Error al guardar: " + result.error);
+  
+  setVideos([result.video, ...videos]);
+  setNuevo({ titulo:"", categoria:"Oncología", url:"", autor:"", descripcion:"", keywords:"" });
+  setAgregando(false);
+};
+ const eliminarVideo = async (id) => {
+  if (confirm("¿Eliminar?")) {
+    const result = await eliminarVideoSupabase(id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setVideos(videos.filter(v => v.id !== id));
+  }
+};
 
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
@@ -2665,7 +2679,6 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
           <input value={nuevo.url} onChange={e=>setNuevo({...nuevo,url:e.target.value})} placeholder="URL YouTube" style={inputStyle}/>
           <input value={nuevo.autor} onChange={e=>setNuevo({...nuevo,autor:e.target.value})} placeholder="Autor (opcional)" style={inputStyle}/>
           <textarea value={nuevo.descripcion} onChange={e=>setNuevo({...nuevo,descripcion:e.target.value})} placeholder="Descripción" rows={2} style={{...inputStyle,resize:"none"}}/>
-          <input value={nuevo.keywords} onChange={e=>setNuevo({...nuevo,keywords:e.target.value})} placeholder="Palabras clave (separadas por coma)" style={inputStyle}/>
           {errorAdd && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorAdd}</div>}
           <button onClick={agregarVideo} style={{...btnPrimary, marginTop:0}}>Guardar video</button>
         </div>
@@ -2708,13 +2721,13 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [users, setUsers] = useState([]); // TEMPORAL: hasta migrar AdminPanel/EquiposPanel
   const [loadingSession, setLoadingSession] = useState(true);
-  const [videos, setVideos] = useState(VIDEOS_INICIALES);
   const [pacientes, setPacientes] = useState([]);
   const [tablaCirugias, setTablaCirugias] = useState([]);
 const [pendientes, setPendientes] = useState([]);
 const [loadingCirugias, setLoadingCirugias] = useState(false);
 const [loadingPendientes, setLoadingPendientes] = useState(false);
   const [conocimiento, setConocimiento] = useState([]);
+  const [videos, setVideos] = useState([]);
   const [misServiciosLista, setMisServiciosLista] = useState([]); // array de {id, nombre, ...}
 const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [equipos, setEquipos] = useState([]);
@@ -2944,6 +2957,17 @@ if (invitResult.ok) {
 const serviciosResult = await listarMisServicios(perfil.id);
 if (serviciosResult.ok) {
   setMisServiciosLista(serviciosResult.servicios);
+}
+// Cargar conocimiento (la IA lo usa para todos)
+const conocimientoResult = await listarConocimiento();
+if (conocimientoResult.ok) {
+  setConocimiento(conocimientoResult.conocimiento);
+}
+
+// Cargar videos
+const videosResult = await listarVideos();
+if (videosResult.ok) {
+  setVideos(videosResult.videos);
 }
 // Si no hay conversaciones, mostrar mensaje de bienvenida
 if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.length === 0)) {
