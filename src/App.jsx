@@ -1918,7 +1918,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
             <label style={labelStyle}>Iniciales (máx 8)</label>
-            <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,8)})} placeholder="JPM" style={inputStyle} maxLength={8}/>
+            <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,100)})} placeholder="Juan Pérez Mora o JPM" style={inputStyle} maxLength={100}/>
           </div>
           <div>
             <label style={labelStyle}>Edad</label>
@@ -2170,7 +2170,7 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipo
   const guardarNuevo = async () => {
     setError("");
     if (!nuevo.iniciales.trim()) return setError("Ingresa las iniciales");
-    if (nuevo.iniciales.length > 8) return setError("Máximo 8 caracteres en iniciales");
+    if (nuevo.iniciales.length > 100) return setError("Máximo 100 caracteres");
     if (!nuevo.cama.trim()) return setError("Ingresa la cama");
     if (!nuevo.servicio.trim()) return setError("Ingresa el servicio");
     if (!nuevo.diagnostico.trim()) return setError("Ingresa el diagnóstico");
@@ -2317,8 +2317,8 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipo
         
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
-            <label style={labelStyle}>Iniciales (máx 8 chars)</label>
-            <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,8)})} placeholder="JPM" style={inputStyle} maxLength={8}/>
+            <label style={labelStyle}>Nombre o iniciales</label>
+            <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,100)})} placeholder="Juan Pérez Mora o JPM" style={inputStyle} maxLength={100}/>
           </div>
           <div>
             <label style={labelStyle}>Edad</label>
