@@ -50,7 +50,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.8.0 (beta)";
+const VERSION = "v0.9.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
