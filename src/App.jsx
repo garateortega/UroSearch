@@ -3091,7 +3091,7 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
 }
 };
 
-  const userInitials = currentUser ? (currentUser.nombre.split(" ").map(p=>p[0]).filter(c=>c.match(/[A-Z]/i)).slice(0,2).join("").toUpperCase() || "U") : "";
+ const userInitials = currentUser ? currentUser.nombre.split(" ").map(p=>p[0]||"").filter(c=>c && c.match(/[A-Z]/i)).slice(0,2).join("").toUpperCase() : "";
 
   const buscarVideosRelevantes = (consulta) => {
     const q = consulta.toLowerCase();
