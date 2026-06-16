@@ -75,7 +75,7 @@ function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
   const puntuados = documentos.map(doc => {
     const tituloN = doc.titulo.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
     const contN = doc.contenido.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    const tagsN = (doc.tags||[]).join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    const tagsN = (Array.isArray(doc.tags) ? doc.tags : []).join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
     let score = 0;
     palabras.forEach(p => {
       const raiz = p.length > 5 ? p.slice(0, p.length - 2) : p;
