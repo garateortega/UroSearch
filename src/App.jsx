@@ -1420,7 +1420,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
       <div style={{display:"flex",gap:0,background:"#f0f8fd",borderBottom:"0.5px solid #b8d8ef",padding:"4px 12px 0",overflowX:"auto",flexShrink:0}}>
-        {[["pacientes","👥 Pacientes"],["tabla","📅 Tabla Quirúrgica"],["pendientes","✅ Pendientes del día"]].map(([id,label]) => (
+        {[["pacientes","👥 Pacientes"],["pendientes","✅ Pendientes del día"],["tabla","📋 Tabla Quirúrgica"]].map(([id,label]) => (
           <button key={id} onClick={()=>setSubTab(id)} style={{padding:"10px 14px",fontSize:12,fontWeight:subTab===id?500:400,background:"transparent",border:"none",borderBottom:subTab===id?"2px solid #1a6fb5":"2px solid transparent",color:subTab===id?"#1a6fb5":"#4a7eab",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
@@ -2208,7 +2208,7 @@ const SUGERENCIAS_SOAP = {
   // Servicios
   const [nuevoServicio, setNuevoServicio] = useState("");
   const [serviciosEquipo, setServiciosEquipo] = useState([]);
-
+const [miembrosEquipo, setMiembrosEquipo] = useState([]);
   const esEquipo = contexto !== "personal";
   const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
 
@@ -2227,10 +2227,17 @@ const SUGERENCIAS_SOAP = {
       if (result.ok) setServiciosEquipo(result.servicios);
     }
   };
-
+// Cargar miembros del equipo (para asignar encargados)
+const cargarMiembrosEquipo = async () => {
+  if (esEquipo) {
+    const result = await listarMiembros(contexto);
+    if (result.ok) setMiembrosEquipo(result.miembros);
+  }
+};
   useEffect(() => {
     cargarPacientes();
     cargarServiciosEquipo();
+    cargarMiembrosEquipo();
   }, [contexto]);
 
   // Servicios disponibles según contexto
@@ -2292,7 +2299,11 @@ const SUGERENCIAS_SOAP = {
     setPacientes(prev => prev.map(p => p.id === paciente.id ? result.paciente : p));
     if (seleccionado?.id === paciente.id) setSeleccionado(result.paciente);
   };
-
+const asignarEncargados = async (pacienteId, nuevosEncargados) => {
+  const result = await actualizarPaciente(pacienteId, { encargados: nuevosEncargados });
+  if (!result.ok) return alert("Error: " + result.error);
+  setPacientes(prev => prev.map(p => p.id === pacienteId ? result.paciente : p));
+};
   const eliminarPacienteHandler = async (paciente) => {
     if (!confirm(`¿Eliminar paciente ${paciente.iniciales}?\n\nEsto borra evoluciones y exámenes asociados.`)) return;
     const result = await eliminarPaciente(paciente.id);
@@ -2733,11 +2744,58 @@ const SUGERENCIAS_SOAP = {
                     <div style={{fontSize:10,color:"#4a7eab",marginBottom:2}}>{p.edad}a {p.sexo}</div>
                     <div style={{fontSize:11,color:"#1a3a5c",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
                     {p.estado === "alta" && <div style={{fontSize:9,color:"#999",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
+                    {esEquipo && <EncargadosPaciente paciente={p} miembros={miembrosEquipo} currentUser={currentUser} onActualizar={asignarEncargados} />}
                   </div>
                 ))}
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
+  const [abierto, setAbierto] = useState(false);
+  const encargados = Array.isArray(paciente.encargados) ? paciente.encargados : [];
+
+ const toggle = async (userId) => {
+  const nueva = encargados.includes(userId)
+    ? encargados.filter(id => id !== userId)
+    : [...encargados, userId];
+  await onActualizar(paciente.id, nueva);
+};
+
+  const nombreDe = (id) => {
+    const m = miembros.find(x => x.perfiles?.id === id);
+    return m?.perfiles?.nombre || "?";
+  };
+
+  return (
+    <div onClick={(e)=>e.stopPropagation()} style={{marginTop:6}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+        {encargados.map(id => (
+          <span key={id} style={{fontSize:9,background:"#e0f5ec",color:"#1a6f5c",padding:"2px 6px",borderRadius:8,fontWeight:500}}>
+            {nombreDe(id)}
+          </span>
+        ))}
+        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:9,background:"#f0f8fd",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"2px 6px",cursor:"pointer"}}>
+          {abierto ? "Cerrar" : "+ Encargado"}
+        </button>
+      </div>
+      {abierto && (
+        <div style={{marginTop:4,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:6,padding:"4px",maxHeight:140,overflowY:"auto"}}>
+          {miembros.map(m => {
+            const id = m.perfiles?.id;
+            const asignado = encargados.includes(id);
+            return (
+              <div key={id} onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",cursor:"pointer",fontSize:11,color:"#1a3a5c"}}>
+                <span style={{width:14,height:14,borderRadius:3,border:"1px solid #b8d8ef",background:asignado?"#1a6fb5":"#fff",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
+                {m.perfiles?.nombre}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
