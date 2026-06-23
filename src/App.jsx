@@ -65,6 +65,30 @@ function getYouTubeId(url) {
   for (const p of patterns) { const m = url.match(p); if (m) return m[1]; }
   return null;
 }
+function getVimeoId(url) {
+  if (!url) return null;
+  const m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  return m ? m[1] : null;
+}
+function VideoThumb({ url, style }) {
+  const [thumb, setThumb] = useState(null);
+  const ytId = getYouTubeId(url);
+  const vimeoId = getVimeoId(url);
+
+  useEffect(() => {
+    if (ytId) {
+      setThumb(`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`);
+    } else if (vimeoId) {
+      fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${vimeoId}`)
+        .then(r => r.json())
+        .then(d => setThumb(d.thumbnail_url))
+        .catch(() => setThumb(null));
+    }
+  }, [url]);
+
+  if (!thumb) return null;
+  return <img src={thumb} alt="" style={style} />;
+}
 
 function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
   if (!documentos || documentos.length === 0) return [];
@@ -87,7 +111,7 @@ function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
     });
     return { ...doc, score };
   });
-  const conScore = puntuados.filter(d => d.score > 0);
+  const conScore = puntuados.filter(d => d.score >= 20);
   if (conScore.length === 0) return [];
   return conScore.sort((a,b) => b.score - a.score).slice(0, maxDocs);
 }
@@ -954,8 +978,8 @@ function CirugiasBiblioteca() {
 }
 
 function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
-  const [subTab, setSubTab] = useState("mapas");
-  const tabsConocimiento = [["mapas","🗺 Mapas"],["videos","🎬 Videos"],["cirugias","🔪 Cirugías"]];
+  const [subTab, setSubTab] = useState("cirugias");
+ const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"],["mapas","🗺 Mapas"]];
   if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
 
   return (
@@ -1395,7 +1419,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
-      <div style={{display:"flex",gap:0,background:"#f0f8fd",borderBottom:"0.5px solid #b8d8ef",padding:"0 12px",overflowX:"auto"}}>
+      <div style={{display:"flex",gap:0,background:"#f0f8fd",borderBottom:"0.5px solid #b8d8ef",padding:"4px 12px 0",overflowX:"auto",flexShrink:0}}>
         {[["pacientes","👥 Pacientes"],["tabla","📅 Tabla Quirúrgica"],["pendientes","✅ Pendientes del día"]].map(([id,label]) => (
           <button key={id} onClick={()=>setSubTab(id)} style={{padding:"10px 14px",fontSize:12,fontWeight:subTab===id?500:400,background:"transparent",border:"none",borderBottom:subTab===id?"2px solid #1a6fb5":"2px solid transparent",color:subTab===id?"#1a6fb5":"#4a7eab",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
@@ -2722,6 +2746,7 @@ const SUGERENCIAS_SOAP = {
 
 function VideoPlayer({ video, onClose }) {
   const ytId = getYouTubeId(video.url);
+  const vimeoId = getVimeoId(video.url);
   return (
     <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.85)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",borderRadius:"var(--border-radius-lg)"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:720,width:"100%",overflow:"hidden"}}>
@@ -2730,7 +2755,7 @@ function VideoPlayer({ video, onClose }) {
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,color:"#7aa3c4",cursor:"pointer",padding:0}}>✕</button>
         </div>
         <div style={{aspectRatio:"16/9",background:"#000"}}>
-          {ytId ? <iframe src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; encrypted-media" allowFullScreen title={video.titulo}/> : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#fff"}}>Video no disponible</div>}
+          {vimeoId ? <iframe src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title={video.titulo}/> : ytId ? <iframe src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; encrypted-media" allowFullScreen title={video.titulo}/> : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#fff"}}>Video no disponible</div>}
         </div>
       </div>
     </div>
@@ -2753,7 +2778,7 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
   setErrorAdd("");
   if (!nuevo.titulo.trim()) return setErrorAdd("Ingresa un título");
   if (!nuevo.url.trim()) return setErrorAdd("Ingresa la URL");
-  if (!getYouTubeId(nuevo.url)) return setErrorAdd("URL de YouTube inválida");
+ if (!getYouTubeId(nuevo.url) && !getVimeoId(nuevo.url)) return setErrorAdd("URL de YouTube o Vimeo inválida");
   
   const sesionResult = await getSession();
   if (!sesionResult.ok || !sesionResult.session) return setErrorAdd("Error de sesión");
@@ -2808,12 +2833,11 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
       ) : (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
           {filtrados.map(v => {
-            const ytId = getYouTubeId(v.url);
-            const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg` : null;
+            
             return (
               <div key={v.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,overflow:"hidden",display:"flex",flexDirection:"column"}}>
                 <div onClick={()=>setPlayingVideo(v)} style={{position:"relative",cursor:"pointer",background:"#1a3a5c",aspectRatio:"16/9",overflow:"hidden"}}>
-                  {thumb && <img src={thumb} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>}
+                  <VideoThumb url={v.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                   <div style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.25)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                     <div style={{width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#1a6fb5"}}>▶</div>
                   </div>
@@ -3202,7 +3226,7 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     // Filtrar por iniciales si se mencionan (busca patrones como J.P.M. o iniciales en mayúscula)
     const inicialesEnQuery = consulta.match(/[A-Z]\.[A-Z]\.[A-Z]\.?/g) || consulta.match(/[A-Z]{2,4}/g) || [];
     if (inicialesEnQuery.length > 0) {
-      const matched = filtrados.filter(p => inicialesEnQuery.some(ini => p.iniciales.includes(ini.replace(/\./g,"")) || ini.includes(p.iniciales.replace(/\./g,""))));
+      const matched = filtrados.filter(p => inicialesEnQuery.some(ini => (p.iniciales || "").includes(ini.replace(/\./g,"")) || ini.includes((p.iniciales || "").replace(/\./g,""))));
       if (matched.length > 0) filtrados = matched;
     }
 
