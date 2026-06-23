@@ -50,7 +50,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.9.0 (beta)";
+const VERSION = "v0.10.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
@@ -2833,7 +2833,6 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
       ) : (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
           {filtrados.map(v => {
-            
             return (
               <div key={v.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,overflow:"hidden",display:"flex",flexDirection:"column"}}>
                 <div onClick={()=>setPlayingVideo(v)} style={{position:"relative",cursor:"pointer",background:"#1a3a5c",aspectRatio:"16/9",overflow:"hidden"}}>
