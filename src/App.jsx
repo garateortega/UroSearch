@@ -50,7 +50,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.10.0 (beta)";
+const VERSION = "v0.11.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
@@ -2190,6 +2190,8 @@ const SUGERENCIAS_SOAP = {
   const [filtroServicio, setFiltroServicio] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("activo");
   const [error, setError] = useState("");
+  const [editandoFicha, setEditandoFicha] = useState(false);
+const [editForm, setEditForm] = useState({});
 
   // Form de nuevo paciente
   const [nuevo, setNuevo] = useState({
@@ -2299,6 +2301,35 @@ const cargarMiembrosEquipo = async () => {
     setPacientes(prev => prev.map(p => p.id === paciente.id ? result.paciente : p));
     if (seleccionado?.id === paciente.id) setSeleccionado(result.paciente);
   };
+  const iniciarEdicion = () => {
+  setEditForm({
+    iniciales: seleccionado.iniciales || "",
+    edad: seleccionado.edad || "",
+    sexo: seleccionado.sexo || "M",
+    cama: seleccionado.cama || "",
+    servicio: seleccionado.servicio || "",
+    diagnostico: seleccionado.diagnostico || "",
+    plan_manejo: seleccionado.plan_manejo || "",
+  });
+  setEditandoFicha(true);
+};
+
+const guardarEdicion = async () => {
+  const datos = {
+    iniciales: editForm.iniciales.trim().toUpperCase(),
+    edad: editForm.edad ? parseInt(editForm.edad) : null,
+    sexo: editForm.sexo,
+    cama: editForm.cama.trim(),
+    servicio: editForm.servicio.trim(),
+    diagnostico: editForm.diagnostico.trim(),
+    plan_manejo: editForm.plan_manejo.trim() || null,
+  };
+  const result = await actualizarPaciente(seleccionado.id, datos);
+  if (!result.ok) return alert("Error: " + result.error);
+  setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
+  setSeleccionado(result.paciente);
+  setEditandoFicha(false);
+};
 const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const result = await actualizarPaciente(pacienteId, { encargados: nuevosEncargados });
   if (!result.ok) return alert("Error: " + result.error);
@@ -2312,6 +2343,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     setSeleccionado(null);
     setVista("lista");
   };
+  
 
   // ============================================================
   // ABRIR FICHA
@@ -2511,36 +2543,90 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{padding:"16px",overflowY:"auto"}}>
         <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
-        {/* Cabecera */}
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
-            <div>
-              <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}</div>
-              <div style={{fontSize:12,color:"#4a7eab",marginTop:2}}>
-                {seleccionado.edad}a {seleccionado.sexo} | Cama {seleccionado.cama} | {seleccionado.servicio}
-              </div>
-              <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Ingreso: {seleccionado.fecha_ingreso}</div>
-            </div>
-            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-              {seleccionado.estado === "activo" ? (
-                <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
-              ) : (
-                <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>↻ Reactivar</button>
-              )}
-              {esCreador && (
-                <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>🗑</button>
-              )}
-            </div>
-          </div>
-          <div style={{fontSize:12,color:"#1a3a5c",marginTop:8,padding:"8px 10px",background:"#f0f8fd",borderRadius:6}}>
-            <strong>Diagnóstico:</strong> {seleccionado.diagnostico}
-          </div>
-          {seleccionado.plan_manejo && (
-            <div style={{fontSize:12,color:"#1a3a5c",marginTop:6,padding:"8px 10px",background:"#f0f8fd",borderRadius:6,whiteSpace:"pre-wrap"}}>
-              <strong>Plan:</strong> {seleccionado.plan_manejo}
-            </div>
+       {/* Cabecera */}
+<div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
+  {editandoFicha ? (
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:2}}>
+          <label style={labelStyle}>Iniciales / Nombre</label>
+          <input value={editForm.iniciales} onChange={e=>setEditForm({...editForm,iniciales:e.target.value})} style={inputStyle}/>
+        </div>
+        <div style={{flex:1}}>
+          <label style={labelStyle}>Edad</label>
+          <input type="number" value={editForm.edad} onChange={e=>setEditForm({...editForm,edad:e.target.value})} style={inputStyle}/>
+        </div>
+        <div style={{flex:1}}>
+          <label style={labelStyle}>Sexo</label>
+          <select value={editForm.sexo} onChange={e=>setEditForm({...editForm,sexo:e.target.value})} style={inputStyle}>
+            <option value="M">M</option>
+            <option value="F">F</option>
+          </select>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:1}}>
+          <label style={labelStyle}>Cama</label>
+          <input value={editForm.cama} onChange={e=>setEditForm({...editForm,cama:e.target.value})} style={inputStyle}/>
+        </div>
+        <div style={{flex:2}}>
+          <label style={labelStyle}>Servicio / Piso</label>
+          {serviciosDisponibles.length > 0 ? (
+            <select value={editForm.servicio} onChange={e=>setEditForm({...editForm,servicio:e.target.value})} style={inputStyle}>
+              <option value="">Selecciona...</option>
+              {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          ) : (
+            <input value={editForm.servicio} onChange={e=>setEditForm({...editForm,servicio:e.target.value})} style={inputStyle}/>
           )}
         </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Diagnóstico</label>
+        <textarea value={editForm.diagnostico} onChange={e=>setEditForm({...editForm,diagnostico:e.target.value})} rows={2} style={{...inputStyle,resize:"vertical"}}/>
+      </div>
+      <div>
+        <label style={labelStyle}>Plan de manejo (opcional)</label>
+        <textarea value={editForm.plan_manejo} onChange={e=>setEditForm({...editForm,plan_manejo:e.target.value})} rows={2} style={{...inputStyle,resize:"vertical"}}/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={guardarEdicion} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar cambios</button>
+        <button onClick={()=>setEditandoFicha(false)} style={{padding:"9px 14px",fontSize:13,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+      </div>
+    </div>
+  ) : (
+    <>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}</div>
+          <div style={{fontSize:12,color:"#4a7eab",marginTop:2}}>
+            {seleccionado.edad}a {seleccionado.sexo} | Cama {seleccionado.cama} | {seleccionado.servicio}
+          </div>
+          <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Ingreso: {seleccionado.fecha_ingreso}</div>
+        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          <button onClick={iniciarEdicion} style={{padding:"5px 10px",fontSize:11,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏ Editar</button>
+          {seleccionado.estado === "activo" ? (
+            <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
+          ) : (
+            <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>↺ Reactivar</button>
+          )}
+          {esCreador && (
+            <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>🗑</button>
+          )}
+        </div>
+      </div>
+      <div style={{fontSize:12,color:"#1a3a5c",marginTop:8,padding:"8px 10px",background:"#f0f8fd",borderRadius:6}}>
+        <strong>Diagnóstico:</strong> {seleccionado.diagnostico}
+      </div>
+      {seleccionado.plan_manejo && (
+        <div style={{fontSize:12,color:"#1a3a5c",marginTop:6,padding:"8px 10px",background:"#f0f8fd",borderRadius:6,whiteSpace:"pre-wrap"}}>
+          <strong>Plan:</strong> {seleccionado.plan_manejo}
+        </div>
+      )}
+    </>
+  )}
+</div>
 
         {/* EVOLUCIONES */}
         <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
@@ -2729,7 +2815,15 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* Vista kanban por servicio */}
       {!loadingPacientes && pacientesFiltrados.length > 0 && (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12}}>
-          {Object.keys(porServicio).sort().map(servicio => (
+          {Object.keys(porServicio).sort((a, b) => {
+  const orden = ["MQ 1", "GINECOLOGÍA", "TRAUMATOLOGÍA", "NEUROCIRUGÍA", "UTI 1", "CIRUGÍA", "MQ 2", "UCI", "UTI 2", "MEDICINA", "TABLA - HOSPITALIZADOS" ];
+  const ia = orden.indexOf(a);
+  const ib = orden.indexOf(b);
+  if (ia === -1 && ib === -1) return a.localeCompare(b);
+  if (ia === -1) return 1;
+  if (ib === -1) return -1;
+  return ia - ib;
+}).map(servicio => (
             <div key={servicio} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px"}}>
               <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid #e8f3fb"}}>
                 {servicio} <span style={{color:"#7aa3c4",fontWeight:400}}>({porServicio[servicio].length})</span>
@@ -2771,15 +2865,34 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
     const m = miembros.find(x => x.perfiles?.id === id);
     return m?.perfiles?.nombre || "?";
   };
+  const colorDeEncargado = (id) => {
+    const paleta = [
+      { bg: "#dbeafe", text: "#1e40af" },
+      { bg: "#dcfce7", text: "#166534" },
+      { bg: "#fee2e2", text: "#991b1b" },
+      { bg: "#fef3c7", text: "#92400e" },
+      { bg: "#f3e8ff", text: "#6b21a8" },
+      { bg: "#ccfbf1", text: "#115e59" },
+      { bg: "#ffe4e6", text: "#9f1239" },
+      { bg: "#ffedd5", text: "#9a3412" },
+      { bg: "#e0e7ff", text: "#3730a3" },
+      { bg: "#d1fae5", text: "#065f46" },
+    ];
+    const idx = miembros.findIndex(x => x.perfiles?.id === id);
+    return paleta[(idx < 0 ? 0 : idx) % paleta.length];
+  };
 
   return (
     <div onClick={(e)=>e.stopPropagation()} style={{marginTop:6}}>
       <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
-        {encargados.map(id => (
-          <span key={id} style={{fontSize:9,background:"#e0f5ec",color:"#1a6f5c",padding:"2px 6px",borderRadius:8,fontWeight:500}}>
-            {nombreDe(id)}
-          </span>
-        ))}
+        {encargados.map(id => {
+  const c = colorDeEncargado(id);
+  return (
+    <span key={id} style={{fontSize:9,background:c.bg,color:c.text,padding:"2px 6px",borderRadius:8,fontWeight:500}}>
+      {nombreDe(id)}
+    </span>
+  );
+})}
         <button onClick={()=>setAbierto(!abierto)} style={{fontSize:9,background:"#f0f8fd",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"2px 6px",cursor:"pointer"}}>
           {abierto ? "Cerrar" : "+ Encargado"}
         </button>
