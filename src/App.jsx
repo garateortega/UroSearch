@@ -2758,13 +2758,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       datos_estructurados: estructurados,
     };
 
-    // DIAGNÓSTICO TEMPORAL - muestra lo que se va a enviar
-    alert("DIAGNÓSTICO - datos_estructurados que se envía:\n\n" + JSON.stringify(estructurados, null, 2));
-
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
     if (!result.ok) return alert("Error: " + result.error);
-    // DIAGNÓSTICO TEMPORAL - muestra lo que devolvió la base
-    alert("DIAGNÓSTICO - lo que devolvió crearExamen:\n\n" + JSON.stringify(result.examen?.datos_estructurados, null, 2));
     // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
     const recarga = await listarExamenes(seleccionado.id);
     if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
