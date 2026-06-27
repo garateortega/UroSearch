@@ -6,6 +6,76 @@ import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitaci
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase } from "./biblioteca";
+
+// ─── Navegación con botón "atrás" del celular para vistas internas (PWA) ───
+// Pila LIFO de vistas internas abiertas; cada una corresponde a una entrada en
+// el historial del navegador. Permite que "atrás" cierre la vista interna (p.ej.
+// volver de una ficha a la lista) en vez de cambiar de pestaña o salir de la app.
+const _backStack = [];                 // [{ id, onClose }]
+let _backSeq = 0;
+const _backClosedByPop = new Set();    // ids que se cerraron por el botón "atrás"
+let _backIgnoringPop = false;          // ignora el popstate sintético de un back manual
+let _backListenerInstalado = false;
+
+function _backInstall() {
+  if (_backListenerInstalado) return;
+  _backListenerInstalado = true;
+  window.addEventListener("popstate", () => {
+    // Ignora el popstate que dispara nuestro propio history.back() al cerrar manualmente.
+    if (_backIgnoringPop) { _backIgnoringPop = false; return; }
+    const top = _backStack.pop();
+    if (top) {
+      _backClosedByPop.add(top.id);
+      top.onClose(); // cierra la vista interna (cambia el estado del componente)
+    }
+    // Si la pila quedó vacía, el back lo maneja la navegación de pestañas / sale de la app.
+  });
+}
+
+// active: true cuando hay una vista interna abierta. onClose: función que la cierra.
+function useBackClose(active, onClose) {
+  const idRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    _backInstall();
+    if (active && idRef.current === null) {
+      // Entramos a una vista interna: registra y agrega una entrada al historial.
+      const id = ++_backSeq;
+      idRef.current = id;
+      _backStack.push({ id, onClose: () => onCloseRef.current() });
+      window.history.pushState({ uroBack: id }, "");
+    } else if (!active && idRef.current !== null) {
+      // Salimos de la vista interna.
+      const id = idRef.current;
+      idRef.current = null;
+      if (_backClosedByPop.has(id)) {
+        // Cerrada por el botón "atrás": la entrada del historial ya se consumió.
+        _backClosedByPop.delete(id);
+      } else {
+        // Cerrada por un botón de la app: quita su entrada del historial.
+        const idx = _backStack.findIndex(e => e.id === id);
+        if (idx !== -1) _backStack.splice(idx, 1);
+        _backIgnoringPop = true;
+        try { window.history.back(); } catch {}
+      }
+    }
+  }, [active]);
+
+  // Limpieza al desmontar (p.ej. al cambiar de pestaña con una vista abierta).
+  useEffect(() => {
+    return () => {
+      const id = idRef.current;
+      if (id !== null) {
+        const idx = _backStack.findIndex(e => e.id === id);
+        if (idx !== -1) _backStack.splice(idx, 1);
+        idRef.current = null;
+      }
+    };
+  }, []);
+}
+
 const TOPICS = [
   { id: "cancer", label: "Cáncer urológico", subtopics: ["Cáncer de próstata", "Cáncer renal", "Cáncer de vejiga", "Cáncer testicular"] },
   { id: "derivacion", label: "Derivaciones urinarias", subtopics: ["Nefrostomía percutánea", "Catéter ureteral", "Cistostomía", "Conducto ileal"] },
@@ -631,6 +701,7 @@ function AdminPanel() {
 function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
+  useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
   const [busqueda, setBusqueda] = useState("");
   const [filtroCat, setFiltroCat] = useState("Todas");
   const [nuevoForm, setNuevoForm] = useState({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"" });
@@ -897,6 +968,7 @@ const CATEGORIAS_CIRUGIAS = ["Todas", "Oncología", "Litiasis", "Derivaciones", 
 
 function CirugiasBiblioteca() {
   const [seleccionado, setSeleccionado] = useState(null);
+  useBackClose(!!seleccionado, () => setSeleccionado(null));
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState("Todas");
 
@@ -1139,6 +1211,7 @@ const PENDIENTES_SUGERIDOS = ["Pasar visita", "Revisar exámenes", "Llamar a fam
 function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, currentUser, onCerrar }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
+  useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
   const [miembros, setMiembros] = useState([]);
   const [invitacionesEquipo, setInvitacionesEquipo] = useState([]);
   const [nuevoNombre, setNuevoNombre] = useState("");
@@ -1761,6 +1834,7 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
 function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias }) {
   const [vista, setVista] = useState("tabla");
   const [seleccionado, setSeleccionado] = useState(null);
+  useBackClose(vista !== "tabla", () => { setVista("tabla"); setSeleccionado(null); });
   const [error, setError] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroFecha, setFiltroFecha] = useState("semana");
@@ -2334,6 +2408,7 @@ const SUGERENCIAS_SOAP = {
 };
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
+  useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
   const [evoluciones, setEvoluciones] = useState([]);
   const [examenes, setExamenes] = useState([]);
   const [filtroServicio, setFiltroServicio] = useState("todos");
@@ -2683,8 +2758,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       datos_estructurados: estructurados,
     };
 
+    // DIAGNÓSTICO TEMPORAL - muestra lo que se va a enviar
+    alert("DIAGNÓSTICO - datos_estructurados que se envía:\n\n" + JSON.stringify(estructurados, null, 2));
+
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
     if (!result.ok) return alert("Error: " + result.error);
+    // DIAGNÓSTICO TEMPORAL - muestra lo que devolvió la base
+    alert("DIAGNÓSTICO - lo que devolvió crearExamen:\n\n" + JSON.stringify(result.examen?.datos_estructurados, null, 2));
     // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
     const recarga = await listarExamenes(seleccionado.id);
     if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
@@ -3763,6 +3843,53 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   try { localStorage.setItem("uro_tab", tab); }
   catch {}
 }, [tab]);
+
+  // ─── Navegación con botón "atrás" del celular (PWA) ───
+  // Engancha el cambio de pestaña y los overlays de nivel superior con la
+  // History API, para que "atrás" vuelva a la vista anterior dentro de la app
+  // en lugar de cerrarla. Solo sale cuando ya estás en la pestaña inicial.
+  const tabRef = useRef(tab);
+  const menuOpenRef = useRef(menuOpen);
+  const panelConvRef = useRef(panelConversacionesAbierto);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
+  useEffect(() => { menuOpenRef.current = menuOpen; }, [menuOpen]);
+  useEffect(() => { panelConvRef.current = panelConversacionesAbierto; }, [panelConversacionesAbierto]);
+
+  // Cada cambio de pestaña agrega una entrada al historial (la primera vez solo
+  // reemplaza la entrada base, sin duplicar).
+  const saltarPush = useRef(true);
+  useEffect(() => {
+    if (saltarPush.current) {
+      saltarPush.current = false;
+      window.history.replaceState({ uroNav: "tab", tab }, "");
+      return;
+    }
+    window.history.pushState({ uroNav: "tab", tab }, "");
+  }, [tab]);
+
+  // Escucha el "atrás": cierra overlays si hay alguno abierto; si no, vuelve a
+  // la pestaña anterior según el estado guardado en el historial.
+  useEffect(() => {
+    const onPop = (e) => {
+      // 1) Si hay un overlay abierto, "atrás" lo cierra y no navega de pestaña.
+      if (menuOpenRef.current || panelConvRef.current) {
+        setMenuOpen(false);
+        setPanelConversacionesAbierto(false);
+        // Repone la entrada consumida para no perder profundidad de pila.
+        window.history.pushState({ uroNav: "tab", tab: tabRef.current }, "");
+        return;
+      }
+      // 2) Navegación normal entre pestañas.
+      const destino = e.state && e.state.uroNav === "tab" ? e.state.tab : null;
+      if (destino && destino !== tabRef.current) {
+        saltarPush.current = true; // evita re-empujar al setear la pestaña
+        setTab(destino);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
 // Verificar si hay sesión al cargar la app, y suscribirse a cambios
 useEffect(() => {
   // Verificar sesión inicial

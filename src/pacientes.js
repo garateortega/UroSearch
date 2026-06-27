@@ -114,6 +114,7 @@ export async function crearExamen(pacienteId, autorId, datos) {
       nombre: datos.nombre,
       resultado: datos.resultado || null,
       fecha_examen: datos.fecha_examen,
+      datos_estructurados: datos.datos_estructurados || {},
     })
     .select('*, autor:perfiles!autor_id(nombre)')
     .single();
