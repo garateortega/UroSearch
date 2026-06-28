@@ -22,6 +22,7 @@ export async function crearConocimiento(autorId, datos) {
       categoria: datos.categoria || 'Guías clínicas',
       contenido: datos.contenido,
       tags: datos.tags || null,
+      fuente: datos.fuente || '',
     })
     .select()
     .single();
@@ -69,3 +70,74 @@ export async function eliminarVideo(id) {
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+// ════════════════════════════════════════════════════════════════
+// FUNCIONES PARA AGREGAR A TU ARCHIVO biblioteca.js
+// ════════════════════════════════════════════════════════════════
+//
+// Copia y pega estas 3 funciones AL FINAL de tu archivo biblioteca.js
+// (antes de cualquier "export default" si lo hubiera, o simplemente al final).
+//
+// IMPORTANTE: tu biblioteca.js ya debe importar el cliente "supabase"
+// arriba del archivo (igual que lo usan crearConocimiento, etc.).
+// Estas funciones reutilizan ese mismo "supabase".
+//
+// ────────────────────────────────────────────────────────────────
+
+
+// Listar todas las preguntas (las más nuevas primero)
+export async function listarPreguntas() {
+  const { data, error } = await supabase
+    .from('preguntas')
+    .select('*')
+    .order('fecha_creacion', { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, preguntas: data || [] };
+}
+
+// Crear una pregunta nueva
+export async function crearPregunta(autorId, datos) {
+  const { data, error } = await supabase
+    .from('preguntas')
+    .insert({
+      autor_id: autorId,
+      enunciado: datos.enunciado,
+      alternativas: datos.alternativas,
+      correcta: datos.correcta,
+      feedback: datos.feedback || '',
+      categoria: datos.categoria || 'General',
+    })
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, pregunta: data };
+}
+
+// Eliminar una pregunta
+export async function eliminarPregunta(preguntaId) {
+  const { error } = await supabase.from('preguntas').delete().eq('id', preguntaId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// ADEMÁS: para que la "Fuente / Libro" de los documentos se guarde,
+// busca tu función crearConocimiento (ya existente en biblioteca.js)
+// y dentro de su .insert({...}) agrega esta línea:
+//
+//     fuente: datos.fuente || '',
+//
+// Queda algo así:
+//
+//   .insert({
+//     autor_id: autorId,
+//     titulo: datos.titulo,
+//     categoria: datos.categoria,
+//     contenido: datos.contenido,
+//     tags: ...,
+//     fuente: datos.fuente || '',     // ← AGREGAR ESTA LÍNEA
+//   })
+//
+// (Solo si quieres la función de agrupar por libro. Si no la agregas,
+//  todo lo demás funciona igual, solo que la fuente no se guardará.)
+// ════════════════════════════════════════════════════════════════

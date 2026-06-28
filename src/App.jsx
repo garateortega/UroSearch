@@ -5,7 +5,7 @@ import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase } from "./biblioteca";
+import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta } from "./biblioteca";
 
 // ─── Navegación con botón "atrás" del celular para vistas internas (PWA) ───
 // Pila LIFO de vistas internas abiertas; cada una corresponde a una entrada en
@@ -698,13 +698,196 @@ function AdminPanel() {
   );
 }
 
+function PreguntasPanel({ currentUser, isAdmin }) {
+  const [preguntas, setPreguntas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [vista, setVista] = useState("quiz"); // "quiz" | "nueva" | "lista"
+  const [idx, setIdx] = useState(0);          // índice de la pregunta actual en quiz
+  const [seleccion, setSeleccion] = useState(null); // alternativa elegida
+  const [mostrarResp, setMostrarResp] = useState(false);
+  const [filtroCat, setFiltroCat] = useState("Todas");
+  const [form, setForm] = useState({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
+  const [errorForm, setErrorForm] = useState("");
+
+  const cargar = async () => {
+    setLoading(true);
+    const result = await listarPreguntas();
+    setLoading(false);
+    if (result.ok) setPreguntas(result.preguntas);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const categorias = ["Todas", ...Array.from(new Set(preguntas.map(p => p.categoria || "General")))];
+  const filtradas = filtroCat === "Todas" ? preguntas : preguntas.filter(p => (p.categoria||"General") === filtroCat);
+  const actual = filtradas[idx] || null;
+
+  const responder = (i) => {
+    if (mostrarResp) return;
+    setSeleccion(i);
+    setMostrarResp(true);
+  };
+  const siguiente = () => {
+    setSeleccion(null); setMostrarResp(false);
+    setIdx(prev => (prev + 1) % filtradas.length);
+  };
+  const anterior = () => {
+    setSeleccion(null); setMostrarResp(false);
+    setIdx(prev => (prev - 1 + filtradas.length) % filtradas.length);
+  };
+
+  const guardar = async () => {
+    if (!form.enunciado.trim()) return setErrorForm("Escribe el enunciado");
+    const alts = form.alternativas.map(a => a.trim());
+    if (alts.some(a => !a)) return setErrorForm("Completa las 4 alternativas");
+    const result = await crearPregunta(currentUser.id, {
+      enunciado: form.enunciado.trim(),
+      alternativas: alts,
+      correcta: form.correcta,
+      feedback: form.feedback.trim(),
+      categoria: form.categoria.trim() || "General",
+    });
+    if (!result.ok) return setErrorForm("Error al guardar: " + result.error);
+    setPreguntas([result.pregunta, ...preguntas]);
+    setForm({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
+    setErrorForm("");
+    setVista("quiz");
+  };
+
+  const eliminar = async (id) => {
+    if (!confirm("¿Eliminar esta pregunta?")) return;
+    const result = await eliminarPregunta(id);
+    if (!result.ok) return alert("Error: " + result.error);
+    setPreguntas(preguntas.filter(p => p.id !== id));
+  };
+
+  // VISTA: crear pregunta (admin)
+  if (vista === "nueva" && isAdmin) {
+    return (
+      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
+        <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nueva pregunta</div>
+        <label style={labelStyle}>Enunciado</label>
+        <textarea value={form.enunciado} onChange={e=>setForm({...form,enunciado:e.target.value})} placeholder="Escribe la pregunta..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
+        <label style={labelStyle}>Alternativas (marca la correcta)</label>
+        {form.alternativas.map((alt, i) => (
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <button onClick={()=>setForm({...form,correcta:i})} style={{width:24,height:24,borderRadius:"50%",border:form.correcta===i?"none":"1px solid #b8d8ef",background:form.correcta===i?"#1a6f5c":"#fff",color:"#fff",cursor:"pointer",fontSize:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{form.correcta===i?"✓":""}</button>
+            <input value={alt} onChange={e=>{const nuevas=[...form.alternativas];nuevas[i]=e.target.value;setForm({...form,alternativas:nuevas});}} placeholder={`Alternativa ${String.fromCharCode(65+i)}`} style={{...inputStyle,marginBottom:0,flex:1}}/>
+          </div>
+        ))}
+        <label style={{...labelStyle,marginTop:8}}>Feedback / explicación</label>
+        <textarea value={form.feedback} onChange={e=>setForm({...form,feedback:e.target.value})} placeholder="Explicación que se muestra al responder..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
+        <label style={labelStyle}>Categoría</label>
+        <input value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})} placeholder="Ej: Litiasis, Oncología, NMIBC..." style={inputStyle}/>
+        {errorForm && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
+        <button onClick={guardar} style={{...btnPrimary,marginTop:0}}>Guardar pregunta</button>
+      </div>
+    );
+  }
+
+  // VISTA: lista de preguntas (admin, para gestionar/eliminar)
+  if (vista === "lista") {
+    return (
+      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",padding:0}}>← Volver al quiz</button>
+          <span style={{fontSize:12,color:"#7aa3c4"}}>{preguntas.length} preguntas</span>
+        </div>
+        {preguntas.length === 0 ? (
+          <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>No hay preguntas aún.</div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {preguntas.map(p => (
+              <div key={p.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                  <span style={{fontSize:10,color:"#1a6fb5",fontWeight:600}}>{p.categoria||"General"}</span>
+                  {isAdmin && <button onClick={()=>eliminar(p.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>}
+                </div>
+                <div style={{fontSize:13,color:"#1a3a5c",marginTop:3}}>{p.enunciado}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // VISTA: quiz (todos)
+  return (
+    <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
+        <div>
+          <div style={{fontSize:22,fontWeight:700,color:"#1a3a5c"}}>❓ Preguntas</div>
+          <div style={{fontSize:13,color:"#4a7eab"}}>{preguntas.length} preguntas para estudiar</div>
+        </div>
+        {isAdmin && (
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+            <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
+          </div>
+        )}
+      </div>
+
+      {categorias.length > 1 && (
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+          {categorias.map(c => (
+            <button key={c} onClick={()=>{setFiltroCat(c);setIdx(0);setSeleccion(null);setMostrarResp(false);}} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid #b8d8ef",background:filtroCat===c?"#1a6fb5":"#fff",color:filtroCat===c?"#fff":"#4a7eab",fontWeight:filtroCat===c?600:400}}>{c}</button>
+          ))}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{textAlign:"center",padding:"40px",color:"#7aa3c4",fontSize:13}}>Cargando...</div>
+      ) : !actual ? (
+        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+          {preguntas.length === 0 ? (isAdmin ? "Aún no has creado preguntas. Usa el botón \"+ Nueva\"." : "El administrador aún no ha creado preguntas.") : "No hay preguntas en esta categoría."}
+        </div>
+      ) : (
+        <div>
+          <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8,textAlign:"center"}}>Pregunta {idx+1} de {filtradas.length}</div>
+          <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"16px",marginBottom:12}}>
+            <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",lineHeight:1.5,marginBottom:14}}>{actual.enunciado}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {(actual.alternativas||[]).map((alt, i) => {
+                let bg = "#fff", border = "0.5px solid #b8d8ef", color = "#1a3a5c";
+                if (mostrarResp) {
+                  if (i === actual.correcta) { bg = "#e0f5ec"; border = "1px solid #1a6f5c"; color = "#1a6f5c"; }
+                  else if (i === seleccion) { bg = "#fde8e6"; border = "1px solid #c0392b"; color = "#c0392b"; }
+                }
+                return (
+                  <button key={i} onClick={()=>responder(i)} disabled={mostrarResp} style={{textAlign:"left",padding:"11px 14px",fontSize:14,background:bg,border,borderRadius:8,cursor:mostrarResp?"default":"pointer",color,display:"flex",alignItems:"center",gap:10,fontWeight:mostrarResp&&i===actual.correcta?600:400}}>
+                    <span style={{fontWeight:600,flexShrink:0}}>{String.fromCharCode(65+i)}.</span>
+                    <span style={{flex:1}}>{alt}</span>
+                    {mostrarResp && i === actual.correcta && <span>✓</span>}
+                    {mostrarResp && i === seleccion && i !== actual.correcta && <span>✗</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {mostrarResp && actual.feedback && (
+              <div style={{marginTop:14,padding:"12px",background:"#f0f8fd",borderRadius:8,borderLeft:"3px solid #1a6fb5"}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#1a6fb5",marginBottom:4}}>💡 Explicación</div>
+                <div style={{fontSize:13,color:"#1a3a5c",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{actual.feedback}</div>
+              </div>
+            )}
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"space-between"}}>
+            <button onClick={anterior} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"#fff",color:"#4a7eab",border:"0.5px solid #b8d8ef",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1}}>← Anterior</button>
+            <button onClick={siguiente} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1,fontWeight:500}}>Siguiente →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
   const [busqueda, setBusqueda] = useState("");
   const [filtroCat, setFiltroCat] = useState("Todas");
-  const [nuevoForm, setNuevoForm] = useState({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"" });
+  const [nuevoForm, setNuevoForm] = useState({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"", fuente:"" });
   const [errorForm, setErrorForm] = useState("");
   const fileRef = useRef(null);
 
@@ -765,7 +948,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
           const content = await page.getTextContent();
           texto += `\n--- Página ${i} ---\n${content.items.map(it => it.str).join(" ")}\n`;
         }
-        if (!texto.trim() || texto.length < 100) { setErrorForm("No se pudo extraer texto del PDF (¿es escaneado?)"); return; }
+        if (!texto.trim() || texto.replace(/--- Página \d+ ---/g,"").trim().length < 100) { setErrorForm("⚠ Este PDF no contiene texto extraíble (probablemente está escaneado como imágenes). Necesitas un PDF con texto digital, o pega el texto manualmente abajo."); return; }
         setNuevoForm({...nuevoForm, contenido: texto, titulo: nuevoForm.titulo || tituloSugerido});
         setErrorForm("");
         return;
@@ -790,12 +973,13 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
     categoria: nuevoForm.categoria,
     contenido: nuevoForm.contenido,
     tags: nuevoForm.tags,
+    fuente: nuevoForm.fuente || "",
   });
   
   if (!result.ok) return setErrorForm("Error al guardar: " + result.error);
   
   setConocimiento([result.item, ...conocimiento]);
-  setNuevoForm({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"" });
+  setNuevoForm({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"", fuente:"" });
   setVista("lista");
 };
 
@@ -811,6 +995,8 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
         <select value={nuevoForm.categoria} onChange={e=>setNuevoForm({...nuevoForm,categoria:e.target.value})} style={inputStyle}>
           {CATEGORIAS_KB.map(c=><option key={c}>{c}</option>)}
         </select>
+        <label style={labelStyle}>Libro / Fuente (opcional)</label>
+        <input value={nuevoForm.fuente||""} onChange={e=>setNuevoForm({...nuevoForm,fuente:e.target.value})} placeholder="Ej: Campbell-Walsh Urology — para agrupar capítulos" style={inputStyle}/>
         <label style={labelStyle}>Contenido del documento</label>
         <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Sube un archivo (PDF, Word .docx, .txt, .md, máx 10 MB) o pega el texto</div>
         <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx" onChange={handleFile} style={{display:"none"}}/>
@@ -861,7 +1047,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {filtrados.map(d => (
             <div key={d.id} onClick={()=>{setSeleccionado(d); setVista("ver");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
-              <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:3}}>{d.categoria}</div>
+              <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:3}}>{d.categoria}{d.fuente ? <span style={{marginLeft:6,fontSize:10,background:"#f3e8ff",color:"#6b21a8",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📖 {d.fuente}</span> : null}</div>
               <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c",marginBottom:4}}>{d.titulo}</div>
               <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")} · {d.contenido?.length?.toLocaleString() || 0} caracteres</div>
               <div style={{fontSize:12,color:"#4a7eab",lineHeight:1.4}}>{d.contenido.slice(0,150)}{d.contenido.length>150?"...":""}</div>
@@ -1049,9 +1235,9 @@ function CirugiasBiblioteca() {
   );
 }
 
-function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
+function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
   const [subTab, setSubTab] = useState("cirugias");
- const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"]];
+ const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"],["preguntas","❓ Preguntas"]];
   if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
 
   return (
@@ -1184,6 +1370,7 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, videos, setVi
       {subTab === "videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {subTab === "cirugias" && <CirugiasBiblioteca/>}
+      {subTab === "preguntas" && <PreguntasPanel currentUser={currentUser} isAdmin={isAdmin}/>}
 
       {subTab === "documentos" && isAdmin && <ConocimientoPanel conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin}/>}
     </div>
@@ -2758,8 +2945,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       datos_estructurados: estructurados,
     };
 
+    // DIAGNÓSTICO TEMPORAL - muestra lo que se va a enviar
+    alert("DIAGNÓSTICO - datos_estructurados que se envía:\n\n" + JSON.stringify(estructurados, null, 2));
+
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
     if (!result.ok) return alert("Error: " + result.error);
+    // DIAGNÓSTICO TEMPORAL - muestra lo que devolvió la base
+    alert("DIAGNÓSTICO - lo que devolvió crearExamen:\n\n" + JSON.stringify(result.examen?.datos_estructurados, null, 2));
     // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
     const recarga = await listarExamenes(seleccionado.id);
     if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
@@ -4285,7 +4477,7 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     const modoIns = modo === "precisa" ? "\n\nMODO PRECISA: máximo 3-4 líneas, sin advertencia." : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
     let ctx = "";
     if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo} ---\n${d.contenido.slice(0,3000)}`).join("\n\n");
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
     }
     if (consultaCirugias) {
       ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
@@ -4504,7 +4696,7 @@ if (!currentUser) {
 
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
-      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
+      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
