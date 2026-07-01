@@ -891,6 +891,15 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const [errorForm, setErrorForm] = useState("");
   const fileRef = useRef(null);
 
+  const eliminar = async (id) => {
+    if (!confirm("¿Eliminar este documento de la base de conocimiento?")) return;
+    const result = await eliminarConocimiento(id);
+    if (!result.ok) return alert("Error al eliminar: " + result.error);
+    setConocimiento(conocimiento.filter(d => d.id !== id));
+    setVista("lista");
+    setSeleccionado(null);
+  };
+
   const filtrados = conocimiento.filter(d => {
     const matchCat = filtroCat === "Todas" || d.categoria === filtroCat;
     const q = busqueda.toLowerCase().trim();
@@ -901,7 +910,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const handleFile = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (f.size > 10*1024*1024) { setErrorForm("El archivo no debe superar 10 MB"); return; }
+    if (f.size > 50*1024*1024) { setErrorForm("El archivo no debe superar 50 MB"); return; }
     setErrorForm("");
     const tituloSugerido = f.name.replace(/\.[^.]+$/,"");
     try {
@@ -1021,7 +1030,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
           <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {(seleccionado.caracteres ?? seleccionado.contenido?.length ?? 0).toLocaleString()} caracteres</div>
           {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
         </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",fontSize:13,color:"#1a3a5c",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{(seleccionado.contenido || "(Sin contenido de texto.)").slice(0,20000)}{(seleccionado.contenido||"").length>20000 ? `\n\n[...] Documento muy largo: mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo sí está guardado y disponible para el chat.` : ""}</div>
+        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",fontSize:13,color:"#1a3a5c",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{(seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{(seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
       </div>
     );
   }
