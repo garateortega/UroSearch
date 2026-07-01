@@ -5,7 +5,7 @@ import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta } from "./biblioteca";
+import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks } from "./biblioteca";
 
 // ─── Navegación con botón "atrás" del celular para vistas internas (PWA) ───
 // Pila LIFO de vistas internas abiertas; cada una corresponde a una entrada en
@@ -158,6 +158,34 @@ function VideoThumb({ url, style }) {
 
   if (!thumb) return null;
   return <img src={thumb} alt="" style={style} />;
+}
+
+// Trocea un texto en chunks de ~tamano caracteres, respetando límites de párrafo/frase
+// y con un pequeño solapamiento para no cortar ideas a la mitad.
+function trocearTexto(texto, tamano = 1500, solape = 200) {
+  if (!texto) return [];
+  const limpio = texto.replace(/\r/g, "");
+  if (limpio.length <= tamano) return [limpio.trim()].filter(Boolean);
+  const chunks = [];
+  let inicio = 0;
+  while (inicio < limpio.length) {
+    let fin = Math.min(inicio + tamano, limpio.length);
+    if (fin < limpio.length) {
+      const ventana = limpio.slice(inicio, fin);
+      const ultimoParrafo = ventana.lastIndexOf("\n\n");
+      const ultimoPunto = ventana.lastIndexOf(". ");
+      let corte = -1;
+      if (ultimoParrafo > tamano * 0.5) corte = ultimoParrafo + 2;
+      else if (ultimoPunto > tamano * 0.5) corte = ultimoPunto + 2;
+      if (corte > 0) fin = inicio + corte;
+    }
+    const pedazo = limpio.slice(inicio, fin).trim();
+    if (pedazo) chunks.push(pedazo);
+    if (fin >= limpio.length) break;
+    inicio = fin - solape;
+    if (inicio < 0) inicio = 0;
+  }
+  return chunks;
 }
 
 function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
@@ -987,8 +1015,23 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   
   if (!result.ok) return setErrorForm("Error al guardar: " + result.error);
   
+  // Trocear el contenido en chunks y guardarlos
+  const pedazos = trocearTexto(nuevoForm.contenido, 1500, 200);
+  if (pedazos.length > 0) {
+    setErrorForm(`Guardando ${pedazos.length} fragmentos...`);
+    const chunksData = pedazos.map((texto, i) => ({
+      documento_id: result.item.id,
+      titulo: nuevoForm.titulo,
+      fuente: nuevoForm.fuente || "",
+      contenido: texto,
+      orden: i,
+    }));
+    await crearChunks(chunksData);
+  }
+  
   setConocimiento([result.item, ...conocimiento]);
   setNuevoForm({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"", fuente:"" });
+  setErrorForm("");
   setVista("lista");
 };
 
@@ -4006,6 +4049,7 @@ const [pendientes, setPendientes] = useState([]);
 const [loadingCirugias, setLoadingCirugias] = useState(false);
 const [loadingPendientes, setLoadingPendientes] = useState(false);
   const [conocimiento, setConocimiento] = useState([]);
+  const [chunks, setChunks] = useState([]);
   const [videos, setVideos] = useState([]);
   const [misServiciosLista, setMisServiciosLista] = useState([]); // array de {id, nombre, ...}
 const [loadingPacientes, setLoadingPacientes] = useState(false);
@@ -4307,6 +4351,11 @@ const conocimientoResult = await listarConocimiento();
 if (conocimientoResult.ok) {
   setConocimiento(conocimientoResult.conocimiento);
 }
+// Cargar chunks (fragmentos) para la búsqueda del chat
+const chunksResult = await listarChunks();
+if (chunksResult.ok) {
+  setChunks(chunksResult.chunks);
+}
 
 // Cargar videos
 const videosResult = await listarVideos();
@@ -4477,7 +4526,9 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
   // LÓGICA ORIGINAL DEL CHAT
   // ============================================
   const videosRelevantes = buscarVideosRelevantes(txt);
-  const docsRelevantes = buscarEnConocimiento(txt, conocimiento, 3);
+  const docsRelevantes = chunks.length > 0
+    ? buscarEnConocimiento(txt, chunks, 6)
+    : buscarEnConocimiento(txt, conocimiento, 3);
   const tieneFuentes = docsRelevantes.length > 0;
   const consultaCirugias = buscarCirugiasRelevantes(txt);
   const consultaPacientes = buscarPacientesRelevantes(txt);
@@ -4486,7 +4537,7 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     const modoIns = modo === "precisa" ? "\n\nMODO PRECISA: máximo 3-4 líneas, sin advertencia." : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
     let ctx = "";
     if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
     }
     if (consultaCirugias) {
       ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
