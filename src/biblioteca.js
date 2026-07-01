@@ -118,7 +118,45 @@ export async function eliminarPregunta(preguntaId) {
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
+// ════════════════════════════════════════════════════════════════
+// FUNCIONES DE CHUNKS — AGREGAR AL FINAL DE biblioteca.js
+// ════════════════════════════════════════════════════════════════
+//
+// Copia estas 2 funciones al final de tu biblioteca.js.
+// Reutilizan el cliente "supabase" que ya está importado arriba.
+//
+// ────────────────────────────────────────────────────────────────
 
+
+// Guardar varios chunks de golpe (se llama al subir un documento)
+export async function crearChunks(chunks) {
+  // chunks = [{ documento_id, titulo, fuente, contenido, orden }, ...]
+  const { data, error } = await supabase
+    .from('conocimiento_chunks')
+    .insert(chunks)
+    .select('*');
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, chunks: data || [] };
+}
+
+// Listar todos los chunks (el chat los usa para buscar)
+export async function listarChunks() {
+  const { data, error } = await supabase
+    .from('conocimiento_chunks')
+    .select('*')
+    .order('fecha_creacion', { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, chunks: data || [] };
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// NOTA sobre borrar documentos:
+// Como la tabla conocimiento_chunks tiene ON DELETE CASCADE apuntando
+// a conocimiento(id), cuando borres un documento con tu función
+// eliminarConocimiento existente, sus chunks se borrarán solos
+// automáticamente. No necesitas hacer nada extra.
+// ════════════════════════════════════════════════════════════════
 
 // ════════════════════════════════════════════════════════════════
 // ADEMÁS: para que la "Fuente / Libro" de los documentos se guarde,
