@@ -4585,8 +4585,8 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
         "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 1500,
+        model: "claude-sonnet-5",
+        max_tokens: 2000,
         system: sysPrompt,
         messages: apiMsgs,
       }),
@@ -4635,8 +4635,8 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
   },
   body: JSON.stringify({
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 1000,
+    model: "claude-sonnet-5",
+    max_tokens: 1300,
     system: SYSTEM_PROMPT,
     messages: [{role: "user", content: `Mapa conceptual sobre: "${tema}". SOLO JSON.`}],
   }),
