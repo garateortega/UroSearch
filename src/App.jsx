@@ -5,7 +5,7 @@ import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks } from "./biblioteca";
+import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 
 // ─── Navegación con botón "atrás" del celular para vistas internas (PWA) ───
 // Pila LIFO de vistas internas abiertas; cada una corresponde a una entrada en
@@ -4354,11 +4354,6 @@ const conocimientoResult = await listarConocimiento();
 if (conocimientoResult.ok) {
   setConocimiento(conocimientoResult.conocimiento);
 }
-// Cargar chunks (fragmentos) para la búsqueda del chat
-const chunksResult = await listarChunks();
-if (chunksResult.ok) {
-  setChunks(chunksResult.chunks);
-}
 
 // Cargar videos
 const videosResult = await listarVideos();
@@ -4529,9 +4524,10 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
   // LÓGICA ORIGINAL DEL CHAT
   // ============================================
   const videosRelevantes = buscarVideosRelevantes(txt);
-  const docsRelevantes = chunks.length > 0
-    ? buscarEnConocimiento(txt, chunks, 6)
-    : buscarEnConocimiento(txt, conocimiento, 3);
+  // Buscar fragmentos relevantes DEL LADO DE LA BASE (entre todos los chunks)
+  let docsRelevantes = [];
+  const busqueda = await buscarChunks(txt, 8);
+  if (busqueda.ok) docsRelevantes = busqueda.chunks;
   const tieneFuentes = docsRelevantes.length > 0;
   const consultaCirugias = buscarCirugiasRelevantes(txt);
   const consultaPacientes = buscarPacientesRelevantes(txt);

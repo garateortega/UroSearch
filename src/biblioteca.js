@@ -149,7 +149,26 @@ export async function listarChunks() {
   return { ok: true, chunks: data || [] };
 }
 
+// ════════════════════════════════════════════════════════════════
+// FUNCIÓN DE BÚSQUEDA EN LA BASE — AGREGAR AL FINAL DE biblioteca.js
+// ════════════════════════════════════════════════════════════════
+//
+// Copia esta función al final de tu biblioteca.js.
+// Reutiliza el cliente "supabase" que ya está importado arriba.
+//
+// Llama a la función SQL buscar_chunks que creaste en Supabase.
+// Devuelve solo los fragmentos más relevantes para la consulta,
+// buscando entre TODOS los chunks del lado de la base de datos.
+// ────────────────────────────────────────────────────────────────
 
+export async function buscarChunks(consulta, limite = 8) {
+  const { data, error } = await supabase.rpc('buscar_chunks', {
+    consulta: consulta,
+    limite: limite,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, chunks: data || [] };
+}
 // ════════════════════════════════════════════════════════════════
 // NOTA sobre borrar documentos:
 // Como la tabla conocimiento_chunks tiene ON DELETE CASCADE apuntando
