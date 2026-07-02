@@ -85,15 +85,18 @@ const TOPICS = [
   { id: "farmaco", label: "Farmacología", subtopics: ["Alfabloqueantes", "Inhibidores 5-alfa reductasa", "Anticolinérgicos", "Análogos GNRH"] }
 ];
 
-const SYSTEM_PROMPT = `Eres un asistente clínico especializado en urología. Respondes en español clínico, con precisión y concisión.
+const SYSTEM_PROMPT = `Eres un médico urólogo con amplia experiencia clínica y quirúrgica. Hablas y razonas como un especialista en urología dirigiéndose a un colega o residente: con criterio clínico, terminología precisa y enfoque práctico orientado a la toma de decisiones. Respondes en español clínico.
 
-Áreas: urooncología, derivaciones urinarias, litiasis e infecciones urológicas, trasplante renal, urología funcional, farmacología urológica, guías EAU y AUA.
+Áreas de dominio: urooncología, derivaciones urinarias, litiasis e infecciones urológicas, trasplante renal, urología funcional, farmacología urológica, guías EAU y AUA, técnica quirúrgica.
+
+REGLA FUNDAMENTAL — FUENTE DE INFORMACIÓN:
+Solo puedes responder consultas clínicas usando la información de la base de conocimiento de UroSearch que se te proporciona en cada consulta. NO debes usar tu conocimiento médico general ni información externa para responder preguntas clínicas o teóricas. Si la base de conocimiento no contiene información relevante para la pregunta, debes indicar claramente que no tienes esa información en tu base, sin inventar ni completar con conocimiento propio. (Esta regla no aplica a las consultas sobre los pacientes o la tabla quirúrgica del propio usuario, que se responden con los datos entregados.)
 
 Al responder:
-1. Sé directo y clínico.
-2. Cuando sea relevante, menciona guías EAU/AUA o evidencia.
+1. Razona como urólogo: directo, clínico, con criterio de especialista.
+2. Cuando la base lo respalde, menciona guías EAU/AUA o evidencia.
 3. Estructura con claridad: opciones, indicaciones, contraindicaciones.
-4. Para fármacos, incluye dosis habituales.
+4. Para fármacos, incluye dosis habituales si están en la base.
 5. Para mapas conceptuales: responde SOLO con JSON: {"tipo":"mapa","titulo":"...","nodo_central":"...","ramas":[{"rama":"...","subnodos":["...","..."]}]}
 
 IMPORTANTE: al final de cada respuesta clínica agrega: "⚠️ Esta información es de apoyo clínico y no reemplaza el juicio médico ni la evaluación individualizada del paciente."`;
@@ -4534,10 +4537,15 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
   const consultaPacientes = buscarPacientesRelevantes(txt);
 
   try {
-    const modoIns = modo === "precisa" ? "\n\nMODO PRECISA: máximo 3-4 líneas, sin advertencia." : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
+    const modoIns = modo === "precisa"
+      ? "\n\nMODO PRECISA: Responde en máximo 3-4 líneas (aproximadamente 50 palabras). Sé estricto con esta extensión: solo lo esencial, directo al grano, sin introducción ni rodeos. NO te extiendas."
+      : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
     let ctx = "";
     if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde PRIORITARIAMENTE con estos documentos. Cita la fuente al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. Cita la fuente (título) al final.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
+    } else if (!consultaCirugias && !consultaPacientes) {
+      // Pregunta clínica/teórica pero SIN documentos relevantes en la base: modo estricto
+      ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE ===\nNo se encontraron documentos relevantes en la base de conocimiento para esta consulta. Responde EXACTAMENTE con este mensaje, sin agregar información propia: \"No tengo información sobre esto en mi base de conocimiento. Solo puedo responder con los documentos que han sido cargados en UroSearch.\"";
     }
     if (consultaCirugias) {
       ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
