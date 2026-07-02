@@ -417,6 +417,32 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
     </div>
   );
 }
+// Convierte Markdown básico (negrita, cursiva, listas, títulos) a HTML seguro
+function renderMarkdown(texto) {
+  if (!texto) return "";
+  // Escapar HTML para seguridad
+  let html = texto
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  // Negrita **texto** o __texto__
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
+  // Cursiva *texto* (evitando los ya convertidos)
+  html = html.replace(/(^|[^*])\*([^*\n]+?)\*([^*]|$)/g, "$1<em>$2</em>$3");
+  // Títulos ### / ## / #
+  html = html.replace(/^### (.+)$/gm, '<div style="font-weight:600;font-size:15px;margin:6px 0 2px;">$1</div>');
+  html = html.replace(/^## (.+)$/gm, '<div style="font-weight:700;font-size:16px;margin:8px 0 3px;">$1</div>');
+  html = html.replace(/^# (.+)$/gm, '<div style="font-weight:700;font-size:17px;margin:8px 0 3px;">$1</div>');
+  // Viñetas: líneas que empiezan con - o *
+  html = html.replace(/^[\-\*] (.+)$/gm, '<div style="padding-left:14px;text-indent:-10px;">• $1</div>');
+  // Saltos de línea restantes
+  html = html.replace(/\n/g, "<br/>");
+  // Limpiar <br/> justo antes/después de los divs de viñetas y títulos
+  html = html.replace(/<br\/>(<div)/g, "$1").replace(/(<\/div>)<br\/>/g, "$1");
+  return html;
+}
+
 function ChatBubble({ msg, userInitials, onPlayVideo }) {
   const isUser = msg.role === "user";
   const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "#1a6fb5" : "#fff", color: isUser ? "#fff" : "#1a3a5c", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid #b8d8ef", whiteSpace:"pre-wrap" };
@@ -424,7 +450,10 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
     <div style={{display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:"12px"}}>
       {!isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"#1a6fb5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"#fff",marginRight:8,flexShrink:0,marginTop:2}}>U</div>}
       <div style={{maxWidth:"82%"}}>
-        <div style={bubbleStyle}>{msg.content}</div>
+        {isUser
+          ? <div style={bubbleStyle}>{msg.content}</div>
+          : <div style={{...bubbleStyle, whiteSpace:"normal"}} dangerouslySetInnerHTML={{__html: renderMarkdown(msg.content)}} />
+        }
         {msg.cirugiasConsulta && (
           <div style={{marginTop:6,padding:"7px 10px",background:"#e0e9f5",border:"0.5px solid #b8c8de",borderRadius:8}}>
             <div style={{fontSize:10,fontWeight:500,color:"#1a4a7c"}}>📅 Información de tu tabla quirúrgica · {msg.cirugiasConsulta.cantidad} {msg.cirugiasConsulta.cantidad === 1 ? "cirugía" : "cirugías"} en {msg.cirugiasConsulta.rango}</div>
@@ -439,7 +468,7 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
           <div style={{marginTop:6,padding:"7px 10px",background:"#e0f5ec",border:"0.5px solid #a8d4be",borderRadius:8}}>
             <div style={{fontSize:10,fontWeight:500,color:"#1a6f5c",marginBottom:4}}>📚 Basado en tu base de conocimiento:</div>
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {msg.fuentes.map(f => <div key={f.id} style={{fontSize:11,color:"#1a6f5c",lineHeight:1.4}}>• <strong>{f.titulo}</strong> <span style={{color:"#7aa3a4"}}>({f.categoria})</span></div>)}
+              {msg.fuentes.map(f => <div key={f.id} style={{fontSize:11,color:"#1a6f5c",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"#7aa3a4"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"#7aa3a4"}}> ({f.categoria})</span> : null)}</div>)}
             </div>
           </div>
         )}
@@ -4591,7 +4620,12 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
     const respuesta = { role:"assistant", content:reply };
     if (videosRelevantes.length > 0) respuesta.videos = videosRelevantes;
-    if (tieneFuentes) respuesta.fuentes = docsRelevantes.map(d => ({id:d.id, titulo:d.titulo, categoria:d.categoria}));
+    if (tieneFuentes) {
+      const vistas = new Set();
+      respuesta.fuentes = docsRelevantes
+        .filter(d => { if (vistas.has(d.titulo)) return false; vistas.add(d.titulo); return true; })
+        .map(d => ({id:d.id, titulo:d.titulo, fuente:d.fuente||"", categoria:d.categoria||""}));
+    }
     if (consultaCirugias && consultaCirugias.cirugias.length > 0) respuesta.cirugiasConsulta = { rango: consultaCirugias.rango, cantidad: consultaCirugias.cirugias.length };
     if (consultaPacientes && !consultaPacientes.ningun && consultaPacientes.pacientes.length > 0) respuesta.pacientesConsulta = { cantidad: consultaPacientes.pacientes.length };
     
