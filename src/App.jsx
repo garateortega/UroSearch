@@ -2108,7 +2108,14 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   useBackClose(vista !== "tabla", () => { setVista("tabla"); setSeleccionado(null); });
   const [error, setError] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [filtroFecha, setFiltroFecha] = useState("semana");
+  const [modoVista, setModoVista] = useState("planner"); // "planner" | "lista"
+  const [lunesSemana, setLunesSemana] = useState(() => {
+    const d = new Date();
+    const dow = (d.getDay() + 6) % 7; // 0 = lunes
+    d.setDate(d.getDate() - dow);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
 
   const [nuevo, setNuevo] = useState({
     fecha: new Date().toISOString().slice(0,10), hora: "08:00",
@@ -2128,28 +2135,49 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   useEffect(() => { cargar(); }, [contexto]);
 
-  // Filtrar por fecha
-  const ahora = new Date();
-  const finDeSemana = new Date(ahora);
-  finDeSemana.setDate(ahora.getDate() + 7);
-  const finDeMes = new Date(ahora);
-  finDeMes.setDate(ahora.getDate() + 30);
+  // ====================================================================
+  // SEMANA MOSTRADA (planner)
+  // ====================================================================
+  const lunesDe = (fecha) => {
+    const d = new Date(fecha);
+    const dow = (d.getDay() + 6) % 7; // 0 = lunes
+    d.setDate(d.getDate() - dow);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const hoyISO = new Date().toISOString().slice(0, 10);
 
-  const cirugiasFiltradas = tablaCirugias.filter(c => {
+  const finSemana = new Date(lunesSemana);
+  finSemana.setDate(finSemana.getDate() + 6);
+  finSemana.setHours(23, 59, 59, 999);
+
+  // Días de la semana (lunes a domingo) en formato ISO
+  const diasSemana = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(lunesSemana);
+    d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+
+  const cirugiasSemana = tablaCirugias.filter(c => {
     if (filtroEstado !== "todos" && c.estado !== filtroEstado) return false;
-    const fechaC = new Date(c.fecha + "T00:00:00");
-    if (filtroFecha === "hoy") return c.fecha === ahora.toISOString().slice(0,10);
-    if (filtroFecha === "semana") return fechaC >= ahora && fechaC <= finDeSemana;
-    if (filtroFecha === "mes") return fechaC >= ahora && fechaC <= finDeMes;
-    return true;
+    const f = new Date(c.fecha + "T00:00:00");
+    return f >= lunesSemana && f <= finSemana;
   });
 
   // Agrupar por fecha
   const porFecha = {};
-  cirugiasFiltradas.forEach(c => {
+  cirugiasSemana.forEach(c => {
     if (!porFecha[c.fecha]) porFecha[c.fecha] = [];
     porFecha[c.fecha].push(c);
   });
+
+  const coloresEstado = {
+    programada: "#1a6fb5", en_curso: "#a06b1a", completada: "#1a6f5c",
+    suspendida: "#999", cancelada: "#c0392b"
+  };
+  const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background: "#fff", color: "#1a6fb5", border: "0.5px solid #b8d8ef", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
+  const toggleOn = { padding: "4px 10px", fontSize: 11, background: "#1a6fb5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
+  const toggleOff = { padding: "4px 10px", fontSize: 11, background: "#fff", color: "#1a6fb5", border: "0.5px solid #b8d8ef", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
 
   // ============================================================
   // CRUD
@@ -2263,86 +2291,139 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       }
 
       // ====================================================================
-      // PROCESAR FILAS DE DATOS
+      // DETECTAR MES Y AÑO (desde el título de la semana, ej: "...DE JULIO" + "2026")
+      // ====================================================================
+      const MESES = { ENERO:"01", FEBRERO:"02", MARZO:"03", ABRIL:"04", MAYO:"05", JUNIO:"06", JULIO:"07", AGOSTO:"08", SEPTIEMBRE:"09", SETIEMBRE:"09", OCTUBRE:"10", NOVIEMBRE:"11", DICIEMBRE:"12" };
+      let mesDetectado = null, anioDetectado = null;
+      for (let i = 0; i < Math.min(matriz.length, 12); i++) {
+        const texto = matriz[i].map(c => String(c || "").toUpperCase()).join(" ");
+        if (!mesDetectado) {
+          for (const [nombreMes, num] of Object.entries(MESES)) {
+            if (texto.includes(nombreMes)) { mesDetectado = num; break; }
+          }
+        }
+        if (!anioDetectado) {
+          const mAnio = texto.match(/\b(20\d{2})\b/);
+          if (mAnio) anioDetectado = mAnio[1];
+        }
+      }
+      const ahoraFallback = new Date();
+      const mesFinal = mesDetectado || String(ahoraFallback.getMonth() + 1).padStart(2, "0");
+      const anioFinal = anioDetectado || String(ahoraFallback.getFullYear());
+
+      // ====================================================================
+      // PROCESAR FILAS DE DATOS (soporta 2 tablas: HBV principal + CCV lunes)
       // ====================================================================
       const filas = [];
       let fechaActual = null;
-      let horarioActual = "AM"; // AM o PM
-      
+      let fechaLunes = null;     // fecha del lunes de la semana (para la tabla CCV)
+      let horarioActual = "AM";  // AM o PM
+      let modoCCV = false;       // true al entrar a "PABELLON / UROLOGIA - CCV"
+
+      const normalizarAbordaje = (raw) => {
+        const a = String(raw || "").toUpperCase().trim();
+        if (!a) return "";
+        if (a.startsWith("ABIER")) return "Abierto";
+        if (a === "LAP" || a.includes("LAPAR")) return "Laparoscópico";
+        if (a === "END" || a.includes("ENDO")) return "Endoscópico";
+        if (a.includes("ROB")) return "Robótico";
+        return String(raw).trim();
+      };
+
       for (let i = filaHeaders + 1; i < matriz.length; i++) {
         const fila = matriz[i];
         if (!fila || fila.every(c => !c || String(c).trim() === "")) continue;
 
-        // Detectar fila de día (ej: "LUNES 04" en columna A)
+        // ¿Empieza la tabla CCV? (cualquier celda menciona "CCV")
+        const filaTextoUpper = fila.map(c => String(c || "").toUpperCase()).join(" ");
+        if (filaTextoUpper.includes("CCV")) {
+          modoCCV = true;
+          fechaActual = fechaLunes; // la tabla CCV es siempre el lunes de la semana
+          continue;
+        }
+
+        // Detectar fila de día (ej: "LUNES 06" en columna A).
+        // OJO: en esta planilla la etiqueta del día va en la MISMA fila que el
+        // primer paciente de ese día, así que NO se hace 'continue': se fija la
+        // fecha y se sigue procesando la fila como paciente.
         const colA = String(fila[0] || "").toUpperCase().trim();
         const matchDia = colA.match(/(LUNES|MARTES|MIERCOLES|MIÉRCOLES|JUEVES|VIERNES|SABADO|SÁBADO|DOMINGO)\s*(\d{1,2})/);
         if (matchDia) {
           const diaNum = matchDia[2].padStart(2, "0");
-          // Detectar mes y año del título principal o del nombre del archivo
-          const ahora = new Date();
-          const mes = String(ahora.getMonth() + 1).padStart(2, "0");
-          const anio = ahora.getFullYear();
-          fechaActual = `${anio}-${mes}-${diaNum}`;
-          continue;
+          fechaActual = `${anioFinal}-${mesFinal}-${diaNum}`;
+          if (matchDia[1].startsWith("LUNES") && !fechaLunes) fechaLunes = fechaActual;
         }
 
         // Detectar horario (AM/PM/PC en col B)
         const colB = String(fila[1] || "").toUpperCase().trim();
-        if (colB === "AM" || colB === "PM" || colB === "PC") {
-          horarioActual = colB;
-        }
+        if (colB === "AM" || colB === "PM" || colB === "PC") horarioActual = colB;
 
-        // Si no hay fecha actual, no se puede importar
         if (!fechaActual) continue;
 
         // Extraer datos de la fila
         const nombreCompleto = String(fila[mapaColumnas.nombre] || "").trim();
         const diagnostico = String(fila[mapaColumnas.diagnostico] || "").trim();
         const cirugia = String(fila[mapaColumnas.cirugia] || "").trim();
-        
-        // Solo importar si hay diagnóstico Y cirugía
-        if (!diagnostico || !cirugia) continue;
-        if (nombreCompleto === "" || nombreCompleto.toUpperCase() === "NOMBRE") continue;
 
-        // Anonimizar: convertir nombre completo a iniciales
-        const iniciales = nombreCompleto
-          .split(/\s+/)
-          .filter(p => p.length > 1)
-          .map(p => p[0].toUpperCase())
-          .join("")
-          .slice(0, 8) || "??";
+        // Solo importar si hay diagnóstico Y cirugía (salta filas "CORR:", vacías, etc.)
+        if (!diagnostico || !cirugia) continue;
+        if (nombreCompleto === "" || nombreCompleto.toUpperCase().startsWith("CORR")) continue;
+        if (["NOMBRE","NOMBRES","PACIENTE"].includes(nombreCompleto.toUpperCase())) continue;
+
+        // Nombre COMPLETO (ya no se convierte a iniciales)
+        const nombrePaciente = nombreCompleto.replace(/\s+/g, " ").slice(0, 120);
 
         // Edad
         const edadStr = String(fila[mapaColumnas.edad] || "").trim();
         const edad = edadStr && !isNaN(parseInt(edadStr)) ? parseInt(edadStr) : null;
 
-        // Lateralidad
+        // Lateralidad (LADO: "D°", "I°", "BIL")
         const ladoRaw = String(fila[mapaColumnas.lado] || "").trim().toUpperCase();
         let lateralidad = null;
-        if (ladoRaw.includes("D") || ladoRaw === "DER") lateralidad = "Derecha";
-        else if (ladoRaw.includes("I") || ladoRaw === "IZQ") lateralidad = "Izquierda";
-        else if (ladoRaw.includes("BIL")) lateralidad = "Bilateral";
+        if (ladoRaw.includes("BIL")) lateralidad = "Bilateral";
+        else if (ladoRaw.includes("D")) lateralidad = "Derecha";
+        else if (ladoRaw.includes("I")) lateralidad = "Izquierda";
 
-        // Cirujano (anonimizar también si tiene nombres completos)
-        const cirujanoRaw = String(fila[mapaColumnas.cirujano] || "").trim();
-        const cirujano = cirujanoRaw || null;
+        // Abordaje (ABIERTO / LAP / END)
+        const abordaje = mapaColumnas.abordaje != null ? normalizarAbordaje(fila[mapaColumnas.abordaje]) : "";
 
-        // Hora estimada según horario
-        const hora = horarioActual === "AM" ? "08:00" : horarioActual === "PM" ? "14:00" : "08:00";
+        // Duración (columna TOP, ej "120 MIN")
+        const duracion = mapaColumnas.duracion != null ? String(fila[mapaColumnas.duracion] || "").trim() : "";
+
+        // Obs especiales
+        const obsEspeciales = mapaColumnas.obs != null ? String(fila[mapaColumnas.obs] || "").trim() : "";
+
+        // Cirujano: en CCV la columna se corre; si viene vacío, buscar "DR" en la fila
+        let cirujano = String(fila[mapaColumnas.cirujano] || "").trim();
+        if (!cirujano) {
+          const celdaDr = fila.map(c => String(c || "").trim()).find(c => /^DR/i.test(c));
+          if (celdaDr) cirujano = celdaDr;
+        }
+
+        // Construir observaciones combinando abordaje, duración, diagnóstico y obs especiales
+        const partesObs = [];
+        if (modoCCV) partesObs.push("🏥 CCV (Clínica Costanera)");
+        if (abordaje) partesObs.push(`Abordaje: ${abordaje}`);
+        if (duracion) partesObs.push(`Duración: ${duracion}`);
+        if (diagnostico) partesObs.push(`Dg: ${diagnostico}`);
+        if (obsEspeciales) partesObs.push(`Obs: ${obsEspeciales}`);
+        const observaciones = partesObs.join(" | ").slice(0, 500);
+
+        const hora = horarioActual === "AM" ? "08:00" : "14:00";
 
         filas.push({
           cirujano_id: currentUser.id,
           equipo_id: esEquipo ? contexto : null,
           fecha: fechaActual,
           hora: hora,
-          iniciales: iniciales,
+          iniciales: nombrePaciente,        // ahora guarda el NOMBRE COMPLETO
           edad: edad,
           procedimiento: cirugia.slice(0, 200),
           lateralidad: lateralidad,
           cirujano: cirujano ? cirujano.slice(0, 100) : null,
-          pabellon: "1",
+          pabellon: modoCCV ? "CCV" : "1",
           estado: 'programada',
-          observaciones: String(fila[mapaColumnas.obs] || "").trim().slice(0, 500) || `Diagnóstico: ${diagnostico}`,
+          observaciones: observaciones || `Dg: ${diagnostico}`,
         });
       }
 
@@ -2352,7 +2433,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       }
 
       // Confirmar antes de insertar
-      if (!confirm(`Se importarán ${filas.length} cirugías (con nombres convertidos a iniciales). ¿Continuar?`)) {
+      const nCCV = filas.filter(f => f.pabellon === "CCV").length;
+      const resumenCCV = nCCV > 0 ? ` (${nCCV} de ellas en CCV, lunes)` : "";
+      if (!confirm(`Se importarán ${filas.length} cirugías con nombre completo${resumenCCV}. ¿Continuar?`)) {
         e.target.value = "";
         return;
       }
@@ -2364,7 +2447,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       }
 
       setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
-      alert(`✓ ${result.cirugias.length} cirugías importadas y anonimizadas`);
+      alert(`✓ ${result.cirugias.length} cirugías importadas`);
       e.target.value = "";
     };
     reader.readAsArrayBuffer(file);
@@ -2506,15 +2589,16 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         </div>
       </div>
 
-      {/* Filtros */}
-      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:11,color:"#7aa3c4"}}>Filtrar:</span>
-        <select value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
-          <option value="hoy">Hoy</option>
-          <option value="semana">Próxima semana</option>
-          <option value="mes">Próximo mes</option>
-          <option value="todos">Todas</option>
-        </select>
+      {/* Navegación de semana + filtros */}
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()-7);setLunesSemana(d);}} style={navBtn}>‹</button>
+          <span style={{fontSize:12,fontWeight:600,color:"#1a3a5c",minWidth:120,textAlign:"center"}}>
+            {new Date(diasSemana[0]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})} – {new Date(diasSemana[6]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})}
+          </span>
+          <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()+7);setLunesSemana(d);}} style={navBtn}>›</button>
+          <button onClick={()=>setLunesSemana(lunesDe(new Date()))} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
+        </div>
         <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
           <option value="todos">Todos los estados</option>
           <option value="programada">Programadas</option>
@@ -2523,47 +2607,83 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
-        <span style={{fontSize:11,color:"#7aa3c4",marginLeft:"auto"}}>{cirugiasFiltradas.length} cirugías</span>
+        <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
+          <button onClick={()=>setModoVista("planner")} style={modoVista==="planner"?toggleOn:toggleOff}>📅 Planner</button>
+          <button onClick={()=>setModoVista("lista")} style={modoVista==="lista"?toggleOn:toggleOff}>☰ Lista</button>
+          <span style={{fontSize:11,color:"#7aa3c4",marginLeft:6}}>{cirugiasSemana.length} cx</span>
+        </div>
       </div>
 
       {loadingCirugias && (
         <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>Cargando tabla...</div>
       )}
 
-      {!loadingCirugias && cirugiasFiltradas.length === 0 && (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
-          No hay cirugías en el filtro seleccionado.<br/>
-          Agrega manualmente con + Nueva o importa un Excel.
+      {!loadingCirugias && cirugiasSemana.length === 0 && (
+        <div style={{textAlign:"center",padding:"30px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+          No hay cirugías esta semana.<br/>
+          Usa ‹ › para cambiar de semana, o agrega con + Nueva / Importar Excel.
         </div>
       )}
 
-      {!loadingCirugias && Object.keys(porFecha).sort().map(fecha => (
+      {/* ====================== VISTA PLANNER ====================== */}
+      {!loadingCirugias && modoVista === "planner" && cirugiasSemana.length > 0 && (
+        <div style={{overflowX:"auto",paddingBottom:8}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7, minmax(150px, 1fr))",gap:8,minWidth:1050}}>
+            {diasSemana.map(fecha => {
+              const dObj = new Date(fecha+"T00:00:00");
+              const esHoy = fecha === hoyISO;
+              const delDia = (porFecha[fecha]||[]).slice().sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+              return (
+                <div key={fecha} style={{background:esHoy?"#eaf4ff":"#f4f9fd",borderRadius:8,border:esHoy?"1.5px solid #1a6fb5":"0.5px solid #d4e6f5",padding:6,minHeight:130}}>
+                  <div style={{textAlign:"center",fontSize:11,fontWeight:700,color:esHoy?"#1a6fb5":"#4a7eab",padding:"3px 0 6px",borderBottom:"0.5px solid #d4e6f5",marginBottom:6,textTransform:"capitalize"}}>
+                    {dObj.toLocaleDateString("es-CL",{weekday:"short"})} {dObj.getDate()}
+                    {delDia.length>0 && <span style={{fontSize:9,fontWeight:500,color:"#7aa3c4"}}> · {delDia.length}</span>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                    {delDia.length===0 && <div style={{textAlign:"center",fontSize:10,color:"#c2d5e8",padding:"14px 0"}}>—</div>}
+                    {delDia.map(c => (
+                      <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #cfe2f2",borderLeft:`3px solid ${coloresEstado[c.estado]}`,borderRadius:6,padding:"6px 7px",cursor:"pointer"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                          <span style={{fontSize:10,fontWeight:700,color:coloresEstado[c.estado]}}>{c.hora?.slice(0,5)}</span>
+                          {c.pabellon==="CCV"
+                            ? <span style={{fontSize:8,fontWeight:600,background:"#7a4fb5",color:"#fff",padding:"0 4px",borderRadius:6}}>CCV</span>
+                            : c.pabellon && <span style={{fontSize:8,color:"#7aa3c4"}}>Pab {c.pabellon}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:"#1a3a5c",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
+                        <div style={{fontSize:10,color:"#4a7eab",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
+                        {c.cirujano && <div style={{fontSize:9,color:"#7aa3c4",marginTop:1}}>{c.cirujano}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ====================== VISTA LISTA ====================== */}
+      {!loadingCirugias && modoVista === "lista" && Object.keys(porFecha).sort().map(fecha => (
         <div key={fecha} style={{marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c",marginBottom:8,padding:"4px 10px",background:"#e0e9f5",borderRadius:6}}>
             📅 {new Date(fecha + "T00:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})} ({porFecha[fecha].length})
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {porFecha[fecha].sort((a,b)=>(a.hora||"").localeCompare(b.hora||"")).map(c => {
-              const colores = {
-                programada: "#1a6fb5", en_curso: "#a06b1a", completada: "#1a6f5c",
-                suspendida: "#999", cancelada: "#c0392b"
-              };
-              return (
-                <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${colores[c.estado]}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,color:"#1a3a5c",fontWeight:500}}>
-                        {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
-                      </div>
-                      <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>
-                        Pabellón {c.pabellon} {c.cirujano && `| ${c.cirujano}`}
-                      </div>
+            {porFecha[fecha].slice().sort((a,b)=>(a.hora||"").localeCompare(b.hora||"")).map(c => (
+              <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${coloresEstado[c.estado]}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,color:"#1a3a5c",fontWeight:500}}>
+                      {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
                     </div>
-                    <span style={{fontSize:9,padding:"2px 8px",background:colores[c.estado],color:"#fff",borderRadius:10,whiteSpace:"nowrap"}}>{c.estado.replace("_"," ")}</span>
+                    <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>
+                      {c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`} {c.cirujano && `| ${c.cirujano}`}
+                    </div>
                   </div>
+                  <span style={{fontSize:9,padding:"2px 8px",background:coloresEstado[c.estado],color:"#fff",borderRadius:10,whiteSpace:"nowrap"}}>{c.estado.replace("_"," ")}</span>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       ))}
