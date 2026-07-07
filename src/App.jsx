@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
@@ -2120,8 +2120,10 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const [nuevo, setNuevo] = useState({
     fecha: new Date().toISOString().slice(0,10), hora: "08:00",
     iniciales: "", edad: "", procedimiento: "", lateralidad: "",
-    cirujano: currentUser.nombre, pabellon: "1", estado: "programada", observaciones: ""
+    cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: ""
   });
+  const [editId, setEditId] = useState(null); // id de la cirugía en edición (null = crear)
+  const [miembrosEquipo, setMiembrosEquipo] = useState([]);
 
   const esEquipo = contexto !== "personal";
   const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
@@ -2133,7 +2135,16 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     if (result.ok) setTablaCirugias(result.cirugias);
   };
 
-  useEffect(() => { cargar(); }, [contexto]);
+  const cargarMiembros = async () => {
+    if (esEquipo) {
+      const result = await listarMiembros(contexto);
+      if (result.ok) setMiembrosEquipo(result.miembros);
+    } else {
+      setMiembrosEquipo([]);
+    }
+  };
+
+  useEffect(() => { cargar(); cargarMiembros(); }, [contexto]);
 
   // ====================================================================
   // SEMANA MOSTRADA (planner)
@@ -2171,9 +2182,30 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     porFecha[c.fecha].push(c);
   });
 
+  // Lunes a viernes siempre; sábado (índice 5) y domingo (6) solo si tienen cirugías
+  const diasVisibles = diasSemana.filter((fecha, i) => i < 5 || (porFecha[fecha] && porFecha[fecha].length > 0));
+
   const coloresEstado = {
     programada: "#1a6fb5", en_curso: "#a06b1a", completada: "#1a6f5c",
     suspendida: "#999", cancelada: "#c0392b"
+  };
+  // Relleno claro del recuadro completo según estado
+  const fondoEstado = {
+    programada: "#eaf3fb", en_curso: "#fbf1e0", completada: "#e4f5ec",
+    suspendida: "#eeeeee", cancelada: "#fbe8e6"
+  };
+  // Texto que se muestra dentro del recuadro
+  const textoEstado = {
+    programada: "Programada", en_curso: "En curso", completada: "Completada",
+    suspendida: "Suspendida", cancelada: "Cancelada"
+  };
+  // Separa cirugías de un día en pabellones de hospital y CCV (Costanera)
+  const separarHospitalCCV = (lista) => {
+    const orden = (a,b) => (a.hora||"").localeCompare(b.hora||"");
+    return {
+      hospital: lista.filter(c => c.pabellon !== "CCV").slice().sort(orden),
+      ccv: lista.filter(c => c.pabellon === "CCV").slice().sort(orden),
+    };
   };
   const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background: "#fff", color: "#1a6fb5", border: "0.5px solid #b8d8ef", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
   const toggleOn = { padding: "4px 10px", fontSize: 11, background: "#1a6fb5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
@@ -2198,6 +2230,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       procedimiento: nuevo.procedimiento.trim(),
       lateralidad: nuevo.lateralidad || null,
       cirujano: nuevo.cirujano.trim() || null,
+      primer_ayudante: nuevo.primer_ayudante.trim() || null,
       pabellon: nuevo.pabellon.trim() || null,
       estado: nuevo.estado,
       observaciones: nuevo.observaciones.trim() || null,
@@ -2207,7 +2240,61 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     if (!result.ok) return setError(result.error);
 
     setTablaCirugias(prev => [...prev, result.cirugia].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
-    setNuevo({ fecha: new Date().toISOString().slice(0,10), hora: "08:00", iniciales: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, pabellon: "1", estado: "programada", observaciones: "" });
+    resetForm();
+    setVista("tabla");
+  };
+
+  const resetForm = () => {
+    setEditId(null);
+    setNuevo({ fecha: new Date().toISOString().slice(0,10), hora: "08:00", iniciales: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: "" });
+  };
+
+  // Cargar una cirugía existente en el formulario para editarla
+  const empezarEdicion = (c) => {
+    setEditId(c.id);
+    setNuevo({
+      fecha: c.fecha || new Date().toISOString().slice(0,10),
+      hora: (c.hora || "08:00").slice(0,5),
+      iniciales: c.iniciales || "",
+      edad: c.edad != null ? String(c.edad) : "",
+      procedimiento: c.procedimiento || "",
+      lateralidad: c.lateralidad || "",
+      cirujano: c.cirujano || "",
+      primer_ayudante: c.primer_ayudante || "",
+      pabellon: c.pabellon || "5",
+      estado: c.estado || "programada",
+      observaciones: c.observaciones || "",
+    });
+    setError("");
+    setVista("nuevo");
+  };
+
+  // Guardar cambios de una cirugía existente
+  const guardarEdicion = async () => {
+    setError("");
+    if (!nuevo.iniciales.trim()) return setError("Ingresa el nombre o las iniciales");
+    if (!nuevo.procedimiento.trim()) return setError("Ingresa el procedimiento");
+
+    const cambios = {
+      fecha: nuevo.fecha,
+      hora: nuevo.hora,
+      iniciales: nuevo.iniciales.trim().toUpperCase(),
+      edad: nuevo.edad ? parseInt(nuevo.edad) : null,
+      procedimiento: nuevo.procedimiento.trim(),
+      lateralidad: nuevo.lateralidad || null,
+      cirujano: nuevo.cirujano.trim() || null,
+      primer_ayudante: nuevo.primer_ayudante.trim() || null,
+      pabellon: nuevo.pabellon.trim() || null,
+      estado: nuevo.estado,
+      observaciones: nuevo.observaciones.trim() || null,
+    };
+
+    const result = await actualizarCirugia(editId, cambios);
+    if (!result.ok) return setError(result.error);
+
+    setTablaCirugias(prev => prev.map(c => c.id === editId ? result.cirugia : c).sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
+    setSeleccionado(result.cirugia);
+    resetForm();
     setVista("tabla");
   };
 
@@ -2421,7 +2508,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           procedimiento: cirugia.slice(0, 200),
           lateralidad: lateralidad,
           cirujano: cirujano ? cirujano.slice(0, 100) : null,
-          pabellon: modoCCV ? "CCV" : "1",
+          pabellon: modoCCV ? "CCV" : "5",
           estado: 'programada',
           observaciones: observaciones || `Dg: ${diagnostico}`,
         });
@@ -2464,8 +2551,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("tabla");setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nueva cirugía {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
+        <button onClick={()=>{resetForm();setVista(editId?"detalle":"tabla");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>{editId ? "Editar cirugía" : "Nueva cirugía"} {esEquipo && !editId && `en equipo "${equipoActual?.nombre}"`}</div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -2504,19 +2591,37 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           </div>
           <div>
             <label style={labelStyle}>Pabellón</label>
-            <input value={nuevo.pabellon} onChange={e=>setNuevo({...nuevo,pabellon:e.target.value})} placeholder="1" style={inputStyle}/>
+            <input value={nuevo.pabellon} onChange={e=>setNuevo({...nuevo,pabellon:e.target.value})} placeholder="5" style={inputStyle}/>
           </div>
         </div>
 
-        <label style={labelStyle}>Cirujano</label>
-        <input value={nuevo.cirujano} onChange={e=>setNuevo({...nuevo,cirujano:e.target.value})} style={inputStyle}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Cirujano principal</label>
+            <input value={nuevo.cirujano} onChange={e=>setNuevo({...nuevo,cirujano:e.target.value})} style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Primer ayudante (opcional)</label>
+            {esEquipo && miembrosEquipo.length > 0 ? (
+              <select value={nuevo.primer_ayudante} onChange={e=>setNuevo({...nuevo,primer_ayudante:e.target.value})} style={inputStyle}>
+                <option value="">— Sin primer ayudante —</option>
+                {miembrosEquipo.map(m => {
+                  const nombre = m.perfiles?.nombre;
+                  return nombre ? <option key={m.perfiles?.id} value={nombre}>{nombre}</option> : null;
+                })}
+              </select>
+            ) : (
+              <input value={nuevo.primer_ayudante} onChange={e=>setNuevo({...nuevo,primer_ayudante:e.target.value})} placeholder="Nombre del ayudante" style={inputStyle}/>
+            )}
+          </div>
+        </div>
 
         <label style={labelStyle}>Observaciones (opcional)</label>
         <textarea value={nuevo.observaciones} onChange={e=>setNuevo({...nuevo,observaciones:e.target.value})} rows={2} style={{...inputStyle,resize:"vertical"}}/>
 
         {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
 
-        <button onClick={guardar} style={{...btnPrimary, marginTop:0}}>Guardar cirugía</button>
+        <button onClick={editId ? guardarEdicion : guardar} style={{...btnPrimary, marginTop:0}}>{editId ? "Guardar cambios" : "Guardar cirugía"}</button>
       </div>
     );
   }
@@ -2536,9 +2641,11 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
             <div>
               <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}{seleccionado.edad && ` (${seleccionado.edad}a)`}</div>
               <div style={{fontSize:13,color:"#4a7eab",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
-              <div style={{fontSize:11,color:"#7aa3c4",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | Pabellón {seleccionado.pabellon}</div>
-              {seleccionado.cirujano && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>👨‍⚕️ {seleccionado.cirujano}</div>}
+              <div style={{fontSize:11,color:"#7aa3c4",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
+              {seleccionado.cirujano && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
+              {seleccionado.primer_ayudante && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>🧑‍⚕️ Primer ayudante: {seleccionado.primer_ayudante}</div>}
             </div>
+            <button onClick={()=>empezarEdicion(seleccionado)} style={{padding:"5px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500,whiteSpace:"nowrap"}}>✏️ Editar</button>
           </div>
 
           <div style={{fontSize:12,color:"#1a3a5c",marginBottom:10,padding:"6px 10px",background:"#f0f8fd",borderRadius:6}}>
@@ -2628,32 +2735,45 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       {/* ====================== VISTA PLANNER ====================== */}
       {!loadingCirugias && modoVista === "planner" && cirugiasSemana.length > 0 && (
         <div style={{overflowX:"auto",paddingBottom:8}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7, minmax(150px, 1fr))",gap:8,minWidth:1050}}>
-            {diasSemana.map(fecha => {
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${diasVisibles.length}, minmax(155px, 1fr))`,gap:8,minWidth:diasVisibles.length*160}}>
+            {diasVisibles.map(fecha => {
               const dObj = new Date(fecha+"T00:00:00");
               const esHoy = fecha === hoyISO;
-              const delDia = (porFecha[fecha]||[]).slice().sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+              const { hospital, ccv } = separarHospitalCCV(porFecha[fecha]||[]);
+              const total = hospital.length + ccv.length;
+
+              // Tarjeta de una cirugía: recuadro completo pintado según estado
+              const Tarjeta = (c) => (
+                <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:fondoEstado[c.estado],border:`0.5px solid ${coloresEstado[c.estado]}`,borderLeft:`4px solid ${coloresEstado[c.estado]}`,borderRadius:6,padding:"6px 7px",cursor:"pointer"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                    <span style={{fontSize:10,fontWeight:700,color:coloresEstado[c.estado]}}>{c.hora?.slice(0,5)}</span>
+                    {c.pabellon==="CCV"
+                      ? <span style={{fontSize:8,fontWeight:600,background:"#7a4fb5",color:"#fff",padding:"0 4px",borderRadius:6}}>CCV</span>
+                      : c.pabellon && <span style={{fontSize:8,color:"#5a7a99"}}>Pab {c.pabellon}</span>}
+                  </div>
+                  <div style={{fontSize:11,color:"#1a3a5c",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
+                  <div style={{fontSize:10,color:"#4a6a8a",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
+                  {c.cirujano && <div style={{fontSize:9,color:"#6a8aa9",marginTop:1}}>👨‍⚕️ {c.cirujano}</div>}
+                  {c.primer_ayudante && <div style={{fontSize:9,color:"#6a8aa9"}}>🧑‍⚕️ {c.primer_ayudante}</div>}
+                  <div style={{marginTop:3,display:"inline-block",fontSize:8,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,color:"#fff",background:coloresEstado[c.estado],padding:"1px 6px",borderRadius:8}}>{textoEstado[c.estado]}</div>
+                </div>
+              );
+
               return (
                 <div key={fecha} style={{background:esHoy?"#eaf4ff":"#f4f9fd",borderRadius:8,border:esHoy?"1.5px solid #1a6fb5":"0.5px solid #d4e6f5",padding:6,minHeight:130}}>
                   <div style={{textAlign:"center",fontSize:11,fontWeight:700,color:esHoy?"#1a6fb5":"#4a7eab",padding:"3px 0 6px",borderBottom:"0.5px solid #d4e6f5",marginBottom:6,textTransform:"capitalize"}}>
                     {dObj.toLocaleDateString("es-CL",{weekday:"short"})} {dObj.getDate()}
-                    {delDia.length>0 && <span style={{fontSize:9,fontWeight:500,color:"#7aa3c4"}}> · {delDia.length}</span>}
+                    {total>0 && <span style={{fontSize:9,fontWeight:500,color:"#7aa3c4"}}> · {total}</span>}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                    {delDia.length===0 && <div style={{textAlign:"center",fontSize:10,color:"#c2d5e8",padding:"14px 0"}}>—</div>}
-                    {delDia.map(c => (
-                      <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #cfe2f2",borderLeft:`3px solid ${coloresEstado[c.estado]}`,borderRadius:6,padding:"6px 7px",cursor:"pointer"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                          <span style={{fontSize:10,fontWeight:700,color:coloresEstado[c.estado]}}>{c.hora?.slice(0,5)}</span>
-                          {c.pabellon==="CCV"
-                            ? <span style={{fontSize:8,fontWeight:600,background:"#7a4fb5",color:"#fff",padding:"0 4px",borderRadius:6}}>CCV</span>
-                            : c.pabellon && <span style={{fontSize:8,color:"#7aa3c4"}}>Pab {c.pabellon}</span>}
-                        </div>
-                        <div style={{fontSize:11,color:"#1a3a5c",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
-                        <div style={{fontSize:10,color:"#4a7eab",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
-                        {c.cirujano && <div style={{fontSize:9,color:"#7aa3c4",marginTop:1}}>{c.cirujano}</div>}
-                      </div>
-                    ))}
+                    {total===0 && <div style={{textAlign:"center",fontSize:10,color:"#c2d5e8",padding:"14px 0"}}>—</div>}
+                    {/* Pabellones del hospital primero */}
+                    {hospital.map(Tarjeta)}
+                    {/* CCV (Costanera) separado y siempre abajo */}
+                    {ccv.length>0 && (
+                      <div style={{fontSize:9,fontWeight:700,color:"#7a4fb5",textAlign:"center",margin:"4px 0 1px",padding:"2px 0",borderTop:"1px dashed #c9b6e6",borderBottom:"1px dashed #c9b6e6"}}>CCV · COSTANERA</div>
+                    )}
+                    {ccv.map(Tarjeta)}
                   </div>
                 </div>
               );
@@ -2663,30 +2783,38 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       )}
 
       {/* ====================== VISTA LISTA ====================== */}
-      {!loadingCirugias && modoVista === "lista" && Object.keys(porFecha).sort().map(fecha => (
+      {!loadingCirugias && modoVista === "lista" && Object.keys(porFecha).sort().map(fecha => {
+        const { hospital, ccv } = separarHospitalCCV(porFecha[fecha]||[]);
+        const ordenadas = [...hospital, ...ccv]; // hospital primero, CCV abajo
+        return (
         <div key={fecha} style={{marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c",marginBottom:8,padding:"4px 10px",background:"#e0e9f5",borderRadius:6}}>
             📅 {new Date(fecha + "T00:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})} ({porFecha[fecha].length})
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {porFecha[fecha].slice().sort((a,b)=>(a.hora||"").localeCompare(b.hora||"")).map(c => (
-              <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${coloresEstado[c.estado]}`}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,color:"#1a3a5c",fontWeight:500}}>
-                      {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
+            {ordenadas.map((c,idx) => (
+              <Fragment key={c.id}>
+                {idx===hospital.length && ccv.length>0 && (
+                  <div style={{fontSize:10,fontWeight:700,color:"#7a4fb5",textAlign:"center",margin:"2px 0",padding:"2px 0",borderTop:"1px dashed #c9b6e6",borderBottom:"1px dashed #c9b6e6"}}>CCV · COSTANERA</div>
+                )}
+                <div onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:fondoEstado[c.estado],border:`0.5px solid ${coloresEstado[c.estado]}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`4px solid ${coloresEstado[c.estado]}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,color:"#1a3a5c",fontWeight:500}}>
+                        {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
+                      </div>
+                      <div style={{fontSize:10,color:"#5a7a99",marginTop:2}}>
+                        {c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`}{c.cirujano && ` | 👨‍⚕️ ${c.cirujano}`}{c.primer_ayudante && ` | 🧑‍⚕️ ${c.primer_ayudante}`}
+                      </div>
                     </div>
-                    <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>
-                      {c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`} {c.cirujano && `| ${c.cirujano}`}
-                    </div>
+                    <span style={{fontSize:9,padding:"2px 8px",background:coloresEstado[c.estado],color:"#fff",borderRadius:10,whiteSpace:"nowrap"}}>{textoEstado[c.estado]}</span>
                   </div>
-                  <span style={{fontSize:9,padding:"2px 8px",background:coloresEstado[c.estado],color:"#fff",borderRadius:10,whiteSpace:"nowrap"}}>{c.estado.replace("_"," ")}</span>
                 </div>
-              </div>
+              </Fragment>
             ))}
           </div>
         </div>
-      ))}
+      );})}
     </div>
   );
   }
