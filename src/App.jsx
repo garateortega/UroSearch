@@ -2157,8 +2157,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   const guardar = async () => {
     setError("");
-    if (!nuevo.iniciales.trim()) return setError("Ingresa las iniciales");
-    if (nuevo.iniciales.length > 8) return setError("Máximo 8 caracteres");
+    if (!nuevo.iniciales.trim()) return setError("Ingresa el nombre o las iniciales");
     if (!nuevo.procedimiento.trim()) return setError("Ingresa el procedimiento");
 
     const datos = {
@@ -2398,7 +2397,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
-            <label style={labelStyle}>Iniciales (máx 8)</label>
+            <label style={labelStyle}>Nombre o iniciales</label>
             <input value={nuevo.iniciales} onChange={e=>setNuevo({...nuevo,iniciales:e.target.value.slice(0,100)})} placeholder="Juan Pérez Mora o JPM" style={inputStyle} maxLength={100}/>
           </div>
           <div>
@@ -3029,13 +3028,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       datos_estructurados: estructurados,
     };
 
-    // DIAGNÓSTICO TEMPORAL - muestra lo que se va a enviar
-    alert("DIAGNÓSTICO - datos_estructurados que se envía:\n\n" + JSON.stringify(estructurados, null, 2));
-
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
     if (!result.ok) return alert("Error: " + result.error);
-    // DIAGNÓSTICO TEMPORAL - muestra lo que devolvió la base
-    alert("DIAGNÓSTICO - lo que devolvió crearExamen:\n\n" + JSON.stringify(result.examen?.datos_estructurados, null, 2));
     // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
     const recarga = await listarExamenes(seleccionado.id);
     if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
