@@ -2305,6 +2305,13 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
   };
 
+  const asignarPrimerAyudante = async (cirugia, nombre) => {
+    const result = await actualizarCirugia(cirugia.id, { primer_ayudante: nombre || null });
+    if (!result.ok) return alert("Error: " + result.error);
+    setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
+    if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
+  };
+
   const eliminar = async (cirugia) => {
     if (!confirm(`¿Eliminar cirugía de ${cirugia.iniciales}?`)) return;
     const result = await eliminarCirugia(cirugia.id);
@@ -2652,6 +2659,21 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
             <strong>Estado actual:</strong> {seleccionado.estado}
           </div>
 
+          <div style={{marginBottom:10,padding:"8px 10px",background:"#f0f8fd",borderRadius:6}}>
+            <div style={{fontSize:11,fontWeight:600,color:"#1a3a5c",marginBottom:5}}>🧑‍⚕️ Primer ayudante</div>
+            {esEquipo && miembrosEquipo.length > 0 ? (
+              <select value={seleccionado.primer_ayudante || ""} onChange={e=>asignarPrimerAyudante(seleccionado, e.target.value)} style={{...inputStyle, marginBottom:0}}>
+                <option value="">— Sin primer ayudante —</option>
+                {miembrosEquipo.map(m => {
+                  const nombre = m.perfiles?.nombre;
+                  return nombre ? <option key={m.perfiles?.id} value={nombre}>{nombre}</option> : null;
+                })}
+              </select>
+            ) : (
+              <input value={seleccionado.primer_ayudante || ""} onChange={e=>setSeleccionado({...seleccionado, primer_ayudante:e.target.value})} onBlur={e=>asignarPrimerAyudante(seleccionado, e.target.value)} placeholder="Nombre del ayudante (se guarda al salir del campo)" style={{...inputStyle, marginBottom:0}}/>
+            )}
+          </div>
+
           {seleccionado.observaciones && (
             <div style={{fontSize:12,color:"#1a3a5c",marginBottom:10,padding:"8px 10px",background:"#fff8e1",borderRadius:6}}>
               <strong>Observaciones:</strong> {seleccionado.observaciones}
@@ -2751,7 +2773,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                       ? <span style={{fontSize:8,fontWeight:600,background:"#7a4fb5",color:"#fff",padding:"0 4px",borderRadius:6}}>CCV</span>
                       : c.pabellon && <span style={{fontSize:8,color:"#5a7a99"}}>Pab {c.pabellon}</span>}
                   </div>
-                  <div style={{fontSize:11,color:"#1a3a5c",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
+                  <div style={{fontSize:10,color:"#1a3a5c",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
                   <div style={{fontSize:10,color:"#4a6a8a",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
                   {c.cirujano && <div style={{fontSize:9,color:"#6a8aa9",marginTop:1}}>👨‍⚕️ {c.cirujano}</div>}
                   {c.primer_ayudante && <div style={{fontSize:9,color:"#6a8aa9"}}>🧑‍⚕️ {c.primer_ayudante}</div>}
