@@ -2015,6 +2015,20 @@ function NotasPanel({ currentUser, contexto, equipos }) {
       }).select("*, autor:perfiles(nombre)").single();
       if (error) throw error;
       setNotas(prev => [data, ...prev]);
+      // Notificar al equipo si la nota es visible para todos
+      if (esEquipo && nueva.visibilidad === "equipo") {
+        try {
+          const rm = await listarMiembros(contexto);
+          if (rm.ok) {
+            rm.miembros.forEach(m => {
+              const uid = m.perfiles?.id;
+              if (uid && uid !== currentUser.id) {
+                crearNotificacion(uid, `Nueva nota del equipo${nueva.titulo.trim() ? `: "${nueva.titulo.trim()}"` : ""} — por ${currentUser.nombre}`, "general");
+              }
+            });
+          }
+        } catch {}
+      }
       setNueva({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
     } catch (e) { alert("Error: " + (e.message || e)); }
   };
@@ -2516,6 +2530,16 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
     // Al completar una cirugía → crear automáticamente el paciente hospitalizado
     if (nuevoEstado === "completada") {
+      // Avisar al equipo
+      if (esEquipo) {
+        try {
+          const rm = await listarMiembros(contexto);
+          if (rm.ok) rm.miembros.forEach(m => {
+            const uid = m.perfiles?.id;
+            if (uid && uid !== currentUser.id) crearNotificacion(uid, `Cirugía completada: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha})`, "cirugia");
+          });
+        } catch {}
+      }
       if (!confirm(`¿Crear a ${cirugia.iniciales} como paciente hospitalizado en la pestaña Pacientes?`)) return;
       const datosPaciente = {
         medico_id: currentUser.id,
@@ -3204,6 +3228,9 @@ const SUGERENCIAS_SOAP = {
   const [mostrarExAntiguos, setMostrarExAntiguos] = useState(false);
   const [pendientesPaciente, setPendientesPaciente] = useState([]);
   const [nuevoPendientePac, setNuevoPendientePac] = useState({ texto: "", prioridad: "normal", fecha_objetivo: "", encargados: [] });
+  const [abrirFormPendiente, setAbrirFormPendiente] = useState(false);
+  const [abrirFormEvo, setAbrirFormEvo] = useState(false);
+  const [abrirFormExamen, setAbrirFormExamen] = useState(false);
 const [editForm, setEditForm] = useState({});
 const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando se está agregando una cirugía
 
@@ -3346,6 +3373,12 @@ const cargarMiembrosEquipo = async () => {
     if (!result.ok) return alert("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === paciente.id ? result.paciente : p));
     if (seleccionado?.id === paciente.id) setSeleccionado(result.paciente);
+    // Avisar a los encargados cuando se da de alta
+    if (nuevoEstado === "alta" && Array.isArray(paciente.encargados)) {
+      paciente.encargados.filter(id => id !== currentUser.id).forEach(id => {
+        crearNotificacion(id, `Paciente dado de alta: ${paciente.iniciales} (cama ${paciente.cama})`, "paciente");
+      });
+    }
   };
   const iniciarEdicion = () => {
   setEditForm({
@@ -3452,6 +3485,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     setMostrarEvosAntiguas(false);
     setMostrarExAntiguos(false);
     setEditandoHistoria(false);
+    setAbrirFormPendiente(false);
+    setAbrirFormEvo(false);
+    setAbrirFormExamen(false);
     const evoResult = await listarEvoluciones(paciente.id);
     if (evoResult.ok) setEvoluciones(evoResult.evoluciones);
     const exResult = await listarExamenes(paciente.id);
@@ -3504,6 +3540,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const result = await actualizarPendiente(p.id, { estado: nuevoEstado });
     if (!result.ok) return alert("Error: " + result.error);
     setPendientesPaciente(prev => prev.map(x => x.id === p.id ? result.pendiente : x));
+    // Avisar a los encargados cuando se completa
+    if (nuevoEstado === "completado" && Array.isArray(p.encargados)) {
+      p.encargados.filter(id => id !== currentUser.id).forEach(id => {
+        crearNotificacion(id, `Pendiente completado: "${p.texto.replace(/^\[[^\]]*\]\s*/,"").slice(0,70)}"`, "pendiente");
+      });
+    }
   };
 
   // ============================================================
@@ -4013,7 +4055,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               ))}
               {evoluciones.length > 1 && (
                 <button onClick={()=>setMostrarEvosAntiguas(!mostrarEvosAntiguas)} style={{padding:"8px",fontSize:12,background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
-                  {mostrarEvosAntiguas ? "▴ Ocultar evoluciones anteriores" : `▾ Ver ${evoluciones.length - 1} evolución${evoluciones.length - 1 === 1 ? "" : "es"} anterior${evoluciones.length - 1 === 1 ? "" : "es"}`}
+                  {mostrarEvosAntiguas ? "▴ Ver menos evoluciones" : "▾ Ver más evoluciones"}
                 </button>
               )}
             </div>
@@ -4106,7 +4148,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 ))}
                 {fechas.length > 1 && (
                   <button onClick={()=>setMostrarExAntiguos(!mostrarExAntiguos)} style={{padding:"8px",fontSize:12,background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
-                    {mostrarExAntiguos ? "▴ Ocultar exámenes anteriores" : `▾ Ver exámenes de ${fechas.length - 1} día${fechas.length - 1 === 1 ? "" : "s"} anterior${fechas.length - 1 === 1 ? "" : "es"}`}
+                    {mostrarExAntiguos ? "▴ Ver menos exámenes" : "▾ Ver más exámenes"}
                   </button>
                 )}
               </div>
@@ -4116,7 +4158,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         {/* PENDIENTES DEL PACIENTE */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>✅ Pendientes del paciente</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormPendiente||pendientesPaciente.length>0?10:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>✅ Pendientes del paciente</div>
+            <button onClick={()=>setAbrirFormPendiente(!abrirFormPendiente)} style={{padding:"5px 12px",fontSize:12,background:abrirFormPendiente?"var(--superficie)":"var(--primario)",color:abrirFormPendiente?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormPendiente?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormPendiente?"Cancelar":"+ Agregar pendiente"}</button>
+          </div>
+          {abrirFormPendiente && (
+          <div style={{marginBottom:pendientesPaciente.length>0?10:0}}>
           <textarea value={nuevoPendientePac.texto} onChange={e=>setNuevoPendientePac({...nuevoPendientePac,texto:e.target.value})} placeholder="¿Qué hay que hacer con este paciente?" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
             <select value={nuevoPendientePac.prioridad} onChange={e=>setNuevoPendientePac({...nuevoPendientePac,prioridad:e.target.value})} style={{...inputStyle,marginBottom:0}}>
@@ -4128,20 +4175,28 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </div>
           {esEquipo && miembrosEquipo.length > 0 && (
             <div style={{marginBottom:8}}>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:4}}>Encargados:</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                {miembrosEquipo.map(m => {
-                  const uid = m.perfiles?.id, nombre = m.perfiles?.nombre;
-                  if (!uid || !nombre) return null;
-                  const sel = nuevoPendientePac.encargados.includes(uid);
-                  return (
-                    <button key={uid} onClick={()=>setNuevoPendientePac({...nuevoPendientePac,encargados: sel ? nuevoPendientePac.encargados.filter(x=>x!==uid) : [...nuevoPendientePac.encargados, uid]})} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)",fontWeight:sel?600:400}}>{nombre}</button>
-                  );
-                })}
-              </div>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:4}}>Agregar encargado:</div>
+              <select value="" onChange={e=>{const uid=e.target.value; if(uid && !nuevoPendientePac.encargados.includes(uid)) setNuevoPendientePac({...nuevoPendientePac,encargados:[...nuevoPendientePac.encargados,uid]});}} style={{...inputStyle,marginBottom:6}}>
+                <option value="">Seleccionar miembro…</option>
+                {miembrosEquipo.filter(m=>m.perfiles?.id && !nuevoPendientePac.encargados.includes(m.perfiles.id)).map(m => (
+                  <option key={m.perfiles.id} value={m.perfiles.id}>{m.perfiles.nombre}</option>
+                ))}
+              </select>
+              {nuevoPendientePac.encargados.length > 0 && (
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {nuevoPendientePac.encargados.map(uid => {
+                    const m = miembrosEquipo.find(x=>x.perfiles?.id===uid);
+                    return (
+                      <span key={uid} onClick={()=>setNuevoPendientePac({...nuevoPendientePac,encargados:nuevoPendientePac.encargados.filter(x=>x!==uid)})} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",background:"var(--primario)",color:"var(--texto-inv)",fontWeight:600}}>{m?.perfiles?.nombre||"?"} ✕</span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
-          <button onClick={guardarPendientePaciente} disabled={!nuevoPendientePac.texto.trim()} style={{...btnPrimary,marginTop:0,marginBottom:pendientesPaciente.length>0?10:0,opacity:nuevoPendientePac.texto.trim()?1:0.6}}>+ Agregar pendiente</button>
+          <button onClick={()=>{guardarPendientePaciente();setAbrirFormPendiente(false);}} disabled={!nuevoPendientePac.texto.trim()} style={{...btnPrimary,marginTop:0,opacity:nuevoPendientePac.texto.trim()?1:0.6}}>+ Guardar pendiente</button>
+          </div>
+          )}
           {pendientesPaciente.map(p => (
             <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:"var(--fondo-suave)",borderRadius:6,marginBottom:4,opacity:p.estado==="completado"?0.55:1}}>
               <button onClick={()=>togglePendientePacCompletado(p)} style={{width:17,height:17,borderRadius:4,border:"1px solid var(--borde)",background:p.estado==="completado"?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}}>{p.estado==="completado"?"✓":""}</button>
@@ -4155,8 +4210,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         {/* NUEVA EVOLUCIÓN (formulario) */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>➕ Nueva evolución</div>
-
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormEvo?10:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nueva evolución</div>
+            <button onClick={()=>setAbrirFormEvo(!abrirFormEvo)} style={{padding:"5px 12px",fontSize:12,background:abrirFormEvo?"var(--superficie)":"var(--primario)",color:abrirFormEvo?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormEvo?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormEvo?"Cerrar":"+ Agregar evolución"}</button>
+          </div>
+          {abrirFormEvo && (<>
           {/* Selector tipo */}
           <div style={{display:"flex",gap:8,marginBottom:10}}>
             <button onClick={()=>setTipoEvo("estructurada")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="estructurada"?"var(--primario)":"var(--superficie)",color:tipoEvo==="estructurada"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="estructurada"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Estructurada (SOAP)</button>
@@ -4314,11 +4372,16 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
 
           <button onClick={guardarEvolucion} style={{...btnPrimary, marginTop:0}}>+ Guardar evolución</button>
+          </>)}
         </div>
 
         {/* NUEVO EXAMEN (formulario) */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>➕ Nuevo examen</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormExamen?10:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
+            <button onClick={()=>setAbrirFormExamen(!abrirFormExamen)} style={{padding:"5px 12px",fontSize:12,background:abrirFormExamen?"var(--superficie)":"var(--primario)",color:abrirFormExamen?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormExamen?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormExamen?"Cerrar":"+ Agregar examen"}</button>
+          </div>
+          {abrirFormExamen && (<>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
             <select value={nuevoEx.tipo} onChange={e=>setNuevoEx({...nuevoEx,tipo:e.target.value,nombre:"",pirads:"",pesoProstatico:"",lugar:"",tipoCultivo:""})} style={{...inputStyle,marginBottom:0}}>
@@ -4490,7 +4553,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
           <textarea value={nuevoEx.resultado} onChange={e=>setNuevoEx({...nuevoEx,resultado:e.target.value})} placeholder="Resultado (opcional)" rows={2} style={{...inputStyle,resize:"vertical"}}/>
           <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0}}>+ Guardar examen</button>
-
+          </>)}
         </div>
       </div>
     );
@@ -5215,33 +5278,25 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
   // Detecta si la consulta es sobre los pacientes del médico
   const buscarPacientesRelevantes = (consulta) => {
     const q = consulta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    const palabrasPacientes = ["paciente","pacientes","hospitalizad","hospitalizado","cama","camas","servicio","ingres","alta","altas","mis","tengo","cuanto","cuanta","cuanto","quien","quien","resumen","ficha","evolucion","evolución","examen","examen","diagnostic","diagnóstic","mi paciente"];
+    const palabrasPacientes = ["paciente","pacientes","hospitalizad","hospitalizado","cama","camas","servicio","ingres","alta","altas","mis","tengo","cuanto","cuanta","quien","resumen","ficha","evolucion","examen","diagnostic","operad","post op","postop"];
     const esConsulta = palabrasPacientes.some(p => q.includes(p));
     if (!esConsulta) return null;
-    const misPacientes = pacientes.filter(p => p.medicoId === currentUser.correo);
+    // Los pacientes ya vienen filtrados por contexto (personales o del equipo activo)
+    const misPacientes = pacientes || [];
     if (misPacientes.length === 0) return { ningun: true, total: 0 };
 
     // Filtrar por estado si se menciona
     let filtrados = misPacientes;
     if (q.includes("hospitalizad") || q.includes("activo") || q.includes("internad")) {
       filtrados = filtrados.filter(p => p.estado === "activo");
-    } else if (q.includes("dado de alta") || q.includes("dados de alta") || q.includes("alta")) {
+    } else if (q.includes("dado de alta") || q.includes("dados de alta") || q.includes("de alta")) {
       filtrados = filtrados.filter(p => p.estado === "alta");
     }
 
-    // Filtrar por servicio si se menciona
-    const misServicios = (serviciosUsuario && serviciosUsuario[currentUser.correo]) || [];
-    misServicios.forEach(s => {
-      const sNorm = s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-      if (q.includes(sNorm)) {
-        filtrados = filtrados.filter(p => p.servicio === s);
-      }
-    });
-
-    // Filtrar por iniciales si se mencionan (busca patrones como J.P.M. o iniciales en mayúscula)
-    const inicialesEnQuery = consulta.match(/[A-Z]\.[A-Z]\.[A-Z]\.?/g) || consulta.match(/[A-Z]{2,4}/g) || [];
+    // Filtrar por iniciales si se mencionan
+    const inicialesEnQuery = consulta.match(/[A-Z]\.[A-Z]\.[A-Z]\.?/g) || consulta.match(/[A-Z]{2,}/g) || [];
     if (inicialesEnQuery.length > 0) {
-      const matched = filtrados.filter(p => inicialesEnQuery.some(ini => (p.iniciales || "").includes(ini.replace(/\./g,"")) || ini.includes((p.iniciales || "").replace(/\./g,""))));
+      const matched = filtrados.filter(p => inicialesEnQuery.some(ini => (p.iniciales || "").toUpperCase().includes(ini.replace(/\./g,"")) ));
       if (matched.length > 0) filtrados = matched;
     }
 
@@ -5324,14 +5379,13 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
       } else {
         ctx += `Total de pacientes del usuario: ${consultaPacientes.totalMisPacientes}. Coinciden con la consulta: ${consultaPacientes.pacientes.length}.\n\nDETALLE DE PACIENTES:\n`;
         ctx += consultaPacientes.pacientes.map(p => {
-          let detalle = `- ${p.iniciales} (${p.edad}a ${p.sexo}) | Cama ${p.cama} | Servicio: ${p.servicio} | Estado: ${p.estado === "activo" ? "Hospitalizado" : "Alta"} | Ingreso: ${p.fechaIngreso}\n  Diagnóstico: ${p.diagnostico}`;
-          if (p.planManejo) detalle += `\n  Plan: ${p.planManejo}`;
-          if (p.evoluciones.length > 0) {
-            detalle += `\n  Última evolución (${p.evoluciones[0].fecha}): ${p.evoluciones[0].texto.slice(0,200)}${p.evoluciones[0].texto.length > 200 ? "..." : ""}`;
-          }
-          if (p.examenes.length > 0) {
-            detalle += `\n  Exámenes: ${p.examenes.slice(0,3).map(ex => `${ex.tipo} ${ex.nombre} (${ex.fecha})`).join(", ")}`;
-          }
+          let detalle = `- ${p.iniciales} (${p.edad || "?"}a ${p.sexo || ""}) | Cama ${p.cama} | Servicio: ${p.servicio} | Estado: ${p.estado === "activo" ? "Hospitalizado" : "Alta"} | Ingreso: ${p.fecha_ingreso}\n  Diagnóstico: ${p.diagnostico}`;
+          if (p.operado) detalle += `\n  Operado: sí${Array.isArray(p.cirugias_realizadas) && p.cirugias_realizadas.length ? ` (${p.cirugias_realizadas.map(cx => cx.nombre).join(", ")})` : ""}`;
+          if (Array.isArray(p.antecedentes) && p.antecedentes.length) detalle += `\n  Antecedentes: ${p.antecedentes.join(", ")}`;
+          if (p.alergias) detalle += `\n  Alergias: ${p.alergias}`;
+          if (p.estado_clinico) detalle += `\n  Estado clínico: ${p.estado_clinico}`;
+          if (p.historia) detalle += `\n  Historia: ${p.historia.slice(0,300)}${p.historia.length > 300 ? "..." : ""}`;
+          if (p.plan_manejo) detalle += `\n  Plan: ${p.plan_manejo}`;
           return detalle;
         }).join("\n\n");
       }
@@ -5507,7 +5561,6 @@ if (!currentUser) {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <NotificationBell currentUser={currentUser}/>
-            <button onClick={()=>setTema(tema==="light"?"dark":"light")} title={tema==="light"?"Modo oscuro":"Modo claro"} style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{tema==="light"?"🌙":"☀️"}</button>
             <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:"5px 14px 5px 5px",cursor:"pointer"}}>
               <div style={{width:38,height:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
               <span style={{fontSize:14,color:"var(--texto)",fontWeight:500}}>▾</span>
@@ -5521,6 +5574,9 @@ if (!currentUser) {
               <div style={{fontSize:11,color:"var(--texto-sec)"}}>{currentUser.correo}</div>
               <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>{currentUser.especialidad}{isAdmin?" · Administrador":""}</div>
             </div>
+            <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+              {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
+            </button>
             <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
         )}
