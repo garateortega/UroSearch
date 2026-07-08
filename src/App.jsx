@@ -220,13 +220,13 @@ function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
 function LogoUroSearch({ size = 40 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 50 50">
-      <circle cx="25" cy="25" r="23.5" fill="#fff" stroke="#1a4a7c" strokeWidth="2"/>
-      <path d="M 15 11 C 10 11, 8 14, 8 19 C 8 24, 10 27, 15 27 C 17.5 27, 19 26, 19.5 24 C 20 21, 20 16, 19.5 13.5 C 19 12, 17.5 11, 15 11 Z" fill="#1a4a7c"/>
-      <path d="M 17 27 C 19 30, 16 33, 18.5 36 C 21 39, 23 40, 25 42" stroke="#1a4a7c" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-      <path d="M 35 11 C 40 11, 42 14, 42 19 C 42 24, 40 27, 35 27 C 32.5 27, 31 26, 30.5 24 C 30 21, 30 16, 30.5 13.5 C 31 12, 32.5 11, 35 11 Z" fill="#7ec0e8"/>
-      <path d="M 33 27 C 31 30, 34 33, 31.5 36 C 29 39, 27 40, 25 42" stroke="#7ec0e8" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-      <path d="M 19 43 C 19 41.5, 21 40.5, 25 40.5 C 22 42, 28 45.5, 25 47 C 21 47, 19 45.5, 19 43 Z" fill="#1a4a7c"/>
-      <path d="M 31 43 C 31 41.5, 29 40.5, 25 40.5 C 22 42, 28 45.5, 25 47 C 29 47, 31 45.5, 31 43 Z" fill="#7ec0e8"/>
+      <circle cx="25" cy="25" r="23.5" fill="#fff" stroke="var(--primario-osc)" strokeWidth="2"/>
+      <path d="M 15 11 C 10 11, 8 14, 8 19 C 8 24, 10 27, 15 27 C 17.5 27, 19 26, 19.5 24 C 20 21, 20 16, 19.5 13.5 C 19 12, 17.5 11, 15 11 Z" fill="var(--primario-osc)"/>
+      <path d="M 17 27 C 19 30, 16 33, 18.5 36 C 21 39, 23 40, 25 42" stroke="var(--primario-osc)" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+      <path d="M 35 11 C 40 11, 42 14, 42 19 C 42 24, 40 27, 35 27 C 32.5 27, 31 26, 30.5 24 C 30 21, 30 16, 30.5 13.5 C 31 12, 32.5 11, 35 11 Z" fill="var(--primario-claro)"/>
+      <path d="M 33 27 C 31 30, 34 33, 31.5 36 C 29 39, 27 40, 25 42" stroke="var(--primario-claro)" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+      <path d="M 19 43 C 19 41.5, 21 40.5, 25 40.5 C 22 42, 28 45.5, 25 47 C 21 47, 19 45.5, 19 43 Z" fill="var(--primario-osc)"/>
+      <path d="M 31 43 C 31 41.5, 29 40.5, 25 40.5 C 22 42, 28 45.5, 25 47 C 29 47, 31 45.5, 31 43 Z" fill="var(--primario-claro)"/>
     </svg>
   );
 }
@@ -255,16 +255,16 @@ function MapaConceptual({ data }) {
               return (
                 <g key={j}>
                   <line x1={bx} y1={by} x2={sx} y2={sy} stroke={color} strokeWidth="0.8" strokeOpacity="0.35" strokeDasharray="3,2"/>
-                  <rect x={sx-44} y={sy-13} width="88" height="26" rx="6" fill="#fff" stroke={color} strokeWidth="0.8" strokeOpacity="0.6"/>
-                  <text x={sx} y={sy+1} textAnchor="middle" dominantBaseline="central" fontSize="10" fill="#555">{s}</text>
+                  <rect x={sx-44} y={sy-13} width="88" height="26" rx="6" fill="var(--superficie)" stroke={color} strokeWidth="0.8" strokeOpacity="0.6"/>
+                  <text x={sx} y={sy+1} textAnchor="middle" dominantBaseline="central" fontSize="10" fill="var(--neutro)">{s}</text>
                 </g>
               );
             })}
           </g>
         );
       })}
-      <circle cx={cx} cy={cy} r="46" fill="#fff" stroke="#1a6fb5" strokeWidth="1.5"/>
-      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="500" fill="#1a3a5c">{data.nodo_central}</text>
+      <circle cx={cx} cy={cy} r="46" fill="var(--superficie)" stroke="var(--primario)" strokeWidth="1.5"/>
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="500" fill="var(--texto)">{data.nodo_central}</text>
     </svg>
   );
 }
@@ -298,8 +298,8 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
       left: 0,
       bottom: 0,
       width: "280px",
-      background: "#fff",
-      borderRight: "0.5px solid #b8d8ef",
+      background:"var(--superficie)",
+      borderRight: "0.5px solid var(--borde)",
       display: "flex",
       flexDirection: "column",
       zIndex: 20,
@@ -309,18 +309,18 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
       {/* Header */}
       <div style={{
         padding: "14px 16px",
-        borderBottom: "0.5px solid #b8d8ef",
+        borderBottom: "0.5px solid var(--borde)",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        background: "#f0f8fd",
+        background: "var(--fondo-suave)",
       }}>
-        <div style={{fontSize:14, fontWeight:600, color:"#1a3a5c"}}>Mis conversaciones</div>
+        <div style={{fontSize:14, fontWeight:600, color:"var(--texto)"}}>Mis conversaciones</div>
         <button onClick={onCerrar} style={{
           background: "none",
           border: "none",
           fontSize: 18,
-          color: "#7aa3c4",
+          color: "var(--texto-ter)",
           cursor: "pointer",
           padding: 0,
           lineHeight: 1,
@@ -328,14 +328,14 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
       </div>
 
       {/* Botón nueva conversación */}
-      <div style={{padding: "10px 12px", borderBottom: "0.5px solid #e8f3fb"}}>
+      <div style={{padding: "10px 12px", borderBottom: "0.5px solid var(--fondo)"}}>
         <button onClick={onNueva} style={{
           width: "100%",
           padding: "9px",
           fontSize: 13,
           fontWeight: 500,
-          background: "#1a6fb5",
-          color: "#fff",
+          background: "var(--primario)",
+          color:"var(--texto-inv)",
           border: "none",
           borderRadius: 8,
           cursor: "pointer",
@@ -345,7 +345,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
       {/* Lista de conversaciones */}
       <div style={{flex: 1, overflowY: "auto", padding: "8px 6px"}}>
         {conversaciones.length === 0 ? (
-          <div style={{textAlign:"center", padding:"30px 16px", color:"#7aa3c4", fontSize:12, lineHeight:1.5}}>
+          <div style={{textAlign:"center", padding:"30px 16px", color:"var(--texto-ter)", fontSize:12, lineHeight:1.5}}>
             No tienes conversaciones aún.<br/>Empieza una con el botón de arriba.
           </div>
         ) : (
@@ -359,14 +359,14 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                   padding: "10px 12px",
                   borderRadius: 8,
                   cursor: "pointer",
-                  background: esActual ? "#e0e9f5" : "transparent",
-                  border: esActual ? "0.5px solid #1a6fb5" : "0.5px solid transparent",
+                  background: esActual ? "var(--fondo-suave)" : "transparent",
+                  border: esActual ? "0.5px solid var(--primario)" : "0.5px solid transparent",
                   marginBottom: 4,
                   position: "relative",
           
                 }}
                 onMouseEnter={e => {
-                  if (!esActual) e.currentTarget.style.background = "#f0f8fd";
+                  if (!esActual) e.currentTarget.style.background = "var(--fondo-suave)";
                   const btn = e.currentTarget.querySelector('.btn-eliminar');
                   if (btn) btn.style.opacity = '1';
                 }}
@@ -379,7 +379,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                 <div style={{
                   fontSize: 12.5,
                   fontWeight: esActual ? 500 : 400,
-                  color: "#1a3a5c",
+                  color: "var(--texto)",
                   marginBottom: 3,
                   lineHeight: 1.3,
                   paddingRight: 24,
@@ -388,7 +388,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
                 }}>{conv.titulo || "Sin título"}</div>
-                <div style={{fontSize: 10, color: "#7aa3c4"}}>
+                <div style={{fontSize: 10, color: "var(--texto-ter)"}}>
                   {formatearFecha(conv.fecha_actualizacion)}
                 </div>
                 <button
@@ -400,7 +400,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                     right: 8,
                     background: "none",
                     border: "none",
-                    color: "#c0392b",
+                    color: "var(--peligro)",
                     fontSize: 14,
                     cursor: "pointer",
                     padding: 2,
@@ -445,48 +445,48 @@ function renderMarkdown(texto) {
 
 function ChatBubble({ msg, userInitials, onPlayVideo }) {
   const isUser = msg.role === "user";
-  const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "#1a6fb5" : "#fff", color: isUser ? "#fff" : "#1a3a5c", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid #b8d8ef", whiteSpace:"pre-wrap" };
+  const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "var(--primario)" : "var(--superficie)", color: isUser ?"var(--texto-inv)":"var(--texto)", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid var(--borde)", whiteSpace:"pre-wrap" };
   return (
     <div style={{display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:"12px"}}>
-      {!isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"#1a6fb5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"#fff",marginRight:8,flexShrink:0,marginTop:2}}>U</div>}
+      {!isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"var(--texto-inv)",marginRight:8,flexShrink:0,marginTop:2}}>U</div>}
       <div style={{maxWidth:"82%"}}>
         {isUser
           ? <div style={bubbleStyle}>{msg.content}</div>
           : <div style={{...bubbleStyle, whiteSpace:"normal"}} dangerouslySetInnerHTML={{__html: renderMarkdown(msg.content)}} />
         }
         {msg.cirugiasConsulta && (
-          <div style={{marginTop:6,padding:"7px 10px",background:"#e0e9f5",border:"0.5px solid #b8c8de",borderRadius:8}}>
-            <div style={{fontSize:10,fontWeight:500,color:"#1a4a7c"}}>📅 Información de tu tabla quirúrgica · {msg.cirugiasConsulta.cantidad} {msg.cirugiasConsulta.cantidad === 1 ? "cirugía" : "cirugías"} en {msg.cirugiasConsulta.rango}</div>
+          <div style={{marginTop:6,padding:"7px 10px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:8}}>
+            <div style={{fontSize:10,fontWeight:500,color:"var(--primario-osc)"}}>📅 Información de tu tabla quirúrgica · {msg.cirugiasConsulta.cantidad} {msg.cirugiasConsulta.cantidad === 1 ? "cirugía" : "cirugías"} en {msg.cirugiasConsulta.rango}</div>
           </div>
         )}
         {msg.pacientesConsulta && (
-          <div style={{marginTop:6,padding:"7px 10px",background:"#f5e0f0",border:"0.5px solid #e0b8d0",borderRadius:8}}>
-            <div style={{fontSize:10,fontWeight:500,color:"#7a3a6b"}}>🏥 Información de tus pacientes · {msg.pacientesConsulta.cantidad} {msg.pacientesConsulta.cantidad === 1 ? "paciente" : "pacientes"}</div>
+          <div style={{marginTop:6,padding:"7px 10px",background:"var(--chip-rosa-bg)",border:"0.5px solid var(--chip-rosa-borde)",borderRadius:8}}>
+            <div style={{fontSize:10,fontWeight:500,color:"var(--chip-rosa)"}}>🏥 Información de tus pacientes · {msg.pacientesConsulta.cantidad} {msg.pacientesConsulta.cantidad === 1 ? "paciente" : "pacientes"}</div>
           </div>
         )}
         {msg.fuentes && msg.fuentes.length > 0 && (
-          <div style={{marginTop:6,padding:"7px 10px",background:"#e0f5ec",border:"0.5px solid #a8d4be",borderRadius:8}}>
-            <div style={{fontSize:10,fontWeight:500,color:"#1a6f5c",marginBottom:4}}>📚 Basado en tu base de conocimiento:</div>
+          <div style={{marginTop:6,padding:"7px 10px",background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",borderRadius:8}}>
+            <div style={{fontSize:10,fontWeight:500,color:"var(--exito)",marginBottom:4}}>📚 Basado en tu base de conocimiento:</div>
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {msg.fuentes.map(f => <div key={f.id} style={{fontSize:11,color:"#1a6f5c",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"#7aa3a4"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"#7aa3a4"}}> ({f.categoria})</span> : null)}</div>)}
+              {msg.fuentes.map(f => <div key={f.id} style={{fontSize:11,color:"var(--exito)",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"var(--texto-ter)"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"var(--texto-ter)"}}> ({f.categoria})</span> : null)}</div>)}
             </div>
           </div>
         )}
         {msg.videos && msg.videos.length > 0 && (
-          <div style={{marginTop:8,padding:"10px 12px",background:"#f0f8fd",border:"0.5px solid #b8d8ef",borderRadius:10}}>
-            <div style={{fontSize:11,fontWeight:500,color:"#4a7eab",marginBottom:8}}>🎬 Videos sugeridos de la biblioteca</div>
+          <div style={{marginTop:8,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
+            <div style={{fontSize:11,fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>🎬 Videos sugeridos de la biblioteca</div>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {msg.videos.map(v => {
                 const ytId = getYouTubeId(v.url);
                 const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/default.jpg` : null;
                 return (
-                  <div key={v.id} onClick={()=>onPlayVideo(v)} style={{display:"flex",alignItems:"center",gap:10,padding:"6px",background:"#fff",borderRadius:8,cursor:"pointer",border:"0.5px solid #d0e9f8"}}>
+                  <div key={v.id} onClick={()=>onPlayVideo(v)} style={{display:"flex",alignItems:"center",gap:10,padding:"6px",background:"var(--superficie)",borderRadius:8,cursor:"pointer",border:"0.5px solid var(--header-bg)"}}>
                     {thumb && <img src={thumb} alt="" style={{width:60,height:45,objectFit:"cover",borderRadius:4,flexShrink:0}}/>}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.titulo}</div>
-                      <div style={{fontSize:10,color:"#7aa3c4"}}>{v.categoria} · {v.autor}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.titulo}</div>
+                      <div style={{fontSize:10,color:"var(--texto-ter)"}}>{v.categoria} · {v.autor}</div>
                     </div>
-                    <div style={{fontSize:13,color:"#1a6fb5"}}>▶</div>
+                    <div style={{fontSize:13,color:"var(--primario)"}}>▶</div>
                   </div>
                 );
               })}
@@ -494,15 +494,104 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
           </div>
         )}
       </div>
-      {isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"#3a8dc5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:500,color:"#fff",marginLeft:8,flexShrink:0,marginTop:2}}>{userInitials}</div>}
+      {isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario-claro)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:500,color:"var(--texto-inv)",marginLeft:8,flexShrink:0,marginTop:2}}>{userInitials}</div>}
     </div>
   );
 }
 
-const inputStyle = { width:"100%", padding:"10px 12px", fontSize:14, borderRadius:8, border:"1px solid #b8d8ef", background:"#fff", color:"#1a3a5c", outline:"none", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" };
-const labelStyle = { fontSize:12, fontWeight:500, color:"#4a7eab", marginBottom:4, display:"block" };
-const btnPrimary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"#1a6fb5", color:"#fff", border:"none", borderRadius:8, cursor:"pointer", marginTop:6 };
-const btnSecondary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"#fff", color:"#1a6fb5", border:"1px solid #1a6fb5", borderRadius:8, cursor:"pointer", marginTop:8 };
+const inputStyle = { width:"100%", padding:"10px 12px", fontSize:14, borderRadius:8, border:"1px solid var(--borde)", background:"var(--superficie)", color:"var(--texto)", outline:"none", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" };
+const labelStyle = { fontSize:12, fontWeight:500, color:"var(--texto-sec)", marginBottom:4, display:"block" };
+const btnPrimary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"var(--primario)", color:"var(--texto-inv)", border:"none", borderRadius:8, cursor:"pointer", marginTop:6 };
+
+// ============================================================
+// TEMAS (modo claro / oscuro) — variables CSS
+// ============================================================
+const THEME_CSS = `
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --fondo: #e8f3fb;
+  --header-bg: #d0e9f8;
+  --fondo-suave: #f0f8fd;
+  --superficie: #ffffff;
+  --borde: #b8d8ef;
+  --borde-suave: #d4e6f5;
+  --primario: #1a6fb5;
+  --primario-osc: #1a4a7c;
+  --primario-claro: #7ec0e8;
+  --texto: #1a3a5c;
+  --texto-sec: #4a7eab;
+  --texto-ter: #7aa3c4;
+  --texto-inv: #ffffff;
+  --navy-fijo: #1a3a5c;
+  --hoy-bg: #eaf4ff;
+  --peligro: #c0392b;
+  --peligro-bg: #fde8e6;
+  --peligro-borde: #f0c5c0;
+  --exito: #1a6f5c;
+  --exito-bg: #e0f5ec;
+  --exito-borde: #a8d4be;
+  --alerta: #a06b1a;
+  --alerta-bg: #fff8e1;
+  --alerta-borde: #f0d896;
+  --neutro: #8a99a8;
+  --neutro-bg: #eeeeee;
+  --ccv: #7a4fb5;
+  --ccv-borde: #c9b6e6;
+  --ccv-bg: #f3e8ff;
+  --est-prog-bg: #eaf3fb;
+  --chip-azul: #1e40af;   --chip-azul-bg: #dbeafe;
+  --chip-indigo: #3730a3; --chip-indigo-bg: #e0e7ff;
+  --chip-rosa: #7a3a6b;   --chip-rosa-bg: #f5e0f0; --chip-rosa-borde: #e0b8d0;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --fondo: #0e1a26;
+  --header-bg: #142434;
+  --fondo-suave: #16232f;
+  --superficie: #1b2c3d;
+  --borde: #2e4a63;
+  --borde-suave: #263c50;
+  --primario: #4da3e0;
+  --primario-osc: #7ec0e8;
+  --primario-claro: #3a7cad;
+  --texto: #dcebf7;
+  --texto-sec: #9cc0dd;
+  --texto-ter: #6f93b3;
+  --texto-inv: #ffffff;
+  --navy-fijo: #12253b;
+  --hoy-bg: #1d3a55;
+  --peligro: #e0796d;
+  --peligro-bg: #3a2320;
+  --peligro-borde: #5c352f;
+  --exito: #52c2a0;
+  --exito-bg: #16302a;
+  --exito-borde: #2a5a4a;
+  --alerta: #dcaa54;
+  --alerta-bg: #332a12;
+  --alerta-borde: #5a4a20;
+  --neutro: #8a99a8;
+  --neutro-bg: #26303a;
+  --ccv: #b18ae0;
+  --ccv-borde: #5a4380;
+  --ccv-bg: #2a2140;
+  --est-prog-bg: #1c3550;
+  --chip-azul: #a8c4f5;   --chip-azul-bg: #1e2f52;
+  --chip-indigo: #b8bdf5; --chip-indigo-bg: #262b52;
+  --chip-rosa: #e0aed0;   --chip-rosa-bg: #3a2233; --chip-rosa-borde: #5a3850;
+}
+`;
+
+// Inyectar el CSS de temas una sola vez al cargar el módulo (cubre también la
+// pantalla de login, que se renderiza fuera del root autenticado) y aplicar
+// de inmediato el tema guardado para evitar destello claro al recargar.
+if (typeof document !== "undefined" && !document.getElementById("uro-theme-css")) {
+  const st = document.createElement("style");
+  st.id = "uro-theme-css";
+  st.textContent = THEME_CSS;
+  document.head.appendChild(st);
+  try { document.documentElement.setAttribute("data-theme", localStorage.getItem("uro_tema") || "light"); } catch {}
+}
+const btnSecondary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"var(--superficie)", color:"var(--primario)", border:"1px solid var(--primario)", borderRadius:8, cursor:"pointer", marginTop:8 };
 
 function AuthScreen({ onLogin }) {
   const [view, setView] = useState("welcome");
@@ -572,15 +661,15 @@ function AuthScreen({ onLogin }) {
     return (
       <div style={{padding:"48px 32px", textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:24}}><LogoUroSearch size={110}/></div>
-        <div style={{fontSize:42, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"#1a3a5c", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
-        <div style={{fontSize:17, color:"#4a7eab", marginBottom:38, lineHeight:1.5}}>Asistente Clínico de Urología</div>
+        <div style={{fontSize:42, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
+        <div style={{fontSize:17, color:"var(--texto-sec)", marginBottom:38, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
           <button onClick={()=>{setView("login"); setError(""); setInfo("");}} style={{...btnPrimary, padding:"14px", fontSize:16}}>Iniciar sesión</button>
           <button onClick={()=>{setView("register"); setError(""); setInfo("");}} style={{...btnSecondary, padding:"14px", fontSize:16}}>Solicitar cuenta</button>
         </div>
-        <div style={{fontSize:12, color:"#7aa3c4", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
-        <div style={{fontSize:12, fontStyle:"italic", color:"#4a7eab", marginTop:24, paddingTop:16, borderTop:"0.5px solid #b8d8ef"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
-        <div style={{fontSize:9, fontFamily:"monospace", color:"#7aa3c4", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
+        <div style={{fontSize:12, color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
+        <div style={{fontSize:12, fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
+        <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
     );
   }
@@ -588,32 +677,32 @@ function AuthScreen({ onLogin }) {
   if (view === "login") {
     return (
       <div style={{padding:"24px 24px 32px"}}>
-        <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
+        <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24}}>
           <LogoUroSearch size={36}/>
-          <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"#1a3a5c"}}>Iniciar sesión</div>
+          <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Iniciar sesión</div>
         </div>
         <label style={labelStyle}>Correo electrónico</label>
         <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Contraseña</label>
         <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" style={inputStyle} disabled={loading}/>
-        {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
+        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
         <button onClick={handleLogin} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
-        <div style={{textAlign:"center",fontSize:12,color:"#4a7eab",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"#1a6fb5",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Solicítala aquí</button></div>
+        <div style={{textAlign:"center",fontSize:12,color:"var(--texto-sec)",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Solicítala aquí</button></div>
       </div>
     );
   }
 
   return (
     <div style={{padding:"24px 24px 32px"}}>
-      <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
+      <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
         <LogoUroSearch size={36}/>
-        <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"#1a3a5c"}}>Solicitar cuenta</div>
+        <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Solicitar cuenta</div>
       </div>
-      <div style={{fontSize:12,color:"#4a7eab",marginBottom:18,lineHeight:1.5}}>Tu cuenta será revisada por el administrador antes de ser activada.</div>
+      <div style={{fontSize:12,color:"var(--texto-sec)",marginBottom:18,lineHeight:1.5}}>Tu cuenta será revisada por el administrador antes de ser activada.</div>
       <label style={labelStyle}>Nombre completo</label>
       <input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} placeholder="Dr. Juan Pérez" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Correo electrónico</label>
@@ -623,19 +712,19 @@ function AuthScreen({ onLogin }) {
         {ESPECIALIDADES.map(e=><option key={e}>{e}</option>)}
       </select>
       <label style={labelStyle}>Documento de respaldo</label>
-      <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Adjunta título de especialidad o carta de residencia (PDF/JPG/PNG, máx. 5 MB)</div>
+      <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>Adjunta título de especialidad o carta de residencia (PDF/JPG/PNG, máx. 5 MB)</div>
       <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} style={{display:"none"}} disabled={loading}/>
-      <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:13,background:"#fff",color:"#1a6fb5",border:"1px dashed #1a6fb5",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
+      <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
       <label style={labelStyle}>Contraseña</label>
       <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 6 caracteres" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Confirmar contraseña</label>
       <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle} disabled={loading}/>
-      {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
-      {info && <div style={{fontSize:12,color:"#1a6f5c",background:"#e0f5ec",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
+      {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
+      {info && <div style={{fontSize:12,color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
       <button onClick={handleRegister} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
         {loading ? "Enviando solicitud..." : "Enviar solicitud"}
       </button>
-      <div style={{textAlign:"center",fontSize:12,color:"#4a7eab",marginTop:14}}>¿Ya tienes cuenta? <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"#1a6fb5",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Inicia sesión</button></div>
+      <div style={{textAlign:"center",fontSize:12,color:"var(--texto-sec)",marginTop:14}}>¿Ya tienes cuenta? <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Inicia sesión</button></div>
     </div>
   );
 }
@@ -693,13 +782,13 @@ function AdminPanel() {
 
   const badge = (e) => ({
     fontSize:10, fontWeight:500, padding:"2px 8px", borderRadius:10,
-    background: e==="aprobado"?"#d4f0e0":e==="rechazado"?"#fde8e6":"#fdf0d0",
-    color: e==="aprobado"?"#1a6f5c":e==="rechazado"?"#c0392b":"#a06b1a"
+    background: e==="aprobado"?"var(--exito-bg)":e==="rechazado"?"var(--peligro-bg)":"var(--alerta-bg)",
+    color: e==="aprobado"?"var(--exito)":e==="rechazado"?"var(--peligro)":"var(--alerta)"
   });
 
   if (loading) {
     return (
-      <div style={{padding:"40px 16px", textAlign:"center", color:"#7aa3c4", fontSize:13}}>
+      <div style={{padding:"40px 16px", textAlign:"center", color:"var(--texto-ter)", fontSize:13}}>
         Cargando usuarios...
       </div>
     );
@@ -709,46 +798,46 @@ function AdminPanel() {
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
         <div>
-          <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:4}}>Panel de administración</div>
-          <div style={{fontSize:12,color:"#4a7eab"}}>Gestión de cuentas del equipo clínico</div>
+          <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:4}}>Panel de administración</div>
+          <div style={{fontSize:12,color:"var(--texto-sec)"}}>Gestión de cuentas del equipo clínico</div>
         </div>
-        <button onClick={cargarPerfiles} style={{padding:"6px 12px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #1a6fb5",borderRadius:6,cursor:"pointer"}}>↻ Actualizar</button>
+        <button onClick={cargarPerfiles} style={{padding:"6px 12px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--primario)",borderRadius:6,cursor:"pointer"}}>↻ Actualizar</button>
       </div>
 
-      {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:10}}>{error}</div>}
+      {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:10}}>{error}</div>}
 
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
         {[["pendiente",`Pendientes (${counts.pendiente})`],["aprobado",`Aprobados (${counts.aprobado})`],["rechazado",`Rechazados (${counts.rechazado})`],["todos","Todos"]].map(([id,label]) => (
-          <button key={id} onClick={()=>setFiltro(id)} style={{padding:"6px 12px",fontSize:12,fontWeight:filtro===id?500:400,borderRadius:6,cursor:"pointer",border:filtro===id?"none":"0.5px solid #b8d8ef",background:filtro===id?"#1a6fb5":"#fff",color:filtro===id?"#fff":"#4a7eab"}}>{label}</button>
+          <button key={id} onClick={()=>setFiltro(id)} style={{padding:"6px 12px",fontSize:12,fontWeight:filtro===id?500:400,borderRadius:6,cursor:"pointer",border:filtro===id?"none":"0.5px solid var(--borde)",background:filtro===id?"var(--primario)":"var(--superficie)",color:filtro===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>
         ))}
       </div>
 
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>
+        <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:13}}>
           {perfiles.length === 0 ? "No hay usuarios registrados" : "No hay usuarios en esta categoría"}
         </div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {filtrados.map(u => (
-            <div key={u.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px"}}>
+            <div key={u.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c"}}>{u.nombre || "Sin nombre"}</div>
+                <div style={{fontSize:14,fontWeight:500,color:"var(--texto)"}}>{u.nombre || "Sin nombre"}</div>
                 <span style={badge(u.estado)}>{u.estado}</span>
-                {u.rol === "admin" && <span style={{fontSize:9,padding:"1px 6px",background:"#1a3a5c",color:"#fff",borderRadius:4,fontWeight:500}}>ADMIN</span>}
+                {u.rol === "admin" && <span style={{fontSize:9,padding:"1px 6px",background:"var(--navy-fijo)",color:"var(--texto-inv)",borderRadius:4,fontWeight:500}}>ADMIN</span>}
               </div>
-              <div style={{fontSize:12,color:"#4a7eab"}}>{u.correo} · {u.especialidad || "Sin especialidad"}</div>
-              {u.fecha_registro && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
+              <div style={{fontSize:12,color:"var(--texto-sec)"}}>{u.correo} · {u.especialidad || "Sin especialidad"}</div>
+              {u.fecha_registro && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
               {u.documento_nombre && (
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#f0f8fd",borderRadius:6,fontSize:11,color:"#4a7eab",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6,fontSize:11,color:"var(--texto-sec)",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
               )}
               <div style={{display:"flex",gap:6,marginTop:8}}>
                 {u.estado === "pendiente" && (<>
-                  <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aprobar</button>
-                  <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"#c0392b",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✗ Rechazar</button>
+                  <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aprobar</button>
+                  <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--peligro)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✗ Rechazar</button>
                 </>)}
-                {u.estado === "aprobado" && u.rol !== "admin" && <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
-                {u.estado === "rechazado" && <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"#fff",color:"#1a6f5c",border:"0.5px solid #1a6f5c",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
-                {u.rol !== "admin" && <button onClick={()=>eliminar(u.id)} style={{padding:"7px 10px",fontSize:12,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
+                {u.estado === "aprobado" && u.rol !== "admin" && <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
+                {u.estado === "rechazado" && <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--superficie)",color:"var(--exito)",border:"0.5px solid var(--exito)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
+                {u.rol !== "admin" && <button onClick={()=>eliminar(u.id)} style={{padding:"7px 10px",fontSize:12,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
               </div>
             </div>
           ))}
@@ -824,14 +913,14 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   if (vista === "nueva" && isAdmin) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nueva pregunta</div>
+        <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nueva pregunta</div>
         <label style={labelStyle}>Enunciado</label>
         <textarea value={form.enunciado} onChange={e=>setForm({...form,enunciado:e.target.value})} placeholder="Escribe la pregunta..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
         <label style={labelStyle}>Alternativas (marca la correcta)</label>
         {form.alternativas.map((alt, i) => (
           <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-            <button onClick={()=>setForm({...form,correcta:i})} style={{width:24,height:24,borderRadius:"50%",border:form.correcta===i?"none":"1px solid #b8d8ef",background:form.correcta===i?"#1a6f5c":"#fff",color:"#fff",cursor:"pointer",fontSize:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{form.correcta===i?"✓":""}</button>
+            <button onClick={()=>setForm({...form,correcta:i})} style={{width:24,height:24,borderRadius:"50%",border:form.correcta===i?"none":"1px solid var(--borde)",background:form.correcta===i?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{form.correcta===i?"✓":""}</button>
             <input value={alt} onChange={e=>{const nuevas=[...form.alternativas];nuevas[i]=e.target.value;setForm({...form,alternativas:nuevas});}} placeholder={`Alternativa ${String.fromCharCode(65+i)}`} style={{...inputStyle,marginBottom:0,flex:1}}/>
           </div>
         ))}
@@ -839,7 +928,7 @@ function PreguntasPanel({ currentUser, isAdmin }) {
         <textarea value={form.feedback} onChange={e=>setForm({...form,feedback:e.target.value})} placeholder="Explicación que se muestra al responder..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
         <label style={labelStyle}>Categoría</label>
         <input value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})} placeholder="Ej: Litiasis, Oncología, NMIBC..." style={inputStyle}/>
-        {errorForm && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
+        {errorForm && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
         <button onClick={guardar} style={{...btnPrimary,marginTop:0}}>Guardar pregunta</button>
       </div>
     );
@@ -850,20 +939,20 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",padding:0}}>← Volver al quiz</button>
-          <span style={{fontSize:12,color:"#7aa3c4"}}>{preguntas.length} preguntas</span>
+          <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",padding:0}}>← Volver al quiz</button>
+          <span style={{fontSize:12,color:"var(--texto-ter)"}}>{preguntas.length} preguntas</span>
         </div>
         {preguntas.length === 0 ? (
-          <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>No hay preguntas aún.</div>
+          <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>No hay preguntas aún.</div>
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {preguntas.map(p => (
-              <div key={p.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px"}}>
+              <div key={p.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 12px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
-                  <span style={{fontSize:10,color:"#1a6fb5",fontWeight:600}}>{p.categoria||"General"}</span>
-                  {isAdmin && <button onClick={()=>eliminar(p.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>}
+                  <span style={{fontSize:10,color:"var(--primario)",fontWeight:600}}>{p.categoria||"General"}</span>
+                  {isAdmin && <button onClick={()=>eliminar(p.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>}
                 </div>
-                <div style={{fontSize:13,color:"#1a3a5c",marginTop:3}}>{p.enunciado}</div>
+                <div style={{fontSize:13,color:"var(--texto)",marginTop:3}}>{p.enunciado}</div>
               </div>
             ))}
           </div>
@@ -877,13 +966,13 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
         <div>
-          <div style={{fontSize:22,fontWeight:700,color:"#1a3a5c"}}>❓ Preguntas</div>
-          <div style={{fontSize:13,color:"#4a7eab"}}>{preguntas.length} preguntas para estudiar</div>
+          <div style={{fontSize:22,fontWeight:700,color:"var(--texto)"}}>❓ Preguntas</div>
+          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
         </div>
         {isAdmin && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
-            <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
+            <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+            <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
           </div>
         )}
       </div>
@@ -891,28 +980,28 @@ function PreguntasPanel({ currentUser, isAdmin }) {
       {categorias.length > 1 && (
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
           {categorias.map(c => (
-            <button key={c} onClick={()=>{setFiltroCat(c);setIdx(0);setSeleccion(null);setMostrarResp(false);}} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid #b8d8ef",background:filtroCat===c?"#1a6fb5":"#fff",color:filtroCat===c?"#fff":"#4a7eab",fontWeight:filtroCat===c?600:400}}>{c}</button>
+            <button key={c} onClick={()=>{setFiltroCat(c);setIdx(0);setSeleccion(null);setMostrarResp(false);}} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid var(--borde)",background:filtroCat===c?"var(--primario)":"var(--superficie)",color:filtroCat===c?"var(--texto-inv)":"var(--texto-sec)",fontWeight:filtroCat===c?600:400}}>{c}</button>
           ))}
         </div>
       )}
 
       {loading ? (
-        <div style={{textAlign:"center",padding:"40px",color:"#7aa3c4",fontSize:13}}>Cargando...</div>
+        <div style={{textAlign:"center",padding:"40px",color:"var(--texto-ter)",fontSize:13}}>Cargando...</div>
       ) : !actual ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
           {preguntas.length === 0 ? (isAdmin ? "Aún no has creado preguntas. Usa el botón \"+ Nueva\"." : "El administrador aún no ha creado preguntas.") : "No hay preguntas en esta categoría."}
         </div>
       ) : (
         <div>
-          <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8,textAlign:"center"}}>Pregunta {idx+1} de {filtradas.length}</div>
-          <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"16px",marginBottom:12}}>
-            <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",lineHeight:1.5,marginBottom:14}}>{actual.enunciado}</div>
+          <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8,textAlign:"center"}}>Pregunta {idx+1} de {filtradas.length}</div>
+          <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px",marginBottom:12}}>
+            <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",lineHeight:1.5,marginBottom:14}}>{actual.enunciado}</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {(actual.alternativas||[]).map((alt, i) => {
-                let bg = "#fff", border = "0.5px solid #b8d8ef", color = "#1a3a5c";
+                let bg = "var(--superficie)", border = "0.5px solid var(--borde)", color = "var(--texto)";
                 if (mostrarResp) {
-                  if (i === actual.correcta) { bg = "#e0f5ec"; border = "1px solid #1a6f5c"; color = "#1a6f5c"; }
-                  else if (i === seleccion) { bg = "#fde8e6"; border = "1px solid #c0392b"; color = "#c0392b"; }
+                  if (i === actual.correcta) { bg = "var(--exito-bg)"; border = "1px solid var(--exito)"; color = "var(--exito)"; }
+                  else if (i === seleccion) { bg = "var(--peligro-bg)"; border = "1px solid var(--peligro)"; color = "var(--peligro)"; }
                 }
                 return (
                   <button key={i} onClick={()=>responder(i)} disabled={mostrarResp} style={{textAlign:"left",padding:"11px 14px",fontSize:14,background:bg,border,borderRadius:8,cursor:mostrarResp?"default":"pointer",color,display:"flex",alignItems:"center",gap:10,fontWeight:mostrarResp&&i===actual.correcta?600:400}}>
@@ -925,15 +1014,15 @@ function PreguntasPanel({ currentUser, isAdmin }) {
               })}
             </div>
             {mostrarResp && actual.feedback && (
-              <div style={{marginTop:14,padding:"12px",background:"#f0f8fd",borderRadius:8,borderLeft:"3px solid #1a6fb5"}}>
-                <div style={{fontSize:11,fontWeight:600,color:"#1a6fb5",marginBottom:4}}>💡 Explicación</div>
-                <div style={{fontSize:13,color:"#1a3a5c",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{actual.feedback}</div>
+              <div style={{marginTop:14,padding:"12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:"3px solid var(--primario)"}}>
+                <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:4}}>💡 Explicación</div>
+                <div style={{fontSize:13,color:"var(--texto)",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{actual.feedback}</div>
               </div>
             )}
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"space-between"}}>
-            <button onClick={anterior} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"#fff",color:"#4a7eab",border:"0.5px solid #b8d8ef",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1}}>← Anterior</button>
-            <button onClick={siguiente} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1,fontWeight:500}}>Siguiente →</button>
+            <button onClick={anterior} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1}}>← Anterior</button>
+            <button onClick={siguiente} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1,fontWeight:500}}>Siguiente →</button>
           </div>
         </div>
       )}
@@ -1070,9 +1159,9 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   if (vista === "nuevo") {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setErrorForm("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Agregar a base de conocimiento</div>
-        <div style={{background:"#e0f5ec",border:"0.5px solid #a8d4be",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:11,color:"#1a6f5c",lineHeight:1.5}}>📚 Lo que subas será la fuente prioritaria que UroSearch use para responder.</div>
+        <button onClick={()=>{setVista("lista");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Agregar a base de conocimiento</div>
+        <div style={{background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:11,color:"var(--exito)",lineHeight:1.5}}>📚 Lo que subas será la fuente prioritaria que UroSearch use para responder.</div>
         <label style={labelStyle}>Título del documento</label>
         <input value={nuevoForm.titulo} onChange={e=>setNuevoForm({...nuevoForm,titulo:e.target.value})} placeholder="Ej: Guía EAU 2024 - Litiasis ureteral" style={inputStyle}/>
         <label style={labelStyle}>Categoría</label>
@@ -1082,14 +1171,14 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
         <label style={labelStyle}>Libro / Fuente (opcional)</label>
         <input value={nuevoForm.fuente||""} onChange={e=>setNuevoForm({...nuevoForm,fuente:e.target.value})} placeholder="Ej: Campbell-Walsh Urology — para agrupar capítulos" style={inputStyle}/>
         <label style={labelStyle}>Contenido del documento</label>
-        <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Sube un archivo (PDF, Word .docx, .txt, .md, máx 10 MB) o pega el texto</div>
+        <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>Sube un archivo (PDF, Word .docx, .txt, .md, máx 10 MB) o pega el texto</div>
         <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx" onChange={handleFile} style={{display:"none"}}/>
-        <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:"10px",fontSize:13,background:"#fff",color:"#1a6fb5",border:"1px dashed #1a6fb5",borderRadius:8,cursor:"pointer",marginBottom:8,textAlign:"left"}}>📎 Subir archivo (PDF · Word · TXT)</button>
+        <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:"pointer",marginBottom:8,textAlign:"left"}}>📎 Subir archivo (PDF · Word · TXT)</button>
         <textarea value={nuevoForm.contenido} onChange={e=>setNuevoForm({...nuevoForm,contenido:e.target.value})} placeholder="Pega aquí el contenido..." rows={10} style={{...inputStyle,resize:"vertical"}}/>
-        <div style={{fontSize:11,color:"#7aa3c4",marginTop:-6,marginBottom:10,textAlign:"right"}}>{nuevoForm.contenido.length.toLocaleString()} caracteres</div>
+        <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:-6,marginBottom:10,textAlign:"right"}}>{nuevoForm.contenido.length.toLocaleString()} caracteres</div>
         <label style={labelStyle}>Palabras clave / tags (opcional)</label>
         <input value={nuevoForm.tags} onChange={e=>setNuevoForm({...nuevoForm,tags:e.target.value})} placeholder="Separadas por coma" style={inputStyle}/>
-        {errorForm && <div style={{fontSize:12,color: errorForm.includes("Procesando")?"#1a6f5c":"#c0392b",background: errorForm.includes("Procesando")?"#e0f5ec":"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
+        {errorForm && <div style={{fontSize:12,color: errorForm.includes("Procesando")?"var(--exito)":"var(--peligro)",background: errorForm.includes("Procesando")?"var(--exito-bg)":"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
         <button onClick={guardar} style={{...btnPrimary, marginTop:0}}>Guardar documento</button>
       </div>
     );
@@ -1098,14 +1187,14 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   if (vista === "ver" && seleccionado) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:4}}>{seleccionado.categoria}</div>
-          <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:6}}>{seleccionado.titulo}</div>
-          <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {(seleccionado.caracteres ?? seleccionado.contenido?.length ?? 0).toLocaleString()} caracteres</div>
-          {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:4}}>{seleccionado.categoria}</div>
+          <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>{seleccionado.titulo}</div>
+          <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {(seleccionado.caracteres ?? seleccionado.contenido?.length ?? 0).toLocaleString()} caracteres</div>
+          {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
         </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",fontSize:13,color:"#1a3a5c",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{(seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{(seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",fontSize:13,color:"var(--texto)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{(seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{(seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
       </div>
     );
   }
@@ -1114,27 +1203,27 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
         <div>
-          <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c",marginBottom:2}}>📚 Base de conocimiento</div>
-          <div style={{fontSize:11,color:"#4a7eab"}}>{conocimiento.length} documentos</div>
+          <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:2}}>📚 Base de conocimiento</div>
+          <div style={{fontSize:11,color:"var(--texto-sec)"}}>{conocimiento.length} documentos</div>
         </div>
-        {isAdmin && <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Agregar</button>}
+        {isAdmin && <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Agregar</button>}
       </div>
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
         {["Todas",...CATEGORIAS_KB].map(c => (
-          <button key={c} onClick={()=>setFiltroCat(c)} style={{padding:"4px 10px",fontSize:11,fontWeight:filtroCat===c?500:400,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid #b8d8ef",background:filtroCat===c?"#1a6fb5":"#fff",color:filtroCat===c?"#fff":"#4a7eab"}}>{c}</button>
+          <button key={c} onClick={()=>setFiltroCat(c)} style={{padding:"4px 10px",fontSize:11,fontWeight:filtroCat===c?500:400,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid var(--borde)",background:filtroCat===c?"var(--primario)":"var(--superficie)",color:filtroCat===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>
         ))}
       </div>
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>{conocimiento.length === 0 ? (isAdmin ? "Aún no has agregado documentos." : "El administrador aún no ha cargado documentos.") : "Ningún documento coincide"}</div>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>{conocimiento.length === 0 ? (isAdmin ? "Aún no has agregado documentos." : "El administrador aún no ha cargado documentos.") : "Ningún documento coincide"}</div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {filtrados.map(d => (
-            <div key={d.id} onClick={()=>{setSeleccionado(d); setVista("ver");}} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
-              <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:3}}>{d.categoria}{d.fuente ? <span style={{marginLeft:6,fontSize:10,background:"#f3e8ff",color:"#6b21a8",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📖 {d.fuente}</span> : null}</div>
-              <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c",marginBottom:4}}>{d.titulo}</div>
-              <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")} · {d.contenido?.length?.toLocaleString() || 0} caracteres</div>
-              <div style={{fontSize:12,color:"#4a7eab",lineHeight:1.4}}>{(d.contenido||"").slice(0,150)}{(d.contenido||"").length>150?"...":""}</div>
+            <div key={d.id} onClick={()=>{setSeleccionado(d); setVista("ver");}} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
+              <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:3}}>{d.categoria}{d.fuente ? <span style={{marginLeft:6,fontSize:10,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📖 {d.fuente}</span> : null}</div>
+              <div style={{fontSize:14,fontWeight:500,color:"var(--texto)",marginBottom:4}}>{d.titulo}</div>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")} · {d.contenido?.length?.toLocaleString() || 0} caracteres</div>
+              <div style={{fontSize:12,color:"var(--texto-sec)",lineHeight:1.4}}>{(d.contenido||"").slice(0,150)}{(d.contenido||"").length>150?"...":""}</div>
             </div>
           ))}
         </div>
@@ -1250,37 +1339,37 @@ function CirugiasBiblioteca() {
   });
 
   if (seleccionado) {
-    const Section = ({ titulo, items, color = "#1a6fb5" }) => (
+    const Section = ({ titulo, items, color = "var(--primario)" }) => (
       <div style={{marginBottom:14}}>
         <div style={{fontSize:12,fontWeight:600,color,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.3px"}}>{titulo}</div>
-        <ul style={{margin:0,paddingLeft:18,fontSize:13,color:"#1a3a5c",lineHeight:1.6}}>
+        <ul style={{margin:0,paddingLeft:18,fontSize:13,color:"var(--texto)",lineHeight:1.6}}>
           {items.map((it,i) => <li key={i} style={{marginBottom:3}}>{it}</li>)}
         </ul>
       </div>
     );
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>setSeleccionado(null)} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a cirugías</button>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"16px",marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:500,color:"#1a6fb5",marginBottom:4}}>{seleccionado.categoria}</div>
-          <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c",marginBottom:8}}>{seleccionado.titulo}</div>
-          <div style={{fontSize:13,color:"#4a7eab",lineHeight:1.5,marginBottom:10}}>{seleccionado.descripcion}</div>
-          <div style={{display:"flex",gap:14,fontSize:11,color:"#7aa3c4",paddingTop:8,borderTop:"0.5px solid #e8f3fb"}}>
-            <span>⏱ Duración: <strong style={{color:"#1a3a5c"}}>{seleccionado.duracion}</strong></span>
-            <span>💉 Anestesia: <strong style={{color:"#1a3a5c"}}>{seleccionado.anestesia}</strong></span>
+        <button onClick={()=>setSeleccionado(null)} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a cirugías</button>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px",marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:4}}>{seleccionado.categoria}</div>
+          <div style={{fontSize:18,fontWeight:600,color:"var(--texto)",marginBottom:8}}>{seleccionado.titulo}</div>
+          <div style={{fontSize:13,color:"var(--texto-sec)",lineHeight:1.5,marginBottom:10}}>{seleccionado.descripcion}</div>
+          <div style={{display:"flex",gap:14,fontSize:11,color:"var(--texto-ter)",paddingTop:8,borderTop:"0.5px solid var(--fondo)"}}>
+            <span>⏱ Duración: <strong style={{color:"var(--texto)"}}>{seleccionado.duracion}</strong></span>
+            <span>💉 Anestesia: <strong style={{color:"var(--texto)"}}>{seleccionado.anestesia}</strong></span>
           </div>
         </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"16px",marginBottom:14}}>
-          <Section titulo="✓ Indicaciones" items={seleccionado.indicaciones} color="#1a6f5c"/>
-          <Section titulo="✗ Contraindicaciones" items={seleccionado.contraindicaciones} color="#c0392b"/>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px",marginBottom:14}}>
+          <Section titulo="✓ Indicaciones" items={seleccionado.indicaciones} color="var(--exito)"/>
+          <Section titulo="✗ Contraindicaciones" items={seleccionado.contraindicaciones} color="var(--peligro)"/>
         </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"16px",marginBottom:14}}>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px",marginBottom:14}}>
           <Section titulo="📋 Preparación pre-operatoria" items={seleccionado.preparacion}/>
           <Section titulo="🔪 Técnica quirúrgica" items={seleccionado.tecnica}/>
           <Section titulo="🛌 Manejo postoperatorio" items={seleccionado.postoperatorio}/>
         </div>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"16px"}}>
-          <Section titulo="⚠️ Complicaciones potenciales" items={seleccionado.complicaciones} color="#a06b1a"/>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px"}}>
+          <Section titulo="⚠️ Complicaciones potenciales" items={seleccionado.complicaciones} color="var(--alerta)"/>
         </div>
       </div>
     );
@@ -1289,25 +1378,25 @@ function CirugiasBiblioteca() {
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{marginBottom:14}}>
-        <div style={{fontSize:22,fontWeight:700,color:"#1a3a5c",marginBottom:2}}>🔪 Protocolos quirúrgicos</div>
-        <div style={{fontSize:13,color:"#4a7eab"}}>{PROTOCOLOS_CIRUGIAS.length} procedimientos urológicos estándar</div>
+        <div style={{fontSize:22,fontWeight:700,color:"var(--texto)",marginBottom:2}}>🔪 Protocolos quirúrgicos</div>
+        <div style={{fontSize:13,color:"var(--texto-sec)"}}>{PROTOCOLOS_CIRUGIAS.length} procedimientos urológicos estándar</div>
       </div>
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar cirugía..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
         {CATEGORIAS_CIRUGIAS.map(c => (
-          <button key={c} onClick={()=>setFiltro(c)} style={{padding:"4px 10px",fontSize:11,fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid #b8d8ef",background:filtro===c?"#1a6fb5":"#fff",color:filtro===c?"#fff":"#4a7eab"}}>{c}</button>
+          <button key={c} onClick={()=>setFiltro(c)} style={{padding:"4px 10px",fontSize:11,fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid var(--borde)",background:filtro===c?"var(--primario)":"var(--superficie)",color:filtro===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>
         ))}
       </div>
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13}}>Ningún procedimiento coincide</div>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13}}>Ningún procedimiento coincide</div>
       ) : (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
           {filtrados.map(p => (
-            <div key={p.id} onClick={()=>setSeleccionado(p)} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer",borderLeft:"3px solid #1a6fb5"}}>
-              <div style={{fontSize:10,fontWeight:500,color:"#1a6fb5",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{p.categoria}</div>
-              <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c",marginBottom:6}}>{p.titulo}</div>
-              <div style={{fontSize:11,color:"#4a7eab",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.descripcion}</div>
-              <div style={{display:"flex",gap:8,fontSize:10,color:"#7aa3c4"}}>
+            <div key={p.id} onClick={()=>setSeleccionado(p)} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer",borderLeft:"3px solid var(--primario)"}}>
+              <div style={{fontSize:10,fontWeight:500,color:"var(--primario)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{p.categoria}</div>
+              <div style={{fontSize:14,fontWeight:500,color:"var(--texto)",marginBottom:6}}>{p.titulo}</div>
+              <div style={{fontSize:11,color:"var(--texto-sec)",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.descripcion}</div>
+              <div style={{display:"flex",gap:8,fontSize:10,color:"var(--texto-ter)"}}>
                 <span>⏱ {p.duracion}</span>
                 <span>💉 {p.anestesia}</span>
               </div>
@@ -1326,9 +1415,9 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      <div style={{display:"flex",gap:0,background:"#f0f8fd",borderBottom:"0.5px solid #b8d8ef",padding:"0 12px",overflowX:"auto"}}>
+      <div style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"0 12px",overflowX:"auto"}}>
         {tabsConocimiento.map(([id,label]) => (
-          <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid #1a6fb5":"3px solid transparent",color:subTab===id?"#1a6fb5":"#4a7eab",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+          <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid var(--primario)":"3px solid transparent",color:subTab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
 
@@ -1336,14 +1425,14 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
   <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
     {/* MAPAS PRECARGADOS */}
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:10}}>Mapas precargados</div>
+      <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:10}}>Mapas precargados</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>
         {TOPICS.map(t => (
           <div key={t.id}>
-            <button onClick={() => setTopicOpen(topicOpen===t.id ? null : t.id)} style={{width:"100%",padding:"8px 10px",fontSize:12,fontWeight:500,textAlign:"left",background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,color:"#1a3a5c",cursor:"pointer",borderBottomLeftRadius:topicOpen===t.id ? 0 : 8,borderBottomRightRadius:topicOpen===t.id ? 0 : 8}}>{t.label} {topicOpen===t.id ? "▲" : "▼"}</button>
+            <button onClick={() => setTopicOpen(topicOpen===t.id ? null : t.id)} style={{width:"100%",padding:"8px 10px",fontSize:12,fontWeight:500,textAlign:"left",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,color:"var(--texto)",cursor:"pointer",borderBottomLeftRadius:topicOpen===t.id ? 0 : 8,borderBottomRightRadius:topicOpen===t.id ? 0 : 8}}>{t.label} {topicOpen===t.id ? "▲" : "▼"}</button>
             {topicOpen===t.id && (
-              <div style={{border:"0.5px solid #b8d8ef",borderTop:"none",borderRadius:"0 0 8px 8px",overflow:"hidden",background:"#fff"}}>
-                {t.subtopics.map(s => <button key={s} onClick={() => { generarMapa(s); setTopicOpen(null); }} style={{display:"block",width:"100%",padding:"7px 12px",fontSize:12,textAlign:"left",background:"#fff",border:"none",borderTop:"0.5px solid #e8f3fb",color:"#4a7eab",cursor:"pointer"}}>{s}</button>)}
+              <div style={{border:"0.5px solid var(--borde)",borderTop:"none",borderRadius:"0 0 8px 8px",overflow:"hidden",background:"var(--superficie)"}}>
+                {t.subtopics.map(s => <button key={s} onClick={() => { generarMapa(s); setTopicOpen(null); }} style={{display:"block",width:"100%",padding:"7px 12px",fontSize:12,textAlign:"left",background:"var(--superficie)",border:"none",borderTop:"0.5px solid var(--fondo)",color:"var(--texto-sec)",cursor:"pointer"}}>{s}</button>)}
               </div>
             )}
           </div>
@@ -1353,20 +1442,20 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
 
     {/* GENERAR MAPA CON IA */}
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Generar mapa con IA</div>
+      <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>Generar mapa con IA</div>
       <div style={{display:"flex",gap:8}}>
-        <input value={mapaTema} onChange={e=>setMapaTema(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")generarMapa(mapaTema);}} placeholder="Ej: Hematuria macroscópica..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none"}}/>
-        <button onClick={()=>generarMapa(mapaTema)} disabled={mapaLoading||!mapaTema.trim()} style={{padding:"9px 14px",borderRadius:8,border:"none",background:mapaLoading||!mapaTema.trim()?"#cdddec":"#1a6fb5",color:"#fff",fontSize:13,cursor:mapaLoading||!mapaTema.trim()?"default":"pointer",fontWeight:500}}>{mapaLoading ? "Generando..." : "Generar ↗"}</button>
+        <input value={mapaTema} onChange={e=>setMapaTema(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")generarMapa(mapaTema);}} placeholder="Ej: Hematuria macroscópica..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none"}}/>
+        <button onClick={()=>generarMapa(mapaTema)} disabled={mapaLoading||!mapaTema.trim()} style={{padding:"9px 14px",borderRadius:8,border:"none",background:mapaLoading||!mapaTema.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:13,cursor:mapaLoading||!mapaTema.trim()?"default":"pointer",fontWeight:500}}>{mapaLoading ? "Generando..." : "Generar ↗"}</button>
       </div>
     </div>
 
-    {mapaLoading && <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>Generando mapa...</div>}
+    {mapaLoading && <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:13}}>Generando mapa...</div>}
 
     {/* MAPA ACTUAL CON BOTÓN DE GUARDAR */}
     {mapaActual && !mapaLoading && (
-      <div style={{border:"0.5px solid #b8d8ef",borderRadius:12,overflow:"hidden",background:"#fff",marginBottom:16}}>
-        <div style={{padding:"10px 14px",borderBottom:"0.5px solid #b8d8ef",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f0f8fd",gap:10}}>
-          <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c"}}>{mapaActual.titulo}</div>
+      <div style={{border:"0.5px solid var(--borde)",borderRadius:12,overflow:"hidden",background:"var(--superficie)",marginBottom:16}}>
+        <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--fondo-suave)",gap:10}}>
+          <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{mapaActual.titulo}</div>
           <button 
             onClick={onGuardarMapa} 
             disabled={guardandoMapa}
@@ -1374,8 +1463,8 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
               padding:"5px 12px",
               fontSize:11,
               fontWeight:500,
-              background: guardandoMapa ? "#cdddec" : "#1a6fb5",
-              color:"#fff",
+              background: guardandoMapa ? "var(--borde)" : "var(--primario)",
+              color:"var(--texto-inv)",
               border:"none",
               borderRadius:6,
               cursor: guardandoMapa ? "default" : "pointer",
@@ -1389,12 +1478,12 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
       </div>
     )}
 
-    {!mapaActual && !mapaLoading && <div style={{textAlign:"center",padding:"32px 0",color:"#7aa3c4",fontSize:13}}>Selecciona un tema o escribe uno</div>}
+    {!mapaActual && !mapaLoading && <div style={{textAlign:"center",padding:"32px 0",color:"var(--texto-ter)",fontSize:13}}>Selecciona un tema o escribe uno</div>}
 
     {/* MIS MAPAS GUARDADOS */}
     {mapasGuardados && mapasGuardados.length > 0 && (
-      <div style={{marginTop:24, paddingTop:16, borderTop:"0.5px solid #b8d8ef"}}>
-        <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:10}}>
+      <div style={{marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>
+        <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:10}}>
           Mis mapas guardados ({mapasGuardados.length})
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
@@ -1402,8 +1491,8 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
             <div 
               key={mapa.id}
               style={{
-                background:"#fff",
-                border:"0.5px solid #b8d8ef",
+                background:"var(--superficie)",
+                border:"0.5px solid var(--borde)",
                 borderRadius:8,
                 padding:"10px 12px",
                 position:"relative",
@@ -1421,10 +1510,10 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
                   paddingRight:24,
                 }}
               >
-                <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c",marginBottom:3, lineHeight:1.3}}>
+                <div style={{fontSize:12,fontWeight:500,color:"var(--texto)",marginBottom:3, lineHeight:1.3}}>
                   {mapa.titulo}
                 </div>
-                <div style={{fontSize:10,color:"#7aa3c4"}}>
+                <div style={{fontSize:10,color:"var(--texto-ter)"}}>
                   {new Date(mapa.fecha_creacion).toLocaleDateString("es-CL")}
                 </div>
               </button>
@@ -1436,7 +1525,7 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
                   right:6,
                   background:"none",
                   border:"none",
-                  color:"#c0392b",
+                  color:"var(--peligro)",
                   fontSize:13,
                   cursor:"pointer",
                   padding:2,
@@ -1468,7 +1557,7 @@ function CampoAlt({ label, opciones, value, onChange }) {
       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
         {opciones.map(op => {
           const sel = value === op;
-          return <button key={op} onClick={()=>onChange(sel ? "" : op)} style={{padding:"5px 10px",fontSize:11,fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid #b8d8ef",background:sel?"#1a6fb5":"#fff",color:sel?"#fff":"#4a7eab"}}>{op}</button>;
+          return <button key={op} onClick={()=>onChange(sel ? "" : op)} style={{padding:"5px 10px",fontSize:11,fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)"}}>{op}</button>;
         })}
       </div>
     </div>
@@ -1602,13 +1691,13 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px"}}>
-        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Crear nuevo equipo</div>
+        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Crear nuevo equipo</div>
         <label style={labelStyle}>Nombre del equipo</label>
         <input value={nuevoNombre} onChange={e=>setNuevoNombre(e.target.value)} placeholder="Ej: Equipo Urología HBV" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Descripción (opcional)</label>
         <textarea value={nuevoDescripcion} onChange={e=>setNuevoDescripcion(e.target.value)} placeholder="Para qué se usará este equipo" rows={3} style={{...inputStyle,resize:"none"}} disabled={loading}/>
-        {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
         <button onClick={crearEquipoHandler} disabled={loading} style={{...btnPrimary, marginTop:0, opacity: loading ? 0.6 : 1}}>{loading ? "Creando..." : "Crear equipo"}</button>
       </div>
     );
@@ -1619,29 +1708,29 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
     const esDueño = seleccionado.dueno_id === currentUser.id;
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setSeleccionado(null);setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a equipos</button>
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:4}}>{seleccionado.nombre}</div>
-          {seleccionado.descripcion && <div style={{fontSize:12,color:"#4a7eab",marginBottom:6}}>{seleccionado.descripcion}</div>}
-          <div style={{fontSize:11,color:"#7aa3c4"}}>{miembros.length} miembros</div>
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a equipos</button>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
+          <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:4}}>{seleccionado.nombre}</div>
+          {seleccionado.descripcion && <div style={{fontSize:12,color:"var(--texto-sec)",marginBottom:6}}>{seleccionado.descripcion}</div>}
+          <div style={{fontSize:11,color:"var(--texto-ter)"}}>{miembros.length} miembros</div>
         </div>
 
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>👥 Miembros</div>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>👥 Miembros</div>
           {miembros.map(m => {
             const perfil = m.perfiles;
             return (
-              <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#f0f8fd",borderRadius:6,marginBottom:5}}>
+              <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"var(--fondo-suave)",borderRadius:6,marginBottom:5}}>
                 <div>
-                  <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c"}}>
+                  <div style={{fontSize:12,fontWeight:500,color:"var(--texto)"}}>
                     {perfil?.nombre || "Sin nombre"}
-                    {m.user_id === seleccionado.dueno_id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4}}>DUEÑO</span>}
-                    {m.user_id === currentUser.id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"#1a6f5c",color:"#fff",borderRadius:4}}>TÚ</span>}
+                    {m.user_id === seleccionado.dueno_id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>DUEÑO</span>}
+                    {m.user_id === currentUser.id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"var(--exito)",color:"var(--texto-inv)",borderRadius:4}}>TÚ</span>}
                   </div>
-                  <div style={{fontSize:10,color:"#7aa3c4"}}>{perfil?.correo}</div>
+                  <div style={{fontSize:10,color:"var(--texto-ter)"}}>{perfil?.correo}</div>
                 </div>
                 {esDueño && m.user_id !== currentUser.id && (
-                  <button onClick={()=>expulsar(m.user_id)} style={{padding:"4px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>Expulsar</button>
+                  <button onClick={()=>expulsar(m.user_id)} style={{padding:"4px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Expulsar</button>
                 )}
               </div>
             );
@@ -1649,20 +1738,20 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
         </div>
 
         {esDueño && (
-          <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
-            <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>+ Invitar miembro</div>
-            <div style={{fontSize:11,color:"#7aa3c4",marginBottom:6}}>Solo puedes invitar usuarios ya aprobados en UroSearch</div>
+          <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>+ Invitar miembro</div>
+            <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>Solo puedes invitar usuarios ya aprobados en UroSearch</div>
             <div style={{display:"flex",gap:6}}>
-              <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}} disabled={loading}/>
-              <button onClick={invitar} disabled={!invitarCorreo.trim() || loading} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:invitarCorreo.trim() && !loading ?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>{loading ? "..." : "Invitar"}</button>
+              <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}} disabled={loading}/>
+              <button onClick={invitar} disabled={!invitarCorreo.trim() || loading} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:invitarCorreo.trim() && !loading ?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>{loading ? "..." : "Invitar"}</button>
             </div>
-            {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginTop:8}}>{error}</div>}
+            {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginTop:8}}>{error}</div>}
 
             {invitacionesEquipo.length > 0 && (
               <div style={{marginTop:12}}>
-                <div style={{fontSize:11,fontWeight:500,color:"#7aa3c4",marginBottom:4}}>Invitaciones pendientes</div>
+                <div style={{fontSize:11,fontWeight:500,color:"var(--texto-ter)",marginBottom:4}}>Invitaciones pendientes</div>
                 {invitacionesEquipo.map(i => (
-                  <div key={i.id} style={{padding:"6px 10px",background:"#fff8e1",borderRadius:6,fontSize:11,color:"#8a6610",marginBottom:4}}>
+                  <div key={i.id} style={{padding:"6px 10px",background:"var(--alerta-bg)",borderRadius:6,fontSize:11,color:"var(--alerta)",marginBottom:4}}>
                     📨 {i.perfiles?.nombre} ({i.perfiles?.correo})
                   </div>
                 ))}
@@ -1673,9 +1762,9 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
 
         <div style={{display:"flex",gap:6}}>
           {esDueño ? (
-            <button onClick={()=>eliminarEquipoHandler(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar equipo</button>
+            <button onClick={()=>eliminarEquipoHandler(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar equipo</button>
           ) : (
-            <button onClick={()=>salir(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>Salir del equipo</button>
+            <button onClick={()=>salir(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>Salir del equipo</button>
           )}
         </div>
       </div>
@@ -1686,20 +1775,20 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
   return (
     <div style={{padding:"20px",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c"}}>👥 Mis equipos</div>
-        <button onClick={onCerrar} style={{background:"none",border:"none",fontSize:18,color:"#7aa3c4",cursor:"pointer"}}>✕</button>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)"}}>👥 Mis equipos</div>
+        <button onClick={onCerrar} style={{background:"none",border:"none",fontSize:18,color:"var(--texto-ter)",cursor:"pointer"}}>✕</button>
       </div>
 
       {invitacionesPendientes.length > 0 && (
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:500,color:"#a06b1a",marginBottom:6}}>📨 Invitaciones pendientes ({invitacionesPendientes.length})</div>
+          <div style={{fontSize:12,fontWeight:500,color:"var(--alerta)",marginBottom:6}}>📨 Invitaciones pendientes ({invitacionesPendientes.length})</div>
           {invitacionesPendientes.map(inv => (
-            <div key={inv.id} style={{background:"#fff8e1",border:"0.5px solid #f0d896",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-              <div style={{fontSize:13,fontWeight:500,color:"#8a6610",marginBottom:2}}>{inv.equipos?.nombre}</div>
-              <div style={{fontSize:11,color:"#a06b1a",marginBottom:8}}>Invitado por {inv.invitador?.nombre}</div>
+            <div key={inv.id} style={{background:"var(--alerta-bg)",border:"0.5px solid var(--alerta-borde)",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--alerta)",marginBottom:2}}>{inv.equipos?.nombre}</div>
+              <div style={{fontSize:11,color:"var(--alerta)",marginBottom:8}}>Invitado por {inv.invitador?.nombre}</div>
               <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>aceptar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aceptar</button>
-                <button onClick={()=>rechazar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"#fff",color:"#c0392b",border:"0.5px solid #c0392b",borderRadius:6,cursor:"pointer",fontWeight:500}}>Rechazar</button>
+                <button onClick={()=>aceptar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aceptar</button>
+                <button onClick={()=>rechazar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Rechazar</button>
               </div>
             </div>
           ))}
@@ -1709,17 +1798,17 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
       <button onClick={()=>setVista("nuevo")} style={{...btnPrimary, marginTop:0, marginBottom:14}}>+ Crear nuevo equipo</button>
 
       {equipos.length === 0 ? (
-        <div style={{textAlign:"center",padding:"30px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>No perteneces a ningún equipo.<br/>Crea uno o espera invitación.</div>
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>No perteneces a ningún equipo.<br/>Crea uno o espera invitación.</div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {equipos.map(eq => (
-            <div key={eq.id} onClick={()=>abrirDetalle(eq)} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
+            <div key={eq.id} onClick={()=>abrirDetalle(eq)} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:10}}>
-                <div style={{fontSize:14,fontWeight:500,color:"#1a3a5c"}}>{eq.nombre}</div>
-                {eq.dueno_id === currentUser.id && <span style={{fontSize:9,padding:"1px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4,fontWeight:500}}>DUEÑO</span>}
+                <div style={{fontSize:14,fontWeight:500,color:"var(--texto)"}}>{eq.nombre}</div>
+                {eq.dueno_id === currentUser.id && <span style={{fontSize:9,padding:"1px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,fontWeight:500}}>DUEÑO</span>}
               </div>
-              {eq.descripcion && <div style={{fontSize:11,color:"#4a7eab",marginBottom:4}}>{eq.descripcion}</div>}
-              <div style={{fontSize:10,color:"#7aa3c4"}}>{eq.miembros_equipo?.length || 0} miembros</div>
+              {eq.descripcion && <div style={{fontSize:11,color:"var(--texto-sec)",marginBottom:4}}>{eq.descripcion}</div>}
+              <div style={{fontSize:10,color:"var(--texto-ter)"}}>{eq.miembros_equipo?.length || 0} miembros</div>
             </div>
           ))}
         </div>
@@ -1740,34 +1829,34 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   // Buscamos en TODA la lista de equipos (no solo misEquipos) para que el nombre
   // siempre aparezca aunque el filtro de pertenencia no calce.
   const actual = contexto === "personal"
-    ? { icono: "👤", nombre: "Mis Pacientes", color: "#1a6fb5" }
+    ? { icono: "👤", nombre: "Mis Pacientes", color: "var(--primario)" }
     : (() => {
         const eq = equipos.find(e => e.id === contexto);
-        return eq ? { icono: "👥", nombre: eq.nombre, color: "#1a6f5c" } : { icono: "👤", nombre: "Mis Pacientes", color: "#1a6fb5" };
+        return eq ? { icono: "👥", nombre: eq.nombre, color: "var(--exito)" } : { icono: "👤", nombre: "Mis Pacientes", color: "var(--primario)" };
       })();
 
   const elegir = (valor) => { setContexto(valor); setAbierto(false); };
 
   return (
-    <div style={{padding:"8px 14px",background:"#fff",borderBottom:"0.5px solid #b8d8ef",display:"flex",alignItems:"center",gap:8}}>
-      <span style={{fontSize:12,color:"#7aa3c4"}}>Viendo:</span>
+    <div style={{padding:"8px 14px",background:"var(--superficie)",borderBottom:"0.5px solid var(--borde)",display:"flex",alignItems:"center",gap:8}}>
+      <span style={{fontSize:12,color:"var(--texto-ter)"}}>Viendo:</span>
       <div style={{position:"relative"}}>
-        <button onClick={()=>setAbierto(!abierto)} style={{padding:"6px 12px",fontSize:13,fontWeight:600,borderRadius:14,cursor:"pointer",border:"none",background:actual.color,color:"#fff",display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={()=>setAbierto(!abierto)} style={{padding:"6px 12px",fontSize:13,fontWeight:600,borderRadius:14,cursor:"pointer",border:"none",background:actual.color,color:"var(--texto-inv)",display:"flex",alignItems:"center",gap:6}}>
           {actual.icono} {actual.nombre} <span style={{fontSize:11}}>▾</span>
         </button>
         {abierto && (
           <>
             <div onClick={()=>setAbierto(false)} style={{position:"fixed",inset:0,zIndex:20}}/>
-            <div style={{position:"absolute",top:"110%",left:0,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"4px",minWidth:200,zIndex:30,boxShadow:"0 2px 8px rgba(0,0,0,0.12)"}}>
-              <div onClick={()=>elegir("personal")} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto==="personal"?"#f0f8fd":"transparent",color:"#1a3a5c",display:"flex",alignItems:"center",gap:8}}>
-                <span>👤</span> Mis Pacientes {contexto==="personal" && <span style={{marginLeft:"auto",color:"#1a6fb5"}}>✓</span>}
+            <div style={{position:"absolute",top:"110%",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"4px",minWidth:200,zIndex:30,boxShadow:"0 2px 8px rgba(0,0,0,0.12)"}}>
+              <div onClick={()=>elegir("personal")} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto==="personal"?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
+                <span>👤</span> Mis Pacientes {contexto==="personal" && <span style={{marginLeft:"auto",color:"var(--primario)"}}>✓</span>}
               </div>
               {misEquipos.map(eq => (
-                <div key={eq.id} onClick={()=>elegir(eq.id)} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto===eq.id?"#f0f8fd":"transparent",color:"#1a3a5c",display:"flex",alignItems:"center",gap:8}}>
-                  <span>👥</span> {eq.nombre} {contexto===eq.id && <span style={{marginLeft:"auto",color:"#1a6f5c"}}>✓</span>}
+                <div key={eq.id} onClick={()=>elegir(eq.id)} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto===eq.id?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
+                  <span>👥</span> {eq.nombre} {contexto===eq.id && <span style={{marginLeft:"auto",color:"var(--exito)"}}>✓</span>}
                 </div>
               ))}
-              <div onClick={()=>{ setAbierto(false); onAbrirEquipos(); }} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,color:"#1a6fb5",borderTop:"0.5px solid #e8f3fb",marginTop:4,display:"flex",alignItems:"center",gap:8}}>
+              <div onClick={()=>{ setAbierto(false); onAbrirEquipos(); }} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,color:"var(--primario)",borderTop:"0.5px solid var(--fondo)",marginTop:4,display:"flex",alignItems:"center",gap:8}}>
                 <span>⚙️</span> Gestionar / crear equipo
               </div>
             </div>
@@ -1816,9 +1905,9 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
-      <div style={{display:"flex",gap:0,background:"#f0f8fd",borderBottom:"0.5px solid #b8d8ef",padding:"4px 12px 0",overflowX:"auto",flexShrink:0}}>
+      <div style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 12px 0",overflowX:"auto",flexShrink:0}}>
         {[["pacientes","👥 Pacientes"],["pendientes","✅ Pendientes"],["tabla","📋 Tabla Quirúrgica"]].map(([id,label]) => (
-          <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid #1a6fb5":"3px solid transparent",color:subTab===id?"#1a6fb5":"#4a7eab",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+          <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid var(--primario)":"3px solid transparent",color:subTab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
       {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes}/>}
@@ -1837,21 +1926,21 @@ function EncargadosPendiente({ pendiente, miembros, onToggle, nombreMiembro }) {
       <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
         {encargados.map(id => (
           nombreMiembro(id) && (
-            <span key={id} style={{fontSize:11,background:"#e0f5ec",color:"#1a6f5c",padding:"3px 9px",borderRadius:10,fontWeight:600}}>👤 {nombreMiembro(id)}</span>
+            <span key={id} style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"3px 9px",borderRadius:10,fontWeight:600}}>👤 {nombreMiembro(id)}</span>
           )
         ))}
-        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:14,background:"#f0f8fd",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
+        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:14,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
           {abierto ? "×" : "+"}
         </button>
       </div>
       {abierto && (
-        <div style={{marginTop:4,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:6,padding:"4px",maxHeight:140,overflowY:"auto"}}>
+        <div style={{marginTop:4,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:6,padding:"4px",maxHeight:140,overflowY:"auto"}}>
           {miembros.map(m => {
             const id = m.perfiles?.id;
             const asignado = encargados.includes(id);
             return (
-              <div key={id} onClick={()=>onToggle(pendiente, id)} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 5px",cursor:"pointer",fontSize:12,color:"#1a3a5c"}}>
-                <span style={{width:15,height:15,borderRadius:3,border:"1px solid #b8d8ef",background:asignado?"#1a6f5c":"#fff",color:"#fff",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
+              <div key={id} onClick={()=>onToggle(pendiente, id)} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 5px",cursor:"pointer",fontSize:12,color:"var(--texto)"}}>
+                <span style={{width:15,height:15,borderRadius:3,border:"1px solid var(--borde)",background:asignado?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
                 {m.perfiles?.nombre}
               </div>
             );
@@ -1957,12 +2046,12 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>
+      <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>
         {esEquipo ? `📋 Pendientes - ${equipoActual?.nombre}` : "📋 Mis pendientes"}
       </div>
 
       {/* Form */}
-      <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px",marginBottom:14}}>
+      <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px",marginBottom:14}}>
         <textarea value={nuevo.texto} onChange={e=>setNuevo({...nuevo,texto:e.target.value})} placeholder="¿Qué hay que hacer?" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
         
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
@@ -1978,10 +2067,10 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
 
         {/* Sugerencias */}
         <div style={{marginTop:10}}>
-          <div style={{fontSize:10,color:"#7aa3c4",marginBottom:4}}>Sugerencias rápidas:</div>
+          <div style={{fontSize:10,color:"var(--texto-ter)",marginBottom:4}}>Sugerencias rápidas:</div>
           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
             {sugerencias.map(s => (
-              <button key={s} onClick={()=>usarSugerencia(s)} style={{padding:"3px 8px",fontSize:10,background:"#f0f8fd",border:"0.5px solid #b8d8ef",color:"#4a7eab",borderRadius:12,cursor:"pointer"}}>{s}</button>
+              <button key={s} onClick={()=>usarSugerencia(s)} style={{padding:"3px 8px",fontSize:10,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:12,cursor:"pointer"}}>{s}</button>
             ))}
           </div>
         </div>
@@ -1989,27 +2078,27 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
 
       {/* Filtros */}
       <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:11,color:"#7aa3c4"}}>Filtrar:</span>
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+        <span style={{fontSize:11,color:"var(--texto-ter)"}}>Filtrar:</span>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="pendiente">Pendientes</option>
           <option value="completado">Completados</option>
           <option value="todos">Todos</option>
         </select>
-        <select value={filtroPrioridad} onChange={e=>setFiltroPrioridad(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+        <select value={filtroPrioridad} onChange={e=>setFiltroPrioridad(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="todas">Todas las prioridades</option>
           <option value="alta">🔴 Alta</option>
           <option value="normal">🟡 Normal</option>
           <option value="baja">🟢 Baja</option>
         </select>
-        <span style={{fontSize:11,color:"#7aa3c4",marginLeft:"auto"}}>{filtrados.length}</span>
+        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{filtrados.length}</span>
       </div>
 
       {loadingPendientes && (
-        <div style={{textAlign:"center",padding:"20px",color:"#7aa3c4",fontSize:13}}>Cargando...</div>
+        <div style={{textAlign:"center",padding:"20px",color:"var(--texto-ter)",fontSize:13}}>Cargando...</div>
       )}
 
       {!loadingPendientes && filtrados.length === 0 && (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13}}>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13}}>
           No hay pendientes en este filtro
         </div>
       )}
@@ -2017,16 +2106,16 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
       {!loadingPendientes && filtrados.length > 0 && (
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {filtrados.map(p => {
-            const colorPrioridad = p.prioridad === "alta" ? "#c0392b" : p.prioridad === "normal" ? "#a06b1a" : "#1a6f5c";
+            const colorPrioridad = p.prioridad === "alta" ? "var(--peligro)" : p.prioridad === "normal" ? "var(--alerta)" : "var(--exito)";
             const completado = p.estado === "completado";
             const esAutor = p.autor_id === currentUser.id;
             return (
-              <div key={p.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 12px",borderLeft:`3px solid ${colorPrioridad}`,opacity:completado?0.6:1}}>
+              <div key={p.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 12px",borderLeft:`3px solid ${colorPrioridad}`,opacity:completado?0.6:1}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                   <input type="checkbox" checked={completado} onChange={()=>toggleCompletar(p)} style={{marginTop:2,cursor:"pointer"}}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,color:"#1a3a5c",textDecoration:completado?"line-through":"none",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{p.texto}</div>
-                    <div style={{fontSize:10,color:"#7aa3c4",marginTop:4,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                    <div style={{fontSize:13,color:"var(--texto)",textDecoration:completado?"line-through":"none",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{p.texto}</div>
+                    <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:4,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                       <span>{p.autor?.nombre || "Anónimo"}</span>
                       {p.fecha_objetivo && <span>📅 {p.fecha_objetivo}</span>}
                       <span style={{color:colorPrioridad,fontWeight:500}}>● {p.prioridad}</span>
@@ -2036,7 +2125,7 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
                     )}
                   </div>
                   {esAutor && (
-                    <button onClick={()=>eliminar(p)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:13,padding:0}}>🗑</button>
+                    <button onClick={()=>eliminar(p)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>🗑</button>
                   )}
                 </div>
               </div>
@@ -2072,28 +2161,28 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
 
   return (
     <div style={{padding:"24px 20px",overflowY:"auto"}}>
-      <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c",marginBottom:6}}>Configura tus servicios</div>
-      <div style={{fontSize:12,color:"#4a7eab",marginBottom:16,lineHeight:1.5}}>Antes de empezar, dime qué servicios o pisos del hospital quieres tener disponibles para asignar a tus pacientes. Puedes modificar esto después.</div>
+      <div style={{fontSize:18,fontWeight:600,color:"var(--texto)",marginBottom:6}}>Configura tus servicios</div>
+      <div style={{fontSize:12,color:"var(--texto-sec)",marginBottom:16,lineHeight:1.5}}>Antes de empezar, dime qué servicios o pisos del hospital quieres tener disponibles para asignar a tus pacientes. Puedes modificar esto después.</div>
 
-      <div style={{fontSize:12,fontWeight:500,color:"#4a7eab",marginBottom:8}}>Sugerencias (toca para seleccionar):</div>
+      <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>Sugerencias (toca para seleccionar):</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:18}}>
         {todos.map(s => {
           const sel = seleccionados.includes(s);
           return (
-            <button key={s} onClick={()=>toggle(s)} style={{padding:"6px 12px",fontSize:12,fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid #b8d8ef",background:sel?"#1a6fb5":"#fff",color:sel?"#fff":"#4a7eab"}}>
+            <button key={s} onClick={()=>toggle(s)} style={{padding:"6px 12px",fontSize:12,fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)"}}>
               {sel ? "✓ " : ""}{s}
             </button>
           );
         })}
       </div>
 
-      <div style={{fontSize:12,fontWeight:500,color:"#4a7eab",marginBottom:6}}>O agrega uno personalizado:</div>
+      <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:6}}>O agrega uno personalizado:</div>
       <div style={{display:"flex",gap:6,marginBottom:18}}>
-        <input value={personalizado} onChange={e=>setPersonalizado(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarPersonalizado();}} placeholder="Ej: Pediatría, 4to piso ala B..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}}/>
-        <button onClick={agregarPersonalizado} disabled={!personalizado.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:personalizado.trim()?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:personalizado.trim()?"pointer":"default"}}>+ Agregar</button>
+        <input value={personalizado} onChange={e=>setPersonalizado(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarPersonalizado();}} placeholder="Ej: Pediatría, 4to piso ala B..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
+        <button onClick={agregarPersonalizado} disabled={!personalizado.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:personalizado.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:personalizado.trim()?"pointer":"default"}}>+ Agregar</button>
       </div>
 
-      <div style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:8,marginBottom:16,fontSize:12,color:"#1a4a7c",lineHeight:1.5}}>
+      <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:8,marginBottom:16,fontSize:12,color:"var(--primario-osc)",lineHeight:1.5}}>
         <strong>{seleccionados.length}</strong> servicio{seleccionados.length === 1 ? "" : "s"} seleccionado{seleccionados.length === 1 ? "" : "s"}{seleccionados.length > 0 ? `: ${seleccionados.join(", ")}` : ""}
       </div>
 
@@ -2186,13 +2275,13 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const diasVisibles = diasSemana.filter((fecha, i) => i < 5 || (porFecha[fecha] && porFecha[fecha].length > 0));
 
   const coloresEstado = {
-    programada: "#1a6fb5", en_curso: "#a06b1a", completada: "#1a6f5c",
-    suspendida: "#999", cancelada: "#c0392b"
+    programada: "var(--primario)", en_curso: "var(--alerta)", completada: "var(--exito)",
+    suspendida: "var(--neutro)", cancelada: "var(--peligro)"
   };
   // Relleno claro del recuadro completo según estado
   const fondoEstado = {
-    programada: "#eaf3fb", en_curso: "#fbf1e0", completada: "#e4f5ec",
-    suspendida: "#eeeeee", cancelada: "#fbe8e6"
+    programada: "var(--est-prog-bg)", en_curso: "var(--alerta-bg)", completada: "var(--exito-bg)",
+    suspendida: "var(--neutro-bg)", cancelada: "var(--peligro-bg)"
   };
   // Texto que se muestra dentro del recuadro
   const textoEstado = {
@@ -2207,9 +2296,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       ccv: lista.filter(c => c.pabellon === "CCV").slice().sort(orden),
     };
   };
-  const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background: "#fff", color: "#1a6fb5", border: "0.5px solid #b8d8ef", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
-  const toggleOn = { padding: "4px 10px", fontSize: 11, background: "#1a6fb5", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
-  const toggleOff = { padding: "4px 10px", fontSize: 11, background: "#fff", color: "#1a6fb5", border: "0.5px solid #b8d8ef", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
+  const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
+  const toggleOn = { padding: "4px 10px", fontSize: 11, background: "var(--primario)", color:"var(--texto-inv)", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
+  const toggleOff = { padding: "4px 10px", fontSize: 11, background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
 
   // ============================================================
   // CRUD
@@ -2558,8 +2647,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{resetForm();setVista(editId?"detalle":"tabla");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>{editId ? "Editar cirugía" : "Nueva cirugía"} {esEquipo && !editId && `en equipo "${equipoActual?.nombre}"`}</div>
+        <button onClick={()=>{resetForm();setVista(editId?"detalle":"tabla");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>{editId ? "Editar cirugía" : "Nueva cirugía"} {esEquipo && !editId && `en equipo "${equipoActual?.nombre}"`}</div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -2626,7 +2715,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         <label style={labelStyle}>Observaciones (opcional)</label>
         <textarea value={nuevo.observaciones} onChange={e=>setNuevo({...nuevo,observaciones:e.target.value})} rows={2} style={{...inputStyle,resize:"vertical"}}/>
 
-        {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
 
         <button onClick={editId ? guardarEdicion : guardar} style={{...btnPrimary, marginTop:0}}>{editId ? "Guardar cambios" : "Guardar cirugía"}</button>
       </div>
@@ -2641,26 +2730,26 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     const esCirujano = seleccionado.cirujano_id === currentUser.id;
     return (
       <div style={{padding:"16px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("tabla");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la tabla</button>
+        <button onClick={()=>{setVista("tabla");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la tabla</button>
 
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px"}}>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
             <div>
-              <div style={{fontSize:18,fontWeight:600,color:"#1a3a5c"}}>{seleccionado.iniciales}{seleccionado.edad && ` (${seleccionado.edad}a)`}</div>
-              <div style={{fontSize:13,color:"#4a7eab",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
-              <div style={{fontSize:11,color:"#7aa3c4",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
-              {seleccionado.cirujano && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
-              {seleccionado.primer_ayudante && <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>🧑‍⚕️ Primer ayudante: {seleccionado.primer_ayudante}</div>}
+              <div style={{fontSize:18,fontWeight:600,color:"var(--texto)"}}>{seleccionado.iniciales}{seleccionado.edad && ` (${seleccionado.edad}a)`}</div>
+              <div style={{fontSize:13,color:"var(--texto-sec)",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
+              {seleccionado.cirujano && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
+              {seleccionado.primer_ayudante && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>🧑‍⚕️ Primer ayudante: {seleccionado.primer_ayudante}</div>}
             </div>
-            <button onClick={()=>empezarEdicion(seleccionado)} style={{padding:"5px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500,whiteSpace:"nowrap"}}>✏️ Editar</button>
+            <button onClick={()=>empezarEdicion(seleccionado)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,whiteSpace:"nowrap"}}>✏️ Editar</button>
           </div>
 
-          <div style={{fontSize:12,color:"#1a3a5c",marginBottom:10,padding:"6px 10px",background:"#f0f8fd",borderRadius:6}}>
+          <div style={{fontSize:12,color:"var(--texto)",marginBottom:10,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
             <strong>Estado actual:</strong> {seleccionado.estado}
           </div>
 
-          <div style={{marginBottom:10,padding:"8px 10px",background:"#f0f8fd",borderRadius:6}}>
-            <div style={{fontSize:11,fontWeight:600,color:"#1a3a5c",marginBottom:5}}>🧑‍⚕️ Primer ayudante</div>
+          <div style={{marginBottom:10,padding:"8px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
+            <div style={{fontSize:11,fontWeight:600,color:"var(--texto)",marginBottom:5}}>🧑‍⚕️ Primer ayudante</div>
             {esEquipo && miembrosEquipo.length > 0 ? (
               <select value={seleccionado.primer_ayudante || ""} onChange={e=>asignarPrimerAyudante(seleccionado, e.target.value)} style={{...inputStyle, marginBottom:0}}>
                 <option value="">— Sin primer ayudante —</option>
@@ -2675,7 +2764,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           </div>
 
           {seleccionado.observaciones && (
-            <div style={{fontSize:12,color:"#1a3a5c",marginBottom:10,padding:"8px 10px",background:"#fff8e1",borderRadius:6}}>
+            <div style={{fontSize:12,color:"var(--texto)",marginBottom:10,padding:"8px 10px",background:"var(--alerta-bg)",borderRadius:6}}>
               <strong>Observaciones:</strong> {seleccionado.observaciones}
             </div>
           )}
@@ -2686,13 +2775,13 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                 key={estado} 
                 onClick={()=>cambiarEstado(seleccionado, estado)}
                 disabled={seleccionado.estado === estado}
-                style={{padding:"5px 10px",fontSize:11,background:seleccionado.estado === estado ? "#1a6fb5" : "#fff",color:seleccionado.estado === estado ? "#fff" : "#4a7eab",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:seleccionado.estado === estado ? "default" : "pointer",fontWeight:500}}
+                style={{padding:"5px 10px",fontSize:11,background:seleccionado.estado === estado ? "var(--primario)" : "var(--superficie)",color:seleccionado.estado === estado ?"var(--texto-inv)":"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:seleccionado.estado === estado ? "default" : "pointer",fontWeight:500}}
               >{estado.replace("_"," ")}</button>
             ))}
           </div>
 
           {esCirujano && (
-            <button onClick={()=>eliminar(seleccionado)} style={{marginTop:14,width:"100%",padding:"10px",fontSize:12,background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar cirugía</button>
+            <button onClick={()=>eliminar(seleccionado)} style={{marginTop:14,width:"100%",padding:"10px",fontSize:12,background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar cirugía</button>
           )}
         </div>
       </div>
@@ -2706,15 +2795,15 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c"}}>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)"}}>
           {esEquipo ? `🔪 Tabla - ${equipoActual?.nombre}` : "🔪 Mi tabla quirúrgica"}
         </div>
         <div style={{display:"flex",gap:6}}>
-          <label style={{padding:"6px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500}}>
+          <label style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
             📊 Importar Excel
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
           </label>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
         </div>
       </div>
 
@@ -2722,13 +2811,13 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:4}}>
           <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()-7);setLunesSemana(d);}} style={navBtn}>‹</button>
-          <span style={{fontSize:12,fontWeight:600,color:"#1a3a5c",minWidth:120,textAlign:"center"}}>
+          <span style={{fontSize:12,fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center"}}>
             {new Date(diasSemana[0]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})} – {new Date(diasSemana[6]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})}
           </span>
           <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()+7);setLunesSemana(d);}} style={navBtn}>›</button>
           <button onClick={()=>setLunesSemana(lunesDe(new Date()))} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
         </div>
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="todos">Todos los estados</option>
           <option value="programada">Programadas</option>
           <option value="en_curso">En curso</option>
@@ -2739,16 +2828,16 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
           <button onClick={()=>setModoVista("planner")} style={modoVista==="planner"?toggleOn:toggleOff}>📅 Planner</button>
           <button onClick={()=>setModoVista("lista")} style={modoVista==="lista"?toggleOn:toggleOff}>☰ Lista</button>
-          <span style={{fontSize:11,color:"#7aa3c4",marginLeft:6}}>{cirugiasSemana.length} cx</span>
+          <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:6}}>{cirugiasSemana.length} cx</span>
         </div>
       </div>
 
       {loadingCirugias && (
-        <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>Cargando tabla...</div>
+        <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando tabla...</div>
       )}
 
       {!loadingCirugias && cirugiasSemana.length === 0 && (
-        <div style={{textAlign:"center",padding:"30px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
           No hay cirugías esta semana.<br/>
           Usa ‹ › para cambiar de semana, o agrega con + Nueva / Importar Excel.
         </div>
@@ -2770,30 +2859,30 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                   <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                     <span style={{fontSize:10,fontWeight:700,color:coloresEstado[c.estado]}}>{c.hora?.slice(0,5)}</span>
                     {c.pabellon==="CCV"
-                      ? <span style={{fontSize:8,fontWeight:600,background:"#7a4fb5",color:"#fff",padding:"0 4px",borderRadius:6}}>CCV</span>
-                      : c.pabellon && <span style={{fontSize:8,color:"#5a7a99"}}>Pab {c.pabellon}</span>}
+                      ? <span style={{fontSize:8,fontWeight:600,background:"var(--ccv)",color:"var(--texto-inv)",padding:"0 4px",borderRadius:6}}>CCV</span>
+                      : c.pabellon && <span style={{fontSize:8,color:"var(--texto-ter)"}}>Pab {c.pabellon}</span>}
                   </div>
-                  <div style={{fontSize:10,color:"#1a3a5c",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
-                  <div style={{fontSize:10,color:"#4a6a8a",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
-                  {c.cirujano && <div style={{fontSize:9,color:"#6a8aa9",marginTop:1}}>👨‍⚕️ {c.cirujano}</div>}
-                  {c.primer_ayudante && <div style={{fontSize:9,color:"#6a8aa9"}}>🧑‍⚕️ {c.primer_ayudante}</div>}
-                  <div style={{marginTop:3,display:"inline-block",fontSize:8,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,color:"#fff",background:coloresEstado[c.estado],padding:"1px 6px",borderRadius:8}}>{textoEstado[c.estado]}</div>
+                  <div style={{fontSize:10,color:"var(--texto)",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
+                  <div style={{fontSize:10,color:"var(--texto-sec)",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
+                  {c.cirujano && <div style={{fontSize:9,color:"var(--texto-ter)",marginTop:1}}>👨‍⚕️ {c.cirujano}</div>}
+                  {c.primer_ayudante && <div style={{fontSize:9,color:"var(--texto-ter)"}}>🧑‍⚕️ {c.primer_ayudante}</div>}
+                  <div style={{marginTop:3,display:"inline-block",fontSize:8,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,color:"var(--texto-inv)",background:coloresEstado[c.estado],padding:"1px 6px",borderRadius:8}}>{textoEstado[c.estado]}</div>
                 </div>
               );
 
               return (
-                <div key={fecha} style={{background:esHoy?"#eaf4ff":"#f4f9fd",borderRadius:8,border:esHoy?"1.5px solid #1a6fb5":"0.5px solid #d4e6f5",padding:6,minHeight:130}}>
-                  <div style={{textAlign:"center",fontSize:11,fontWeight:700,color:esHoy?"#1a6fb5":"#4a7eab",padding:"3px 0 6px",borderBottom:"0.5px solid #d4e6f5",marginBottom:6,textTransform:"capitalize"}}>
+                <div key={fecha} style={{background:esHoy?"var(--hoy-bg)":"var(--fondo-suave)",borderRadius:8,border:esHoy?"1.5px solid var(--primario)":"0.5px solid var(--borde-suave)",padding:6,minHeight:130}}>
+                  <div style={{textAlign:"center",fontSize:11,fontWeight:700,color:esHoy?"var(--primario)":"var(--texto-sec)",padding:"3px 0 6px",borderBottom:"0.5px solid var(--borde-suave)",marginBottom:6,textTransform:"capitalize"}}>
                     {dObj.toLocaleDateString("es-CL",{weekday:"short"})} {dObj.getDate()}
-                    {total>0 && <span style={{fontSize:9,fontWeight:500,color:"#7aa3c4"}}> · {total}</span>}
+                    {total>0 && <span style={{fontSize:9,fontWeight:500,color:"var(--texto-ter)"}}> · {total}</span>}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                    {total===0 && <div style={{textAlign:"center",fontSize:10,color:"#c2d5e8",padding:"14px 0"}}>—</div>}
+                    {total===0 && <div style={{textAlign:"center",fontSize:10,color:"var(--borde-suave)",padding:"14px 0"}}>—</div>}
                     {/* Pabellones del hospital primero */}
                     {hospital.map(Tarjeta)}
                     {/* CCV (Costanera) separado y siempre abajo */}
                     {ccv.length>0 && (
-                      <div style={{fontSize:9,fontWeight:700,color:"#7a4fb5",textAlign:"center",margin:"4px 0 1px",padding:"2px 0",borderTop:"1px dashed #c9b6e6",borderBottom:"1px dashed #c9b6e6"}}>CCV · COSTANERA</div>
+                      <div style={{fontSize:9,fontWeight:700,color:"var(--ccv)",textAlign:"center",margin:"4px 0 1px",padding:"2px 0",borderTop:"1px dashed var(--ccv-borde)",borderBottom:"1px dashed var(--ccv-borde)"}}>CCV · COSTANERA</div>
                     )}
                     {ccv.map(Tarjeta)}
                   </div>
@@ -2810,26 +2899,26 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         const ordenadas = [...hospital, ...ccv]; // hospital primero, CCV abajo
         return (
         <div key={fecha} style={{marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:600,color:"#1a3a5c",marginBottom:8,padding:"4px 10px",background:"#e0e9f5",borderRadius:6}}>
+          <div style={{fontSize:12,fontWeight:600,color:"var(--texto)",marginBottom:8,padding:"4px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
             📅 {new Date(fecha + "T00:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})} ({porFecha[fecha].length})
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
             {ordenadas.map((c,idx) => (
               <Fragment key={c.id}>
                 {idx===hospital.length && ccv.length>0 && (
-                  <div style={{fontSize:10,fontWeight:700,color:"#7a4fb5",textAlign:"center",margin:"2px 0",padding:"2px 0",borderTop:"1px dashed #c9b6e6",borderBottom:"1px dashed #c9b6e6"}}>CCV · COSTANERA</div>
+                  <div style={{fontSize:10,fontWeight:700,color:"var(--ccv)",textAlign:"center",margin:"2px 0",padding:"2px 0",borderTop:"1px dashed var(--ccv-borde)",borderBottom:"1px dashed var(--ccv-borde)"}}>CCV · COSTANERA</div>
                 )}
                 <div onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:fondoEstado[c.estado],border:`0.5px solid ${coloresEstado[c.estado]}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`4px solid ${coloresEstado[c.estado]}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,color:"#1a3a5c",fontWeight:500}}>
+                      <div style={{fontSize:12,color:"var(--texto)",fontWeight:500}}>
                         {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
                       </div>
-                      <div style={{fontSize:10,color:"#5a7a99",marginTop:2}}>
+                      <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>
                         {c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`}{c.cirujano && ` | 👨‍⚕️ ${c.cirujano}`}{c.primer_ayudante && ` | 🧑‍⚕️ ${c.primer_ayudante}`}
                       </div>
                     </div>
-                    <span style={{fontSize:9,padding:"2px 8px",background:coloresEstado[c.estado],color:"#fff",borderRadius:10,whiteSpace:"nowrap"}}>{textoEstado[c.estado]}</span>
+                    <span style={{fontSize:9,padding:"2px 8px",background:coloresEstado[c.estado],color:"var(--texto-inv)",borderRadius:10,whiteSpace:"nowrap"}}>{textoEstado[c.estado]}</span>
                   </div>
                 </div>
               </Fragment>
@@ -3374,8 +3463,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:14}}>Nuevo paciente {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
+        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nuevo paciente {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
         
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -3410,7 +3499,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         ) : (
-          <div style={{fontSize:11,color:"#a06b1a",background:"#fff8e1",padding:"8px 10px",borderRadius:6,marginBottom:8}}>
+          <div style={{fontSize:11,color:"var(--alerta)",background:"var(--alerta-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>
             No tienes servicios configurados. Ve a "⚙️ Servicios" antes de crear pacientes.
           </div>
         )}
@@ -3424,7 +3513,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <label style={labelStyle}>Plan de manejo (opcional)</label>
         <textarea value={nuevo.plan_manejo} onChange={e=>setNuevo({...nuevo,plan_manejo:e.target.value})} placeholder="Plan inicial" rows={3} style={{...inputStyle,resize:"vertical"}}/>
 
-        {error && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
 
         <button onClick={guardarNuevo} style={{...btnPrimary, marginTop:0}}>Guardar paciente</button>
       </div>
@@ -3438,23 +3527,23 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (vista === "servicios") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c",marginBottom:6}}>⚙️ Mis servicios</div>
-        <div style={{fontSize:12,color:"#7aa3c4",marginBottom:14}}>Configura los servicios/pisos del hospital donde atiendes</div>
+        <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>⚙️ Mis servicios</div>
+        <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>Configura los servicios/pisos del hospital donde atiendes</div>
 
         <div style={{display:"flex",gap:6,marginBottom:14}}>
-          <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid #b8d8ef",outline:"none"}}/>
-          <button onClick={agregarServicio} disabled={!nuevoServicio.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:nuevoServicio.trim()?"#1a6fb5":"#cdddec",color:"#fff",border:"none",borderRadius:8,cursor:"pointer"}}>Agregar</button>
+          <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
+          <button onClick={agregarServicio} disabled={!nuevoServicio.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:nuevoServicio.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Agregar</button>
         </div>
 
         {misServiciosLista.length === 0 ? (
-          <div style={{textAlign:"center",padding:"30px 16px",color:"#7aa3c4",fontSize:13}}>No tienes servicios configurados.</div>
+          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13}}>No tienes servicios configurados.</div>
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {misServiciosLista.map(s => (
-              <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"10px 14px"}}>
-                <div style={{fontSize:13,color:"#1a3a5c"}}>{s.nombre}</div>
-                <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:14}}>🗑</button>
+              <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontSize:13,color:"var(--texto)"}}>{s.nombre}</div>
+                <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14}}>🗑</button>
               </div>
             ))}
           </div>
@@ -3471,10 +3560,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const esCreador = seleccionado.medico_id === currentUser.id;
     return (
       <div style={{padding:"16px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"#4a7eab",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
        {/* Cabecera */}
-<div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
+<div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
   {editandoFicha ? (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
       <div style={{display:"flex",gap:8}}>
@@ -3525,7 +3614,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <button key={ant} type="button" onClick={()=>{
                 const nueva = activo ? lista.filter(x=>x!==ant) : [...lista, ant];
                 setEditForm({...editForm, antecedentes: nueva});
-              }} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:activo?"none":"0.5px solid #b8d8ef",background:activo?"#f2a03f":"#fff",color:activo?"#fff":"#7aa3c4",fontWeight:activo?600:400}}>
+              }} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:activo?"none":"0.5px solid var(--borde)",background:activo?"#f2a03f":"var(--superficie)",color:activo?"var(--texto-inv)":"var(--texto-ter)",fontWeight:activo?600:400}}>
                 {ant}
               </button>
             );
@@ -3542,38 +3631,38 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={guardarEdicion} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar cambios</button>
-        <button onClick={()=>setEditandoFicha(false)} style={{padding:"9px 14px",fontSize:13,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={()=>setEditandoFicha(false)} style={{padding:"9px 14px",fontSize:13,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
       </div>
     </div>
   ) : (
     <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
         <div>
-          <div style={{fontSize:24,fontWeight:700,color:"#1a3a5c"}}>{seleccionado.iniciales} <span style={{fontSize:28,fontWeight:700,color:seleccionado.sexo==="F"?"#d6336c":"#1a6fb5"}}>{seleccionado.sexo==="F"?"♀":"♂"}</span></div>
-          <div style={{fontSize:16,fontWeight:600,color:"#4a7eab",marginTop:4}}>
+          <div style={{fontSize:24,fontWeight:700,color:"var(--texto)"}}>{seleccionado.iniciales} <span style={{fontSize:28,fontWeight:700,color:seleccionado.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{seleccionado.sexo==="F"?"♀":"♂"}</span></div>
+          <div style={{fontSize:16,fontWeight:600,color:"var(--texto-sec)",marginTop:4}}>
             {seleccionado.edad} años · Cama {seleccionado.cama} · {seleccionado.servicio}
           </div>
-          <div style={{fontSize:14,color:"#7aa3c4",marginTop:4}}>Ingreso: {seleccionado.fecha_ingreso}</div>
+          <div style={{fontSize:14,color:"var(--texto-ter)",marginTop:4}}>Ingreso: {seleccionado.fecha_ingreso}</div>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          <button onClick={iniciarEdicion} style={{padding:"5px 10px",fontSize:11,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏ Editar</button>
+          <button onClick={iniciarEdicion} style={{padding:"5px 10px",fontSize:11,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏ Editar</button>
           {seleccionado.estado === "activo" ? (
-            <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
+            <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
           ) : (
-            <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer"}}>↺ Reactivar</button>
+            <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>↺ Reactivar</button>
           )}
           {esCreador && (
-            <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer"}}>🗑</button>
+            <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>🗑</button>
           )}
         </div>
       </div>
-      <div style={{fontSize:14,color:"#1a3a5c",marginTop:8,padding:"10px 12px",background:"#f0f8fd",borderRadius:6}}>
+      <div style={{fontSize:14,color:"var(--texto)",marginTop:8,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
         <strong>Diagnóstico:</strong> {seleccionado.diagnostico}
       </div>
       {/* Estado clínico */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:"#f0f8fd",borderRadius:6}}>
-        <span style={{fontSize:14,color:"#1a3a5c",fontWeight:600}}>Estado del paciente</span>
-        <select value={seleccionado.estado_clinico || ""} onChange={e=>cambiarEstadoClinico(e.target.value)} style={{fontSize:13,padding:"5px 10px",borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",cursor:"pointer"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
+        <span style={{fontSize:14,color:"var(--texto)",fontWeight:600}}>Estado del paciente</span>
+        <select value={seleccionado.estado_clinico || ""} onChange={e=>cambiarEstadoClinico(e.target.value)} style={{fontSize:13,padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="">Sin definir</option>
           <option value="estable">🟢 Estable</option>
           <option value="regular">🟡 Regular</option>
@@ -3581,62 +3670,62 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </select>
       </div>
       {/* Operado + agregar cirugía */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:seleccionado.operado?"#e0f5ec":"#f0f8fd",borderRadius:6,gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:14,color:"#1a3a5c",fontWeight:600}}>🔪 Paciente operado</span>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:seleccionado.operado?"var(--exito-bg)":"var(--fondo-suave)",borderRadius:6,gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:14,color:"var(--texto)",fontWeight:600}}>🔪 Paciente operado</span>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {seleccionado.operado && (
-            <button onClick={abrirFormCirugia} style={{fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:500}}>+ Agregar cirugía</button>
+            <button onClick={abrirFormCirugia} style={{fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:500}}>+ Agregar cirugía</button>
           )}
-          <button onClick={toggleOperado} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:seleccionado.operado?"#1a6f5c":"#c8d8e4",position:"relative",transition:"background 0.2s",padding:0}}>
-            <span style={{position:"absolute",top:3,left:seleccionado.operado?23:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}/>
+          <button onClick={toggleOperado} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:seleccionado.operado?"var(--exito)":"var(--borde-suave)",position:"relative",transition:"background 0.2s",padding:0}}>
+            <span style={{position:"absolute",top:3,left:seleccionado.operado?23:3,width:20,height:20,borderRadius:"50%",background:"var(--superficie)",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}/>
           </button>
         </div>
       </div>
       {/* Formulario para agregar cirugía */}
       {seleccionado.operado && formCirugia && (
-        <div style={{marginTop:6,padding:"12px",background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:6}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:8}}>Nueva cirugía</div>
+        <div style={{marginTop:6,padding:"12px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:6}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:8}}>Nueva cirugía</div>
           <label style={labelStyle}>Fecha de la cirugía</label>
           <input type="date" value={formCirugia.fecha} onChange={e=>setFormCirugia({...formCirugia, fecha:e.target.value})} style={inputStyle}/>
           <label style={labelStyle}>Cirugía realizada</label>
           <input value={formCirugia.nombre} onChange={e=>setFormCirugia({...formCirugia, nombre:e.target.value})} placeholder="Ej: RTU vesical, Nefrectomía..." style={inputStyle}/>
           <div style={{display:"flex",gap:8,marginTop:4}}>
             <button onClick={guardarCirugia} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar cirugía</button>
-            <button onClick={()=>setFormCirugia(null)} style={{padding:"9px 14px",fontSize:13,background:"#fff",color:"#7aa3c4",border:"0.5px solid #b8d8ef",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+            <button onClick={()=>setFormCirugia(null)} style={{padding:"9px 14px",fontSize:13,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
           </div>
         </div>
       )}
       {/* Lista de cirugías con día post-op */}
       {seleccionado.operado && Array.isArray(seleccionado.cirugias_realizadas) && seleccionado.cirugias_realizadas.length > 0 && (
-        <div style={{marginTop:6,padding:"10px 12px",background:"#e0f5ec",borderRadius:6}}>
+        <div style={{marginTop:6,padding:"10px 12px",background:"var(--exito-bg)",borderRadius:6}}>
           {seleccionado.cirugias_realizadas.map((cx, idx) => {
             const dia = diaPostOp(cx.fecha);
             return (
-              <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:14,color:"#1a3a5c",padding:"3px 0"}}>
+              <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:14,color:"var(--texto)",padding:"3px 0"}}>
                 <span><strong>Día {dia}:</strong> {cx.nombre}</span>
-                <button onClick={()=>eliminarCirugia(idx)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                <button onClick={()=>eliminarCirugia(idx)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
               </div>
             );
           })}
         </div>
       )}
       {Array.isArray(seleccionado.antecedentes) && seleccionado.antecedentes.length > 0 && (
-        <div style={{fontSize:14,color:"#1a3a5c",marginTop:6,padding:"10px 12px",background:"#f0f8fd",borderRadius:6}}>
+        <div style={{fontSize:14,color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
           <strong>Antecedentes:</strong>{" "}
           <span style={{display:"inline-flex",flexWrap:"wrap",gap:5,verticalAlign:"middle"}}>
             {seleccionado.antecedentes.map(a => (
-              <span key={a} style={{fontSize:12,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{a}</span>
+              <span key={a} style={{fontSize:12,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{a}</span>
             ))}
           </span>
         </div>
       )}
       {seleccionado.alergias && seleccionado.alergias.trim() && (
-        <div style={{fontSize:14,color:"#1a3a5c",marginTop:6,padding:"10px 12px",background:"#fde8e6",borderRadius:6}}>
-          <strong style={{color:"#c0392b"}}>⚠ Alergias:</strong> {seleccionado.alergias}
+        <div style={{fontSize:14,color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--peligro-bg)",borderRadius:6}}>
+          <strong style={{color:"var(--peligro)"}}>⚠ Alergias:</strong> {seleccionado.alergias}
         </div>
       )}
       {seleccionado.plan_manejo && (
-        <div style={{fontSize:14,color:"#1a3a5c",marginTop:6,padding:"10px 12px",background:"#f0f8fd",borderRadius:6,whiteSpace:"pre-wrap"}}>
+        <div style={{fontSize:14,color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,whiteSpace:"pre-wrap"}}>
           <strong>Plan:</strong> {seleccionado.plan_manejo}
         </div>
       )}
@@ -3645,13 +3734,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 </div>
 
         {/* EVOLUCIONES */}
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>📝 Evoluciones</div>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>📝 Evoluciones</div>
 
           {/* Selector tipo */}
           <div style={{display:"flex",gap:8,marginBottom:10}}>
-            <button onClick={()=>setTipoEvo("estructurada")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="estructurada"?"#1a6fb5":"#fff",color:tipoEvo==="estructurada"?"#fff":"#4a7eab",border:tipoEvo==="estructurada"?"none":"0.5px solid #b8d8ef",borderRadius:8,cursor:"pointer",fontWeight:600}}>Estructurada (SOAP)</button>
-            <button onClick={()=>setTipoEvo("libre")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="libre"?"#1a6fb5":"#fff",color:tipoEvo==="libre"?"#fff":"#4a7eab",border:tipoEvo==="libre"?"none":"0.5px solid #b8d8ef",borderRadius:8,cursor:"pointer",fontWeight:600}}>Libre</button>
+            <button onClick={()=>setTipoEvo("estructurada")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="estructurada"?"var(--primario)":"var(--superficie)",color:tipoEvo==="estructurada"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="estructurada"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Estructurada (SOAP)</button>
+            <button onClick={()=>setTipoEvo("libre")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="libre"?"var(--primario)":"var(--superficie)",color:tipoEvo==="libre"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="libre"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Libre</button>
           </div>
 
           {tipoEvo === "libre" ? (
@@ -3660,14 +3749,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:6}}>
   
   {/* PLANTILLAS COMPLETAS - desplegable */}
-  <div style={{border:"0.5px solid #b8d8ef",borderRadius:6,overflow:"hidden"}}>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="plantillas"?null:"plantillas")} style={{width:"100%",padding:"9px 12px",background:"#f0f8fd",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,color:"#1a6fb5",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+  <div style={{border:"0.5px solid var(--borde)",borderRadius:6,overflow:"hidden"}}>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="plantillas"?null:"plantillas")} style={{width:"100%",padding:"9px 12px",background:"var(--fondo-suave)",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,color:"var(--primario)",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       📋 Plantillas completas <span>{seccionAbierta==="plantillas"?"▴":"▾"}</span>
     </button>
     {seccionAbierta==="plantillas" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:5,padding:"8px 12px"}}>
         {Object.keys(PLANTILLAS_SOAP).map(nombre => (
-          <button key={nombre} onClick={()=>setEvoEstructurada(PLANTILLAS_SOAP[nombre])} style={{padding:"5px 11px",fontSize:11,background:"#fff",border:"0.5px solid #b8d8ef",color:"#1a6fb5",borderRadius:10,cursor:"pointer"}}>{nombre}</button>
+          <button key={nombre} onClick={()=>setEvoEstructurada(PLANTILLAS_SOAP[nombre])} style={{padding:"5px 11px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--primario)",borderRadius:10,cursor:"pointer"}}>{nombre}</button>
         ))}
       </div>
     )}
@@ -3676,11 +3765,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* SUBJETIVO */}
   <div>
     <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo (lo que refiere el paciente)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:11,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
     {seccionAbierta==="subjetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.subjetivo.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"#fff",border:"0.5px solid #cdddec",color:"#4a7eab",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -3689,22 +3778,22 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* OBJETIVO */}
   <div>
     <textarea value={evoEstructurada.objetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,objetivo:e.target.value})} placeholder="O - Objetivo (signos vitales, laboratorio)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:11,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
     {seccionAbierta==="objetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.objetivo.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"#fff",border:"0.5px solid #cdddec",color:"#4a7eab",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
   </div>
 
   {/* DIURESIS */}
-  <div style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:6,border:"0.5px solid #b8d8ef"}}>
-    <div style={{fontSize:12,fontWeight:600,color:"#1a6fb5",marginBottom:6}}>💧 Diuresis</div>
+  <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)"}}>
+    <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:6}}>💧 Diuresis</div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       <input type="number" value={diuresis.cantidad} onChange={e=>setDiuresis({...diuresis,cantidad:e.target.value})} placeholder="Cantidad" style={{...inputStyle,marginBottom:0,width:100,flex:"0 0 auto"}}/>
-      <span style={{alignSelf:"center",fontSize:12,color:"#7aa3c4"}}>ml</span>
+      <span style={{alignSelf:"center",fontSize:12,color:"var(--texto-ter)"}}>ml</span>
       <select value={diuresis.via} onChange={e=>setDiuresis({...diuresis,via:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1,minWidth:120}}>
         <option value="">Vía...</option>
         <option value="Diuresis espontánea">Espontánea</option>
@@ -3725,11 +3814,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   </div>
 
   {/* DRENAJE */}
-  <div style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:6,border:"0.5px solid #b8d8ef"}}>
+  <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)"}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <div style={{fontSize:12,fontWeight:600,color:"#1a6fb5"}}>🩸 Drenaje</div>
-      <button onClick={()=>setDrenaje({...drenaje, activo: !drenaje.activo})} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:drenaje.activo?"#1a6f5c":"#c8d8e4",position:"relative",transition:"background 0.2s",padding:0}}>
-        <span style={{position:"absolute",top:3,left:drenaje.activo?23:3,width:20,height:20,borderRadius:"50%",background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}/>
+      <div style={{fontSize:12,fontWeight:600,color:"var(--primario)"}}>🩸 Drenaje</div>
+      <button onClick={()=>setDrenaje({...drenaje, activo: !drenaje.activo})} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:drenaje.activo?"var(--exito)":"var(--borde-suave)",position:"relative",transition:"background 0.2s",padding:0}}>
+        <span style={{position:"absolute",top:3,left:drenaje.activo?23:3,width:20,height:20,borderRadius:"50%",background:"var(--superficie)",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}/>
       </button>
     </div>
     {drenaje.activo && (
@@ -3761,7 +3850,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </select>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <input type="number" value={drenaje.cantidad} onChange={e=>setDrenaje({...drenaje,cantidad:e.target.value})} placeholder="Cantidad" style={{...inputStyle,marginBottom:0,width:100,flex:"0 0 auto"}}/>
-          <span style={{fontSize:12,color:"#7aa3c4"}}>ml</span>
+          <span style={{fontSize:12,color:"var(--texto-ter)"}}>ml</span>
           <select value={drenaje.caracteristicas} onChange={e=>setDrenaje({...drenaje,caracteristicas:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1}}>
             <option value="">Características...</option>
             <option value="Hemático">Hemático</option>
@@ -3778,11 +3867,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* EXAMEN FÍSICO */}
   <div>
     <textarea value={evoEstructurada.examen} onChange={e=>setEvoEstructurada({...evoEstructurada,examen:e.target.value})} placeholder="A - Examen físico/análisis" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:11,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
     {seccionAbierta==="examen" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.examen.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"#fff",border:"0.5px solid #cdddec",color:"#4a7eab",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -3791,11 +3880,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* INDICACIONES */}
   <div>
     <textarea value={evoEstructurada.indicaciones} onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})} placeholder="P - Plan/indicaciones" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:11,background:"#f8fbfd",border:"0.5px solid #cdddec",color:"#7aa3c4",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
     {seccionAbierta==="indicaciones" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.indicaciones.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:11,background:"#fff",border:"0.5px solid #cdddec",color:"#4a7eab",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -3808,21 +3897,21 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
           {/* Lista de evoluciones */}
           {evoluciones.length === 0 ? (
-            <div style={{fontSize:11,color:"#7aa3c4",fontStyle:"italic",padding:"10px 0"}}>No hay evoluciones registradas</div>
+            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"10px 0"}}>No hay evoluciones registradas</div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {evoluciones.map((e, idx) => (
-                <div key={e.id} style={{background:idx===0?"#e8f4fd":"#f0f8fd",borderRadius:6,padding:"10px 12px",borderLeft:idx===0?"3px solid #1a6fb5":"3px solid #b8d8ef",border:idx===0?"0.5px solid #1a6fb5":"none"}}>
+                <div key={e.id} style={{background:idx===0?"var(--fondo-suave)":"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:idx===0?"3px solid var(--primario)":"3px solid var(--borde)",border:idx===0?"0.5px solid var(--primario)":"none"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:8}}>
-                    <div style={{fontSize:11,color:"#7aa3c4",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      {idx===0 && <span style={{fontSize:9,background:"#1a6fb5",color:"#fff",padding:"1px 7px",borderRadius:8,fontWeight:600}}>MÁS RECIENTE</span>}
-                      {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"#1a6f5c":e.tipo==="examen"?"#a06b1a":"#4a7eab",fontWeight:e.tipo==="examen"?600:400}}>{e.tipo==="examen"?"🧪 examen":e.tipo}</span>
+                    <div style={{fontSize:11,color:"var(--texto-ter)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {idx===0 && <span style={{fontSize:9,background:"var(--primario)",color:"var(--texto-inv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>MÁS RECIENTE</span>}
+                      {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"var(--exito)":e.tipo==="examen"?"var(--alerta)":"var(--texto-sec)",fontWeight:e.tipo==="examen"?600:400}}>{e.tipo==="examen"?"🧪 examen":e.tipo}</span>
                     </div>
                     {e.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                      <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
                     )}
                   </div>
-                  <div style={{fontSize:idx===0?13:12,color:"#1a3a5c",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
+                  <div style={{fontSize:idx===0?13:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
                 </div>
               ))}
             </div>
@@ -3830,8 +3919,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* EXÁMENES */}
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c",marginBottom:10}}>🧪 Exámenes</div>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>🧪 Exámenes</div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
             <select value={nuevoEx.tipo} onChange={e=>setNuevoEx({...nuevoEx,tipo:e.target.value,nombre:"",pirads:"",pesoProstatico:"",lugar:"",tipoCultivo:""})} style={{...inputStyle,marginBottom:0}}>
@@ -3854,14 +3943,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
           {/* Panel de parámetros numéricos para exámenes con set definido */}
           {nuevoEx.tipo === "Laboratorio" && PARAMETROS_LAB[nuevoEx.nombre] && (
-            <div style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:6,border:"0.5px solid #b8d8ef",marginBottom:6}}>
-              <div style={{fontSize:11,color:"#7aa3c4",marginBottom:8}}>Completa solo los parámetros que tengas (los vacíos se omiten):</div>
+            <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Completa solo los parámetros que tengas (los vacíos se omiten):</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
                 {PARAMETROS_LAB[nuevoEx.nombre].map(param => (
                   <div key={param.key} style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{fontSize:11,color:"#1a3a5c",fontWeight:500,minWidth:74}}>{param.label}</span>
+                    <span style={{fontSize:11,color:"var(--texto)",fontWeight:500,minWidth:74}}>{param.label}</span>
                     <input type="number" value={paramsLab[param.key] || ""} onChange={e=>setParamsLab({...paramsLab,[param.key]:e.target.value})} style={{...inputStyle,marginBottom:0,padding:"6px 8px",fontSize:12}}/>
-                    {param.unidad && <span style={{fontSize:10,color:"#7aa3c4",minWidth:38}}>{param.unidad}</span>}
+                    {param.unidad && <span style={{fontSize:10,color:"var(--texto-ter)",minWidth:38}}>{param.unidad}</span>}
                   </div>
                 ))}
               </div>
@@ -3893,7 +3982,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {(nuevoEx.nombre === "RM próstata" || nuevoEx.nombre === "Eco VP") && (
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
               <input type="number" value={nuevoEx.pesoProstatico} onChange={e=>setNuevoEx({...nuevoEx,pesoProstatico:e.target.value})} placeholder="Peso prostático" style={{...inputStyle,marginBottom:0,flex:1}}/>
-              <span style={{fontSize:12,color:"#7aa3c4"}}>g</span>
+              <span style={{fontSize:12,color:"var(--texto-ter)"}}>g</span>
             </div>
           )}
           {nuevoEx.nombre === "RM próstata" && (
@@ -3905,14 +3994,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
           {/* CONSTRUCTOR DE LITIASIS (Pielotac) */}
           {nuevoEx.nombre === "Pielotac" && (
-            <div style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:6,border:"0.5px solid #b8d8ef",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#1a6fb5",marginBottom:8}}>🪨 Litiasis</div>
+            <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🪨 Litiasis</div>
               {litiasis.length > 0 && (
                 <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
                   {litiasis.map((l, idx) => (
-                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#1a3a5c",background:"#fff",padding:"5px 9px",borderRadius:6}}>
+                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
                       <span>{[l.ubicacion, l.tercio, l.lateralidad, l.tamano?`${l.tamano} mm`:"", l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · ")}</span>
-                      <button onClick={()=>setLitiasis(litiasis.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                      <button onClick={()=>setLitiasis(litiasis.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -3935,32 +4024,32 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 <div style={{display:"flex",gap:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:4,flex:1}}>
                     <input type="number" value={formLitiasis.tamano} onChange={e=>setFormLitiasis({...formLitiasis,tamano:e.target.value})} placeholder="Tamaño" style={{...inputStyle,marginBottom:0}}/>
-                    <span style={{fontSize:11,color:"#7aa3c4"}}>mm</span>
+                    <span style={{fontSize:11,color:"var(--texto-ter)"}}>mm</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:4,flex:1}}>
                     <input type="number" value={formLitiasis.uh} onChange={e=>setFormLitiasis({...formLitiasis,uh:e.target.value})} placeholder="Densidad" style={{...inputStyle,marginBottom:0}}/>
-                    <span style={{fontSize:11,color:"#7aa3c4"}}>UH</span>
+                    <span style={{fontSize:11,color:"var(--texto-ter)"}}>UH</span>
                   </div>
                 </div>
                 <button onClick={()=>{
                   if (!formLitiasis.ubicacion) return alert("Selecciona la ubicación");
                   setLitiasis([...litiasis, formLitiasis]);
                   setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
-                }} style={{padding:"7px 12px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar litiasis</button>
+                }} style={{padding:"7px 12px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar litiasis</button>
               </div>
             </div>
           )}
 
           {/* CONSTRUCTOR DE TUMOR (UROTAC, TAC TAP, Eco renal) */}
           {(nuevoEx.nombre === "UROTAC" || nuevoEx.nombre === "TAC TAP" || nuevoEx.nombre === "Eco renal") && (
-            <div style={{padding:"10px 12px",background:"#f0f8fd",borderRadius:6,border:"0.5px solid #b8d8ef",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:600,color:"#1a6fb5",marginBottom:8}}>🎯 Tumor</div>
+            <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🎯 Tumor</div>
               {tumores.length > 0 && (
                 <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
                   {tumores.map((t, idx) => (
-                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"#1a3a5c",background:"#fff",padding:"5px 9px",borderRadius:6}}>
+                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
                       <span>{[t.organo, t.sublocalizacion, t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · ")}</span>
-                      <button onClick={()=>setTumores(tumores.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                      <button onClick={()=>setTumores(tumores.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -3990,13 +4079,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 )}
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <input type="number" value={formTumor.tamano} onChange={e=>setFormTumor({...formTumor,tamano:e.target.value})} placeholder="Tamaño" style={{...inputStyle,marginBottom:0}}/>
-                  <span style={{fontSize:11,color:"#7aa3c4"}}>cm</span>
+                  <span style={{fontSize:11,color:"var(--texto-ter)"}}>cm</span>
                 </div>
                 <button onClick={()=>{
                   if (!formTumor.organo) return alert("Selecciona el órgano");
                   setTumores([...tumores, formTumor]);
                   setFormTumor({ organo: "", sublocalizacion: "", tamano: "" });
-                }} style={{padding:"7px 12px",fontSize:12,background:"#1a6f5c",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar tumor</button>
+                }} style={{padding:"7px 12px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar tumor</button>
               </div>
             </div>
           )}
@@ -4005,29 +4094,29 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0, marginBottom:12}}>+ Guardar examen</button>
 
           {examenes.length === 0 ? (
-            <div style={{fontSize:11,color:"#7aa3c4",fontStyle:"italic",padding:"10px 0"}}>No hay exámenes registrados</div>
+            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"10px 0"}}>No hay exámenes registrados</div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {examenes.map(ex => (
-                <div key={ex.id} style={{background:"#f0f8fd",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid #1a6f5c"}}>
+                <div key={ex.id} style={{background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid var(--exito)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:"#1a3a5c"}}>
-                        <span style={{fontSize:9,padding:"1px 6px",background:"#1a6f5c",color:"#fff",borderRadius:3,marginRight:6}}>{ex.tipo}</span>
+                      <div style={{fontSize:12,fontWeight:500,color:"var(--texto)"}}>
+                        <span style={{fontSize:9,padding:"1px 6px",background:"var(--exito)",color:"var(--texto-inv)",borderRadius:3,marginRight:6}}>{ex.tipo}</span>
                         {ex.nombre}
                       </div>
-                      <div style={{fontSize:10,color:"#7aa3c4",marginTop:2}}>{ex.fecha_examen} | {ex.autor?.nombre || "Anónimo"}</div>
+                      <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>{ex.fecha_examen} | {ex.autor?.nombre || "Anónimo"}</div>
                     </div>
                     {ex.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"#c0392b",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
                     )}
                   </div>
                   {ex.datos_estructurados && (ex.datos_estructurados.pirads || ex.datos_estructurados.pesoProstatico || ex.datos_estructurados.lugar || ex.datos_estructurados.tipoCultivo) && (
                     <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
-                      {ex.datos_estructurados.pirads && <span style={{fontSize:11,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:8,fontWeight:600}}>PI-RADS {ex.datos_estructurados.pirads}</span>}
-                      {ex.datos_estructurados.pesoProstatico && <span style={{fontSize:11,background:"#dbeafe",color:"#1e40af",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Próstata {ex.datos_estructurados.pesoProstatico} g</span>}
-                      {ex.datos_estructurados.lugar && <span style={{fontSize:11,background:"#f3e8ff",color:"#6b21a8",padding:"2px 8px",borderRadius:8,fontWeight:600}}>📍 {ex.datos_estructurados.lugar}</span>}
-                      {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:11,background:"#dcfce7",color:"#166534",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
+                      {ex.datos_estructurados.pirads && <span style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>PI-RADS {ex.datos_estructurados.pirads}</span>}
+                      {ex.datos_estructurados.pesoProstatico && <span style={{fontSize:11,background:"var(--chip-azul-bg)",color:"var(--chip-azul)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Próstata {ex.datos_estructurados.pesoProstatico} g</span>}
+                      {ex.datos_estructurados.lugar && <span style={{fontSize:11,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>📍 {ex.datos_estructurados.lugar}</span>}
+                      {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
                     </div>
                   )}
                   {ex.datos_estructurados && ex.datos_estructurados.parametros && Object.keys(ex.datos_estructurados.parametros).length > 0 && (
@@ -4035,7 +4124,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       {Object.entries(ex.datos_estructurados.parametros).map(([k,v]) => {
                         const def = (PARAMETROS_LAB[ex.nombre] || []).find(p => p.key === k);
                         return (
-                          <span key={k} style={{fontSize:11,background:"#fff",border:"0.5px solid #b8d8ef",color:"#1a3a5c",padding:"2px 8px",borderRadius:8}}>
+                          <span key={k} style={{fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8}}>
                             <strong>{def?.label || k}:</strong> {v}{def?.unidad ? ` ${def.unidad}` : ""}
                           </span>
                         );
@@ -4044,10 +4133,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   )}
                   {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.litiasis) && ex.datos_estructurados.litiasis.length > 0 && (
                     <div style={{marginTop:6}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"#1a6fb5",marginBottom:3}}>🪨 Litiasis</div>
+                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🪨 Litiasis</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         {ex.datos_estructurados.litiasis.map((l,i) => (
-                          <span key={i} style={{fontSize:11,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
+                          <span key={i} style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
                             {[l.ubicacion,l.tercio,l.lateralidad,l.tamano?`${l.tamano} mm`:"",l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · ")}
                           </span>
                         ))}
@@ -4056,17 +4145,17 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   )}
                   {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.tumores) && ex.datos_estructurados.tumores.length > 0 && (
                     <div style={{marginTop:6}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"#1a6fb5",marginBottom:3}}>🎯 Tumor</div>
+                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🎯 Tumor</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         {ex.datos_estructurados.tumores.map((t,i) => (
-                          <span key={i} style={{fontSize:11,background:"#fee2e2",color:"#991b1b",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
+                          <span key={i} style={{fontSize:11,background:"var(--peligro-bg)",color:"var(--peligro)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
                             {[t.organo,t.sublocalizacion,t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · ")}
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
-                  {ex.resultado && <div style={{fontSize:12,color:"#1a3a5c",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
+                  {ex.resultado && <div style={{fontSize:12,color:"var(--texto)",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
                 </div>
               ))}
             </div>
@@ -4083,36 +4172,36 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:8,flexWrap:"wrap"}}>
-        <div style={{fontSize:16,fontWeight:600,color:"#1a3a5c"}}>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)"}}>
           {esEquipo ? `🏥 Pacientes - ${equipoActual?.nombre}` : "👤 Mis Pacientes"}
         </div>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setVista("servicios")} style={{padding:"6px 12px",fontSize:12,background:"#fff",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios</button>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"#1a6fb5",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>
+          <button onClick={()=>setVista("servicios")} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios</button>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>
         </div>
       </div>
 
       {/* Filtros */}
       <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:11,color:"#7aa3c4"}}>Filtrar:</span>
-        <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none",cursor:"pointer"}}>
+        <span style={{fontSize:11,color:"var(--texto-ter)"}}>Filtrar:</span>
+        <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
           <option value="todos">Todos los servicios</option>
           {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",outline:"none",cursor:"pointer"}}>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
           <option value="activo">Solo activos</option>
           <option value="alta">Solo dados de alta</option>
           <option value="todos">Todos</option>
         </select>
-        <span style={{fontSize:11,color:"#7aa3c4",marginLeft:"auto"}}>{pacientesFiltrados.length} pacientes</span>
+        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{pacientesFiltrados.length} pacientes</span>
       </div>
 
       {loadingPacientes && (
-        <div style={{textAlign:"center",padding:"30px",color:"#7aa3c4",fontSize:13}}>Cargando pacientes...</div>
+        <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando pacientes...</div>
       )}
 
       {!loadingPacientes && pacientesFiltrados.length === 0 && (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
           No hay pacientes en este contexto.<br/>
           {esEquipo ? "Agrega uno con el botón + Nuevo" : "Crea tu primer paciente con + Nuevo"}
         </div>
@@ -4130,22 +4219,22 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (ib === -1) return -1;
   return ia - ib;
 }).map(servicio => (
-            <div key={servicio} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"12px"}}>
-              <div style={{fontSize:15,fontWeight:700,color:"#1a3a5c",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid #e8f3fb"}}>
-                {servicio} <span style={{color:"#7aa3c4",fontWeight:400,fontSize:13}}>({porServicio[servicio].length})</span>
+            <div key={servicio} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)"}}>
+                {servicio} <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:13}}>({porServicio[servicio].length})</span>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {porServicio[servicio].map(p => (
-                  <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"#f0f8fd":"#f5f5f5",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"#1a6fb5":"#999"}`}}>
+                  <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                      <div style={{fontSize:15,fontWeight:600,color:"#1a3a5c"}}>
-                        {p.iniciales} <span style={{fontSize:19,fontWeight:700,color:p.sexo==="F"?"#d6336c":"#1a6fb5"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
+                      <div style={{fontSize:15,fontWeight:600,color:"var(--texto)"}}>
+                        {p.iniciales} <span style={{fontSize:19,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
                       </div>
-                      <div style={{fontSize:13,fontWeight:600,color:"#1a6fb5",background:"#dbeafe",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
                     </div>
-                    <div style={{fontSize:13,fontWeight:500,color:"#4a7eab",marginBottom:3}}>{p.edad} años</div>
-                    <div style={{fontSize:11,color:"#1a3a5c",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
-                    {p.estado === "alta" && <div style={{fontSize:9,color:"#999",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
+                    <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
+                    <div style={{fontSize:11,color:"var(--texto)",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
+                    {p.estado === "alta" && <div style={{fontSize:9,color:"var(--neutro)",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
                     {esEquipo && <EncargadosPaciente paciente={p} miembros={miembrosEquipo} currentUser={currentUser} onActualizar={asignarEncargados} />}
                   </div>
                 ))}
@@ -4175,16 +4264,16 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
   };
   const colorDeEncargado = (id) => {
     const paleta = [
-      { bg: "#dbeafe", text: "#1e40af" },
-      { bg: "#dcfce7", text: "#166534" },
-      { bg: "#fee2e2", text: "#991b1b" },
-      { bg: "#fef3c7", text: "#92400e" },
-      { bg: "#f3e8ff", text: "#6b21a8" },
-      { bg: "#ccfbf1", text: "#115e59" },
-      { bg: "#ffe4e6", text: "#9f1239" },
-      { bg: "#ffedd5", text: "#9a3412" },
-      { bg: "#e0e7ff", text: "#3730a3" },
-      { bg: "#d1fae5", text: "#065f46" },
+      { bg: "var(--chip-azul-bg)", text: "var(--chip-azul)" },
+      { bg: "var(--exito-bg)", text: "var(--exito)" },
+      { bg: "var(--peligro-bg)", text: "var(--peligro)" },
+      { bg: "var(--alerta-bg)", text: "var(--alerta)" },
+      { bg: "var(--ccv-bg)", text: "var(--ccv)" },
+      { bg: "var(--exito-bg)", text: "var(--exito)" },
+      { bg: "var(--peligro-bg)", text: "var(--peligro)" },
+      { bg: "var(--alerta-bg)", text: "var(--alerta)" },
+      { bg: "var(--chip-indigo-bg)", text: "var(--chip-indigo)" },
+      { bg: "var(--exito-bg)", text: "var(--exito)" },
     ];
     const idx = miembros.findIndex(x => x.perfiles?.id === id);
     return paleta[(idx < 0 ? 0 : idx) % paleta.length];
@@ -4201,18 +4290,18 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
     </span>
   );
 })}
-        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:15,background:"#f0f8fd",color:"#1a6fb5",border:"0.5px solid #b8d8ef",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
+        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:15,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
           {abierto ? "×" : "+"}
         </button>
       </div>
       {abierto && (
-        <div style={{marginTop:4,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:6,padding:"4px",maxHeight:140,overflowY:"auto"}}>
+        <div style={{marginTop:4,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:6,padding:"4px",maxHeight:140,overflowY:"auto"}}>
           {miembros.map(m => {
             const id = m.perfiles?.id;
             const asignado = encargados.includes(id);
             return (
-              <div key={id} onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",cursor:"pointer",fontSize:11,color:"#1a3a5c"}}>
-                <span style={{width:14,height:14,borderRadius:3,border:"1px solid #b8d8ef",background:asignado?"#1a6fb5":"#fff",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
+              <div key={id} onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",cursor:"pointer",fontSize:11,color:"var(--texto)"}}>
+                <span style={{width:14,height:14,borderRadius:3,border:"1px solid var(--borde)",background:asignado?"var(--primario)":"var(--superficie)",color:"var(--texto-inv)",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
                 {m.perfiles?.nombre}
               </div>
             );
@@ -4228,13 +4317,13 @@ function VideoPlayer({ video, onClose }) {
   const vimeoId = getVimeoId(video.url);
   return (
     <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.85)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",borderRadius:"var(--border-radius-lg)"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:720,width:"100%",overflow:"hidden"}}>
-        <div style={{padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"0.5px solid #b8d8ef"}}>
-          <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c"}}>{video.titulo}</div>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,color:"#7aa3c4",cursor:"pointer",padding:0}}>✕</button>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--superficie)",borderRadius:12,maxWidth:720,width:"100%",overflow:"hidden"}}>
+        <div style={{padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"0.5px solid var(--borde)"}}>
+          <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{video.titulo}</div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,color:"var(--texto-ter)",cursor:"pointer",padding:0}}>✕</button>
         </div>
         <div style={{aspectRatio:"16/9",background:"#000"}}>
-          {vimeoId ? <iframe src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title={video.titulo}/> : ytId ? <iframe src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; encrypted-media" allowFullScreen title={video.titulo}/> : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"#fff"}}>Video no disponible</div>}
+          {vimeoId ? <iframe src={`https://player.vimeo.com/video/${vimeoId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title={video.titulo}/> : ytId ? <iframe src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} style={{width:"100%",height:"100%",border:"none"}} allow="autoplay; encrypted-media" allowFullScreen title={video.titulo}/> : <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:"var(--texto-inv)"}}>Video no disponible</div>}
         </div>
       </div>
     </div>
@@ -4287,44 +4376,44 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,gap:10}}>
         <div>
-          <div style={{fontSize:22,fontWeight:700,color:"#1a3a5c",marginBottom:2}}>Biblioteca quirúrgica</div>
-          <div style={{fontSize:13,color:"#4a7eab"}}>{videos.length} videos</div>
+          <div style={{fontSize:22,fontWeight:700,color:"var(--texto)",marginBottom:2}}>Biblioteca quirúrgica</div>
+          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{videos.length} videos</div>
         </div>
-        {isAdmin && <button onClick={()=>setAgregando(!agregando)} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background: agregando?"#fff":"#1a6fb5",color: agregando?"#1a6fb5":"#fff",border: agregando?"1px solid #1a6fb5":"none",borderRadius:8,cursor:"pointer"}}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
+        {isAdmin && <button onClick={()=>setAgregando(!agregando)} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background: agregando?"var(--superficie)":"var(--primario)",color: agregando?"var(--primario)":"var(--texto-inv)",border: agregando?"1px solid var(--primario)":"none",borderRadius:8,cursor:"pointer"}}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
       </div>
       {agregando && isAdmin && (
-        <div style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,padding:"14px",marginBottom:14}}>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
           <input value={nuevo.titulo} onChange={e=>setNuevo({...nuevo,titulo:e.target.value})} placeholder="Título" style={inputStyle}/>
           <select value={nuevo.categoria} onChange={e=>setNuevo({...nuevo,categoria:e.target.value})} style={inputStyle}>{CATEGORIAS_VIDEO.filter(c=>c!=="Todas").map(c=><option key={c}>{c}</option>)}</select>
           <input value={nuevo.url} onChange={e=>setNuevo({...nuevo,url:e.target.value})} placeholder="URL YouTube" style={inputStyle}/>
           <input value={nuevo.autor} onChange={e=>setNuevo({...nuevo,autor:e.target.value})} placeholder="Autor (opcional)" style={inputStyle}/>
           <textarea value={nuevo.descripcion} onChange={e=>setNuevo({...nuevo,descripcion:e.target.value})} placeholder="Descripción" rows={2} style={{...inputStyle,resize:"none"}}/>
-          {errorAdd && <div style={{fontSize:12,color:"#c0392b",background:"#fde8e6",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorAdd}</div>}
+          {errorAdd && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorAdd}</div>}
           <button onClick={agregarVideo} style={{...btnPrimary, marginTop:0}}>Guardar video</button>
         </div>
       )}
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-        {CATEGORIAS_VIDEO.map(c => <button key={c} onClick={()=>setFiltro(c)} style={{padding:"5px 10px",fontSize:11,fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid #b8d8ef",background:filtro===c?"#1a6fb5":"#fff",color:filtro===c?"#fff":"#4a7eab"}}>{c}</button>)}
+        {CATEGORIAS_VIDEO.map(c => <button key={c} onClick={()=>setFiltro(c)} style={{padding:"5px 10px",fontSize:11,fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid var(--borde)",background:filtro===c?"var(--primario)":"var(--superficie)",color:filtro===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>)}
       </div>
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 0",color:"#7aa3c4",fontSize:13}}>No hay videos</div>
+        <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:13}}>No hay videos</div>
       ) : (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
           {filtrados.map(v => {
             return (
-              <div key={v.id} style={{background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:10,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-                <div onClick={()=>setPlayingVideo(v)} style={{position:"relative",cursor:"pointer",background:"#1a3a5c",aspectRatio:"16/9",overflow:"hidden"}}>
+              <div key={v.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+                <div onClick={()=>setPlayingVideo(v)} style={{position:"relative",cursor:"pointer",background:"var(--navy-fijo)",aspectRatio:"16/9",overflow:"hidden"}}>
                   <VideoThumb url={v.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                   <div style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.25)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <div style={{width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#1a6fb5"}}>▶</div>
+                    <div style={{width:44,height:44,borderRadius:"50%",background:"rgba(255,255,255,0.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"var(--primario)"}}>▶</div>
                   </div>
                 </div>
                 <div style={{padding:"10px 12px",flex:1,display:"flex",flexDirection:"column"}}>
-                  <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c",marginBottom:3,lineHeight:1.3}}>{v.titulo}</div>
-                  <div style={{fontSize:11,color:"#4a7eab",marginBottom:6}}>{v.categoria} · {v.autor}</div>
-                  <div style={{fontSize:11,color:"#7aa3c4",lineHeight:1.4,flex:1}}>{v.descripcion}</div>
-                  {isAdmin && <button onClick={()=>eliminarVideo(v.id)} style={{marginTop:8,padding:"5px 8px",fontSize:11,background:"#fff",color:"#c0392b",border:"0.5px solid #f0c5c0",borderRadius:6,cursor:"pointer",alignSelf:"flex-start"}}>Eliminar</button>}
+                  <div style={{fontSize:13,fontWeight:500,color:"var(--texto)",marginBottom:3,lineHeight:1.3}}>{v.titulo}</div>
+                  <div style={{fontSize:11,color:"var(--texto-sec)",marginBottom:6}}>{v.categoria} · {v.autor}</div>
+                  <div style={{fontSize:11,color:"var(--texto-ter)",lineHeight:1.4,flex:1}}>{v.descripcion}</div>
+                  {isAdmin && <button onClick={()=>eliminarVideo(v.id)} style={{marginTop:8,padding:"5px 8px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer",alignSelf:"flex-start"}}>Eliminar</button>}
                 </div>
               </div>
             );
@@ -4358,6 +4447,14 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   try { return localStorage.getItem("uro_tab") || "chat"; }
   catch { return "chat"; }
 });
+  const [tema, setTema] = useState(() => {
+    try { return localStorage.getItem("uro_tema") || "light"; }
+    catch { return "light"; }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", tema);
+    try { localStorage.setItem("uro_tema", tema); } catch {}
+  }, [tema]);
   const [messages, setMessages] = useState([]);
   const [conversaciones, setConversaciones] = useState([]); // lista de conversaciones del usuario
 const [conversacionActual, setConversacionActual] = useState(null); // ID de la conversación abierta
@@ -4997,8 +5094,8 @@ const cargarMapaGuardado = (mapa) => {
   // Pantalla de carga mientras se verifica la sesión inicial
 if (loadingSession) {
   return (
-    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{textAlign:"center",color:"#4a7eab",fontSize:14}}>
+    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center",color:"var(--texto-sec)",fontSize:14}}>
         <LogoUroSearch size={60}/>
         <div style={{marginTop:16}}>Cargando UroSearch...</div>
       </div>
@@ -5008,8 +5105,8 @@ if (loadingSession) {
 
 if (!currentUser) {
   return (
-    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
-      <div style={{width:"100%",maxWidth:480,background:"#fff",borderRadius:16,boxShadow:"0 4px 24px rgba(26,58,92,0.10)",padding:"8px"}}>
+    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
+      <div style={{width:"100%",maxWidth:480,background:"var(--superficie)",borderRadius:16,boxShadow:"0 4px 24px rgba(26,58,92,0.10)",padding:"8px"}}>
         <AuthScreen/>
       </div>
     </div>
@@ -5021,37 +5118,40 @@ if (!currentUser) {
     : [["chat","💬 Chat"],["hospital","🏥 Hospital"],["conocimiento","📖 Biblioteca"]];
 
   return (
-    <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"#e8f3fb",borderRadius:"var(--border-radius-lg)"}}>
-      <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid #b8d8ef",background:"#d0e9f8",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
+    <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)"}}>
+      <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <LogoUroSearch size={56}/>
             <div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:28,color:"#1a3a5c",letterSpacing:"-0.3px"}}>UroSearch</div>
-                {isAdmin && <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",background:"#1a6fb5",color:"#fff",borderRadius:4}}>ADMIN</span>}
+                <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:28,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
+                {isAdmin && <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
               </div>
-              <div style={{fontSize:14,color:"#4a7eab"}}>Asistente Clínico de Urología</div>
+              <div style={{fontSize:14,color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
             </div>
           </div>
-          <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:24,padding:"5px 14px 5px 5px",cursor:"pointer"}}>
-            <div style={{width:38,height:38,borderRadius:"50%",background:isAdmin?"#1a3a5c":"#1a6fb5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:600,color:"#fff"}}>{userInitials}</div>
-            <span style={{fontSize:14,color:"#1a3a5c",fontWeight:500}}>▾</span>
-          </button>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>setTema(tema==="light"?"dark":"light")} title={tema==="light"?"Modo oscuro":"Modo claro"} style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{tema==="light"?"🌙":"☀️"}</button>
+            <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:"5px 14px 5px 5px",cursor:"pointer"}}>
+              <div style={{width:38,height:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
+              <span style={{fontSize:14,color:"var(--texto)",fontWeight:500}}>▾</span>
+            </button>
+          </div>
         </div>
         {menuOpen && (
-          <div style={{position:"absolute",top:60,right:20,background:"#fff",border:"0.5px solid #b8d8ef",borderRadius:8,padding:"8px 0",minWidth:220,zIndex:10,boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
-            <div style={{padding:"8px 14px",borderBottom:"0.5px solid #e8f3fb"}}>
-              <div style={{fontSize:13,fontWeight:500,color:"#1a3a5c"}}>{currentUser.nombre}</div>
-              <div style={{fontSize:11,color:"#4a7eab"}}>{currentUser.correo}</div>
-              <div style={{fontSize:11,color:"#7aa3c4",marginTop:2}}>{currentUser.especialidad}{isAdmin?" · Administrador":""}</div>
+          <div style={{position:"absolute",top:60,right:20,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"8px 0",minWidth:220,zIndex:10,boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
+            <div style={{padding:"8px 14px",borderBottom:"0.5px solid var(--fondo)"}}>
+              <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{currentUser.nombre}</div>
+              <div style={{fontSize:11,color:"var(--texto-sec)"}}>{currentUser.correo}</div>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>{currentUser.especialidad}{isAdmin?" · Administrador":""}</div>
             </div>
-            <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"#c0392b",cursor:"pointer"}}>Cerrar sesión</button>
+            <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
         )}
         <div style={{display:"flex",gap:0,overflowX:"auto"}}>
           {tabs.map(([id,label]) => (
-            <button key={id} onClick={() => setTab(id)} style={{flex:"1 0 auto",padding:"13px 10px",fontSize:14,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid #1a6fb5":"3px solid transparent",color:tab===id?"#1a6fb5":"#4a7eab",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+            <button key={id} onClick={() => setTab(id)} style={{flex:"1 0 auto",padding:"13px 10px",fontSize:14,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
           ))}
         </div>
       </div>
@@ -5075,13 +5175,13 @@ if (!currentUser) {
     )}
           {/* Barra superior con botón de conversaciones */}
 {!isAdmin && (
-  <div style={{padding:"8px 12px", borderBottom:"0.5px solid #e8f3fb", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#f8fbfd"}}>
+  <div style={{padding:"8px 12px", borderBottom:"0.5px solid var(--fondo)", display:"flex", alignItems:"center", justifyContent:"space-between", background:"var(--fondo-suave)"}}>
     <button 
       onClick={() => setPanelConversacionesAbierto(!panelConversacionesAbierto)}
       style={{
-        background:"#fff",
-        border:"0.5px solid #b8d8ef",
-        color:"#1a6fb5",
+        background:"var(--superficie)",
+        border:"0.5px solid var(--borde)",
+        color:"var(--primario)",
         fontSize:12,
         padding:"5px 12px",
         borderRadius:6,
@@ -5099,9 +5199,9 @@ if (!currentUser) {
       <button
         onClick={nuevaConversacion}
         style={{
-          background:"#fff",
-          border:"0.5px solid #b8d8ef",
-          color:"#1a6fb5",
+          background:"var(--superficie)",
+          border:"0.5px solid var(--borde)",
+          color:"var(--primario)",
           fontSize:11,
           padding:"5px 10px",
           borderRadius:6,
@@ -5114,28 +5214,28 @@ if (!currentUser) {
 )}
 <div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:0}}>
   {loadingConversaciones && (
-    <div style={{textAlign:"center",padding:"40px 16px",color:"#7aa3c4",fontSize:13}}>
+    <div style={{textAlign:"center",padding:"40px 16px",color:"var(--texto-ter)",fontSize:13}}>
       Cargando conversación...
     </div>
   )}
-  {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"40px 16px",color:"#7aa3c4",fontSize:13,lineHeight:1.6}}>Como admin puedes usar el chat. Escribe una consulta.</div>}
+  {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"40px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>Como admin puedes usar el chat. Escribe una consulta.</div>}
   {!loadingConversaciones && messages.map((m,i) => <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>)}
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
-                <div style={{width:30,height:30,borderRadius:"50%",background:"#1a6fb5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"#fff"}}>U</div>
-                <div style={{padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"#fff",fontSize:14,color:"#7aa3c4",border:"0.5px solid #b8d8ef"}}>Consultando...</div>
+                <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"var(--texto-inv)"}}>U</div>
+                <div style={{padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:14,color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>Consultando...</div>
               </div>
             )}
             <div ref={bottomRef}/>
           </div>
-          <div style={{padding:"8px 12px 12px",borderTop:"0.5px solid #b8d8ef"}}>
+          <div style={{padding:"8px 12px 12px",borderTop:"0.5px solid var(--borde)"}}>
             <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
-              {[["precisa","⚡ Precisa"],["explicativa","📖 Explicativa"]].map(([id,label])=><button key={id} onClick={()=>setModo(id)} style={{padding:"5px 12px",fontSize:12,fontWeight:modo===id?500:400,borderRadius:8,cursor:"pointer",border:modo===id?"none":"0.5px solid #b8d8ef",background:modo===id?"#1a6fb5":"#fff",color:modo===id?"#fff":"#4a7eab"}}>{label}</button>)}
-              <span style={{fontSize:11,color:"#7aa3c4",marginLeft:4}}>{modo==="precisa" ? "Definición breve" : "Explicación completa"}</span>
+              {[["precisa","⚡ Precisa"],["explicativa","📖 Explicativa"]].map(([id,label])=><button key={id} onClick={()=>setModo(id)} style={{padding:"5px 12px",fontSize:12,fontWeight:modo===id?500:400,borderRadius:8,cursor:"pointer",border:modo===id?"none":"0.5px solid var(--borde)",background:modo===id?"var(--primario)":"var(--superficie)",color:modo===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>)}
+              <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:4}}>{modo==="precisa" ? "Definición breve" : "Explicación completa"}</span>
             </div>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-              <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:14,borderRadius:8,border:"0.5px solid #b8d8ef",background:"#fff",color:"#1a3a5c",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
-              <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"#cdddec":"#1a6fb5",color:"#fff",fontSize:14,cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
+              <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:14,borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
+              <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:14,cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
             </div>
           </div>
         </div>
@@ -5143,9 +5243,9 @@ if (!currentUser) {
 
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
 
-      <div style={{padding:"8px 16px",borderTop:"0.5px solid #b8d8ef",background:"#d0e9f8",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,fontStyle:"italic",color:"#4a7eab"}}>
+      <div style={{padding:"8px 16px",borderTop:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,fontStyle:"italic",color:"var(--texto-sec)"}}>
         <span>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</span>
-        <span style={{fontStyle:"normal",fontFamily:"monospace",fontSize:9,color:"#7aa3c4",letterSpacing:"0.3px"}}>{VERSION}</span>
+        <span style={{fontStyle:"normal",fontFamily:"monospace",fontSize:9,color:"var(--texto-ter)",letterSpacing:"0.3px"}}>{VERSION}</span>
       </div>
     </div>
   );
