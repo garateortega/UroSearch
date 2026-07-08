@@ -6,6 +6,25 @@ import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitaci
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
+import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
+
+// ============================================================
+// NOTIFICACIONES (nivel 1: dentro de la app)
+// ============================================================
+async function crearNotificacion(userId, texto, tipo = "general") {
+  if (!userId) return;
+  try { await supabase.from("notificaciones").insert({ user_id: userId, texto, tipo }); } catch {}
+}
+async function listarNotificaciones(userId) {
+  try {
+    const { data, error } = await supabase.from("notificaciones").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(30);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, notificaciones: data || [] };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+async function marcarNotificacionesLeidas(userId) {
+  try { await supabase.from("notificaciones").update({ leida: true }).eq("user_id", userId).eq("leida", false); } catch {}
+}
 
 // ─── Navegación con botón "atrás" del celular para vistas internas (PWA) ───
 // Pila LIFO de vistas internas abiertas; cada una corresponde a una entrada en
@@ -1869,7 +1888,10 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 
 function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
   const [subTab, setSubTab] = useState(() => {
-    try { return localStorage.getItem("uro_subtab_hospital") || "pacientes"; }
+    try {
+      const guardada = localStorage.getItem("uro_subtab_hospital");
+      return (guardada && guardada !== "pendientes") ? guardada : "pacientes";
+    }
     catch { return "pacientes"; }
   });
   const [contexto, setContexto] = useState(() => {
@@ -1906,13 +1928,13 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
       <div style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 12px 0",overflowX:"auto",flexShrink:0}}>
-        {[["pacientes","👥 Pacientes"],["pendientes","✅ Pendientes"],["tabla","📋 Tabla Quirúrgica"]].map(([id,label]) => (
+        {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla Quirúrgica"],["notas","🗒️ Notas"]].map(([id,label]) => (
           <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid var(--primario)":"3px solid transparent",color:subTab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
-      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes}/>}
-      {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias}/>}
-      {subTab === "pendientes" && <PendientesPanel pendientes={pendientes} setPendientes={setPendientes} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes}/>}
+      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes}/>}
+      {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes}/>}
+      {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
     </div>
   );
 }
@@ -1951,6 +1973,103 @@ function EncargadosPendiente({ pendiente, miembros, onToggle, nombreMiembro }) {
   );
 }
 
+// ============================================================
+// NOTAS LIBRES (personal / equipo)
+// ============================================================
+function NotasPanel({ currentUser, contexto, equipos }) {
+  const esEquipo = contexto !== "personal";
+  const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
+  const [notas, setNotas] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [nueva, setNueva] = useState({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
+
+  const cargar = async () => {
+    setCargando(true);
+    try {
+      let query = supabase.from("notas").select("*, autor:perfiles(nombre)").order("created_at", { ascending: false });
+      if (esEquipo) {
+        // Notas del equipo (visibles a todos) + mis notas personales dentro de este contexto
+        query = query.eq("equipo_id", contexto);
+      } else {
+        query = query.is("equipo_id", null).eq("autor_id", currentUser.id);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      // En contexto de equipo, filtrar: las de visibilidad "equipo" las ven todos; las "personal" solo su autor
+      const visibles = (data || []).filter(n => n.visibilidad === "equipo" || n.autor_id === currentUser.id);
+      setNotas(visibles);
+    } catch (e) { alert("Error cargando notas: " + (e.message || e)); }
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); setNueva(n => ({ ...n, visibilidad: esEquipo ? "equipo" : "personal" })); }, [contexto]);
+
+  const guardar = async () => {
+    if (!nueva.texto.trim()) return alert("Escribe la nota");
+    try {
+      const { data, error } = await supabase.from("notas").insert({
+        autor_id: currentUser.id,
+        equipo_id: esEquipo ? contexto : null,
+        titulo: nueva.titulo.trim() || null,
+        texto: nueva.texto.trim(),
+        visibilidad: esEquipo ? nueva.visibilidad : "personal",
+      }).select("*, autor:perfiles(nombre)").single();
+      if (error) throw error;
+      setNotas(prev => [data, ...prev]);
+      setNueva({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
+    } catch (e) { alert("Error: " + (e.message || e)); }
+  };
+
+  const eliminar = async (nota) => {
+    if (!confirm("¿Eliminar esta nota?")) return;
+    try {
+      const { error } = await supabase.from("notas").delete().eq("id", nota.id);
+      if (error) throw error;
+      setNotas(prev => prev.filter(n => n.id !== nota.id));
+    } catch (e) { alert("Error: " + (e.message || e)); }
+  };
+
+  return (
+    <div style={{padding:"16px",overflowY:"auto"}}>
+      <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>
+        {esEquipo ? `🗒️ Notas - ${equipoActual?.nombre}` : "🗒️ Mis notas"}
+      </div>
+
+      <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px",marginBottom:14}}>
+        <input value={nueva.titulo} onChange={e=>setNueva({...nueva,titulo:e.target.value})} placeholder="Título (opcional)" style={{...inputStyle,marginBottom:6}}/>
+        <textarea value={nueva.texto} onChange={e=>setNueva({...nueva,texto:e.target.value})} placeholder="Escribe una nota libre..." rows={3} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+        {esEquipo && (
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <button onClick={()=>setNueva({...nueva,visibilidad:"equipo"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="equipo"?600:400,background:nueva.visibilidad==="equipo"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="equipo"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="equipo"?"none":"0.5px solid var(--borde)"}}>👥 La ve el equipo</button>
+            <button onClick={()=>setNueva({...nueva,visibilidad:"personal"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="personal"?600:400,background:nueva.visibilidad==="personal"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="personal"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="personal"?"none":"0.5px solid var(--borde)"}}>🔒 Solo yo</button>
+          </div>
+        )}
+        <button onClick={guardar} disabled={!nueva.texto.trim()} style={{...btnPrimary,marginTop:0,opacity:nueva.texto.trim()?1:0.6}}>+ Guardar nota</button>
+      </div>
+
+      {cargando && <div style={{fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Cargando...</div>}
+      {!cargando && notas.length === 0 && <div style={{fontSize:12,color:"var(--texto-ter)",fontStyle:"italic",padding:"14px 0"}}>No hay notas aún.</div>}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {notas.map(n => (
+          <div key={n.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"11px 13px",borderLeft:n.visibilidad==="personal"?"3px solid var(--alerta)":"3px solid var(--primario)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+              <div style={{flex:1,minWidth:0}}>
+                {n.titulo && <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:3}}>{n.titulo}</div>}
+                <div style={{fontSize:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.45}}>{n.texto}</div>
+                <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:5}}>
+                  {n.visibilidad==="personal"?"🔒 Solo yo":"👥 Equipo"} · {n.autor?.nombre || "—"} · {new Date(n.created_at).toLocaleDateString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+                </div>
+              </div>
+              {n.autor_id === currentUser.id && (
+                <button onClick={()=>eliminar(n)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equipos, loadingPendientes, setLoadingPendientes }) {
   const [nuevo, setNuevo] = useState({ texto: "", prioridad: "normal", fecha_objetivo: "" });
   const [filtroEstado, setFiltroEstado] = useState("pendiente");
@@ -1983,12 +2102,14 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
 
   const toggleEncargadoPendiente = async (pendiente, userId) => {
     const actuales = Array.isArray(pendiente.encargados) ? pendiente.encargados : [];
-    const nuevos = actuales.includes(userId)
-      ? actuales.filter(id => id !== userId)
-      : [...actuales, userId];
+    const agregando = !actuales.includes(userId);
+    const nuevos = agregando ? [...actuales, userId] : actuales.filter(id => id !== userId);
     const result = await actualizarPendiente(pendiente.id, { encargados: nuevos });
     if (!result.ok) return alert("Error: " + result.error);
     setPendientes(prev => prev.map(x => x.id === pendiente.id ? result.pendiente : x));
+    if (agregando && userId !== currentUser.id) {
+      crearNotificacion(userId, `Te asignaron un pendiente: "${pendiente.texto.slice(0,80)}"${pendiente.fecha_objetivo ? ` (para el ${pendiente.fecha_objetivo})` : ""}`, "pendiente");
+    }
   };
 
   // Sugerencias rápidas
@@ -2191,7 +2312,7 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
   );
 }
 
-function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias }) {
+function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias, setPacientes }) {
   const [vista, setVista] = useState("tabla");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "tabla", () => { setVista("tabla"); setSeleccionado(null); });
@@ -2392,6 +2513,30 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     if (!result.ok) return alert("Error: " + result.error);
     setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
     if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
+
+    // Al completar una cirugía → crear automáticamente el paciente hospitalizado
+    if (nuevoEstado === "completada") {
+      if (!confirm(`¿Crear a ${cirugia.iniciales} como paciente hospitalizado en la pestaña Pacientes?`)) return;
+      const datosPaciente = {
+        medico_id: currentUser.id,
+        equipo_id: esEquipo ? contexto : null,
+        iniciales: (cirugia.iniciales || "").toUpperCase(),
+        edad: cirugia.edad || null,
+        sexo: "M", // editable después en la ficha
+        cama: "Por asignar",
+        servicio: "Urología",
+        diagnostico: `Post-operado: ${cirugia.procedimiento}${cirugia.lateralidad ? ` (${cirugia.lateralidad})` : ""}`,
+        plan_manejo: null,
+        fecha_ingreso: cirugia.fecha || new Date().toISOString().slice(0, 10),
+        estado: "activo",
+        operado: true,
+        cirugias_realizadas: [{ fecha: cirugia.fecha || new Date().toISOString().slice(0, 10), nombre: cirugia.procedimiento }],
+      };
+      const rp = await crearPaciente(datosPaciente);
+      if (!rp.ok) return alert("Cirugía completada, pero no se pudo crear el paciente: " + rp.error);
+      if (setPacientes) setPacientes(prev => [rp.paciente, ...prev]);
+      alert(`✓ ${cirugia.iniciales} creado como paciente hospitalizado. Edítalo en Pacientes para asignar cama y encargados.`);
+    }
   };
 
   const asignarPrimerAyudante = async (cirugia, nombre) => {
@@ -2399,6 +2544,14 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     if (!result.ok) return alert("Error: " + result.error);
     setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
     if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
+    // Notificar al asignado (si es otro miembro)
+    if (nombre) {
+      const miembro = miembrosEquipo.find(m => m.perfiles?.nombre === nombre);
+      const uid = miembro?.perfiles?.id;
+      if (uid && uid !== currentUser.id) {
+        crearNotificacion(uid, `Te asignaron como primer ayudante: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha} ${cirugia.hora?.slice(0,5)})`, "cirugia");
+      }
+    }
   };
 
   const eliminar = async (cirugia) => {
@@ -3044,6 +3197,13 @@ const SUGERENCIAS_SOAP = {
   const [filtroEstado, setFiltroEstado] = useState("activo");
   const [error, setError] = useState("");
   const [editandoFicha, setEditandoFicha] = useState(false);
+  const [otroAntecedente, setOtroAntecedente] = useState("");
+  const [editandoHistoria, setEditandoHistoria] = useState(false);
+  const [historiaDraft, setHistoriaDraft] = useState("");
+  const [mostrarEvosAntiguas, setMostrarEvosAntiguas] = useState(false);
+  const [mostrarExAntiguos, setMostrarExAntiguos] = useState(false);
+  const [pendientesPaciente, setPendientesPaciente] = useState([]);
+  const [nuevoPendientePac, setNuevoPendientePac] = useState({ texto: "", prioridad: "normal", fecha_objetivo: "", encargados: [] });
 const [editForm, setEditForm] = useState({});
 const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando se está agregando una cirugía
 
@@ -3221,9 +3381,15 @@ const guardarEdicion = async () => {
   setEditandoFicha(false);
 };
 const asignarEncargados = async (pacienteId, nuevosEncargados) => {
+  const paciente = pacientes.find(p => p.id === pacienteId);
+  const previos = Array.isArray(paciente?.encargados) ? paciente.encargados : [];
   const result = await actualizarPaciente(pacienteId, { encargados: nuevosEncargados });
   if (!result.ok) return alert("Error: " + result.error);
   setPacientes(prev => prev.map(p => p.id === pacienteId ? result.paciente : p));
+  // Notificar a los recién agregados (no a quien se auto-asigna)
+  nuevosEncargados.filter(id => !previos.includes(id) && id !== currentUser.id).forEach(id => {
+    crearNotificacion(id, `Te asignaron como encargado del paciente ${paciente?.iniciales || ""} (cama ${paciente?.cama || "?"})`, "paciente");
+  });
 };
   const toggleOperado = async () => {
     const result = await actualizarPaciente(seleccionado.id, { operado: !seleccionado.operado });
@@ -3283,10 +3449,61 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const abrirFicha = async (paciente) => {
     setSeleccionado(paciente);
     setVista("ficha");
+    setMostrarEvosAntiguas(false);
+    setMostrarExAntiguos(false);
+    setEditandoHistoria(false);
     const evoResult = await listarEvoluciones(paciente.id);
     if (evoResult.ok) setEvoluciones(evoResult.evoluciones);
     const exResult = await listarExamenes(paciente.id);
     if (exResult.ok) setExamenes(exResult.examenes.map(normalizarExamen));
+    cargarPendientesPaciente(paciente.id);
+  };
+
+  // ============================================================
+  // HISTORIA DEL PACIENTE
+  // ============================================================
+  const guardarHistoria = async () => {
+    const result = await actualizarPaciente(seleccionado.id, { historia: historiaDraft.trim() || null });
+    if (!result.ok) return alert("Error: " + result.error);
+    setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
+    setSeleccionado(result.paciente);
+    setEditandoHistoria(false);
+  };
+
+  // ============================================================
+  // PENDIENTES DEL PACIENTE (desde la ficha)
+  // ============================================================
+  const cargarPendientesPaciente = async (pacienteId) => {
+    const r = await listarPendientes(currentUser.id, contexto);
+    if (r.ok) setPendientesPaciente((r.pendientes || []).filter(p => p.paciente_id === pacienteId));
+  };
+
+  const guardarPendientePaciente = async () => {
+    if (!nuevoPendientePac.texto.trim()) return alert("Escribe el pendiente");
+    const datos = {
+      autor_id: currentUser.id,
+      equipo_id: esEquipo ? contexto : null,
+      paciente_id: seleccionado.id,
+      texto: `[${seleccionado.iniciales} · cama ${seleccionado.cama}] ${nuevoPendientePac.texto.trim()}`,
+      prioridad: nuevoPendientePac.prioridad,
+      fecha_objetivo: nuevoPendientePac.fecha_objetivo || null,
+      encargados: nuevoPendientePac.encargados,
+    };
+    const result = await crearPendiente(datos);
+    if (!result.ok) return alert("Error: " + result.error);
+    setPendientesPaciente(prev => [result.pendiente, ...prev]);
+    // Notificar encargados asignados
+    nuevoPendientePac.encargados.filter(id => id !== currentUser.id).forEach(id => {
+      crearNotificacion(id, `Te asignaron un pendiente del paciente ${seleccionado.iniciales}: "${nuevoPendientePac.texto.trim().slice(0,70)}"`, "pendiente");
+    });
+    setNuevoPendientePac({ texto: "", prioridad: "normal", fecha_objetivo: "", encargados: [] });
+  };
+
+  const togglePendientePacCompletado = async (p) => {
+    const nuevoEstado = p.estado === "completado" ? "pendiente" : "completado";
+    const result = await actualizarPendiente(p.id, { estado: nuevoEstado });
+    if (!result.ok) return alert("Error: " + result.error);
+    setPendientesPaciente(prev => prev.map(x => x.id === p.id ? result.pendiente : x));
   };
 
   // ============================================================
@@ -3607,18 +3824,35 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div>
         <label style={labelStyle}>Antecedentes</label>
         <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-          {["HTA","DM 2","Hipotiroidismo","Cardiópata","IAM","ACV","Obesidad","Otro"].map(ant => {
+          {(() => {
+            const PRESET = ["HTA","DM 2","Hipotiroidismo","Cardiópata","IAM","ACV","Obesidad"];
             const lista = Array.isArray(editForm.antecedentes) ? editForm.antecedentes : [];
-            const activo = lista.includes(ant);
+            const personalizados = lista.filter(a => !PRESET.includes(a));
             return (
-              <button key={ant} type="button" onClick={()=>{
-                const nueva = activo ? lista.filter(x=>x!==ant) : [...lista, ant];
-                setEditForm({...editForm, antecedentes: nueva});
-              }} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:activo?"none":"0.5px solid var(--borde)",background:activo?"#f2a03f":"var(--superficie)",color:activo?"var(--texto-inv)":"var(--texto-ter)",fontWeight:activo?600:400}}>
-                {ant}
-              </button>
+              <>
+                {PRESET.map(ant => {
+                  const activo = lista.includes(ant);
+                  return (
+                    <button key={ant} type="button" onClick={()=>{
+                      const nueva = activo ? lista.filter(x=>x!==ant) : [...lista, ant];
+                      setEditForm({...editForm, antecedentes: nueva});
+                    }} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:activo?"none":"0.5px solid var(--borde)",background:activo?"#f2a03f":"var(--superficie)",color:activo?"var(--texto-inv)":"var(--texto-ter)",fontWeight:activo?600:400}}>
+                      {ant}
+                    </button>
+                  );
+                })}
+                {personalizados.map(ant => (
+                  <button key={ant} type="button" title="Clic para quitar" onClick={()=>setEditForm({...editForm, antecedentes: lista.filter(x=>x!==ant)})} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:"none",background:"#f2a03f",color:"var(--texto-inv)",fontWeight:600}}>
+                    {ant} ✕
+                  </button>
+                ))}
+              </>
             );
-          })}
+          })()}
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <input value={otroAntecedente} onChange={e=>setOtroAntecedente(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&otroAntecedente.trim()){const lista=Array.isArray(editForm.antecedentes)?editForm.antecedentes:[];if(!lista.includes(otroAntecedente.trim()))setEditForm({...editForm,antecedentes:[...lista,otroAntecedente.trim()]});setOtroAntecedente("");}}} placeholder="Otro antecedente (ej: EPOC, ERC etapa 3...)" style={{...inputStyle,marginBottom:0,flex:1}}/>
+          <button type="button" disabled={!otroAntecedente.trim()} onClick={()=>{const lista=Array.isArray(editForm.antecedentes)?editForm.antecedentes:[];if(!lista.includes(otroAntecedente.trim()))setEditForm({...editForm,antecedentes:[...lista,otroAntecedente.trim()]});setOtroAntecedente("");}} style={{padding:"0 16px",fontSize:13,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,opacity:otroAntecedente.trim()?1:0.5}}>+ Agregar</button>
         </div>
       </div>
       <div>
@@ -3733,9 +3967,195 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   )}
 </div>
 
-        {/* EVOLUCIONES */}
+        {/* HISTORIA DEL PACIENTE */}
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:seleccionado.historia||editandoHistoria?8:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>📖 Historia</div>
+            {!editandoHistoria && (
+              <button onClick={()=>{setHistoriaDraft(seleccionado.historia||"");setEditandoHistoria(true);}} style={{padding:"4px 11px",fontSize:11,background:seleccionado.historia?"var(--superficie)":"var(--primario)",color:seleccionado.historia?"var(--primario)":"var(--texto-inv)",border:seleccionado.historia?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>
+                {seleccionado.historia ? "✏ Editar" : "+ Agregar Historia"}
+              </button>
+            )}
+          </div>
+          {editandoHistoria ? (
+            <>
+              <textarea value={historiaDraft} onChange={e=>setHistoriaDraft(e.target.value)} placeholder="Breve historia del paciente: motivo de ingreso, contexto clínico, evolución previa..." rows={4} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={guardarHistoria} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar historia</button>
+                <button onClick={()=>setEditandoHistoria(false)} style={{padding:"9px 14px",fontSize:13,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+              </div>
+            </>
+          ) : seleccionado.historia ? (
+            <div style={{fontSize:13,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.5,background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px"}}>{seleccionado.historia}</div>
+          ) : null}
+        </div>
+
+        {/* ÚLTIMA EVOLUCIÓN + anteriores colapsadas */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>📝 Evoluciones</div>
+          {evoluciones.length === 0 ? (
+            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay evoluciones registradas</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {(mostrarEvosAntiguas ? evoluciones : evoluciones.slice(0,1)).map((e, idx) => (
+                <div key={e.id} style={{background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:idx===0?"3px solid var(--primario)":"3px solid var(--borde)",border:idx===0?"0.5px solid var(--primario)":"none"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:8}}>
+                    <div style={{fontSize:11,color:"var(--texto-ter)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {idx===0 && <span style={{fontSize:9,background:"var(--primario)",color:"var(--texto-inv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>MÁS RECIENTE</span>}
+                      {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"var(--exito)":e.tipo==="examen"?"var(--alerta)":"var(--texto-sec)",fontWeight:e.tipo==="examen"?600:400}}>{e.tipo==="examen"?"🧪 examen":e.tipo}</span>
+                    </div>
+                    {e.autor_id === currentUser.id && (
+                      <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                    )}
+                  </div>
+                  <div style={{fontSize:idx===0?13:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
+                </div>
+              ))}
+              {evoluciones.length > 1 && (
+                <button onClick={()=>setMostrarEvosAntiguas(!mostrarEvosAntiguas)} style={{padding:"8px",fontSize:12,background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                  {mostrarEvosAntiguas ? "▴ Ocultar evoluciones anteriores" : `▾ Ver ${evoluciones.length - 1} evolución${evoluciones.length - 1 === 1 ? "" : "es"} anterior${evoluciones.length - 1 === 1 ? "" : "es"}`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* EXÁMENES agrupados por día + anteriores colapsados */}
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>🧪 Exámenes</div>
+          {examenes.length === 0 ? (
+            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay exámenes registrados</div>
+          ) : (() => {
+            // Agrupar por fecha_examen (desc)
+            const porDia = {};
+            examenes.forEach(ex => { const f = ex.fecha_examen || "s/f"; if (!porDia[f]) porDia[f] = []; porDia[f].push(ex); });
+            const fechas = Object.keys(porDia).sort((a,b)=>b.localeCompare(a));
+            const fechasVisibles = mostrarExAntiguos ? fechas : fechas.slice(0,1);
+            const cardExamen = (ex) => (
+                <div key={ex.id} style={{background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid var(--exito)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:"var(--texto)"}}>
+                        <span style={{fontSize:9,padding:"1px 6px",background:"var(--exito)",color:"var(--texto-inv)",borderRadius:3,marginRight:6}}>{ex.tipo}</span>
+                        {ex.nombre}
+                      </div>
+                      <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>{ex.autor?.nombre || "Anónimo"}</div>
+                    </div>
+                    {ex.autor_id === currentUser.id && (
+                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                    )}
+                  </div>
+                  {ex.datos_estructurados && (ex.datos_estructurados.pirads || ex.datos_estructurados.pesoProstatico || ex.datos_estructurados.lugar || ex.datos_estructurados.tipoCultivo) && (
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                      {ex.datos_estructurados.pirads && <span style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>PI-RADS {ex.datos_estructurados.pirads}</span>}
+                      {ex.datos_estructurados.pesoProstatico && <span style={{fontSize:11,background:"var(--chip-azul-bg)",color:"var(--chip-azul)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Próstata {ex.datos_estructurados.pesoProstatico} g</span>}
+                      {ex.datos_estructurados.lugar && <span style={{fontSize:11,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>📍 {ex.datos_estructurados.lugar}</span>}
+                      {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
+                    </div>
+                  )}
+                  {ex.datos_estructurados && ex.datos_estructurados.parametros && Object.keys(ex.datos_estructurados.parametros).length > 0 && (
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6}}>
+                      {Object.entries(ex.datos_estructurados.parametros).map(([k,v]) => {
+                        const def = (PARAMETROS_LAB[ex.nombre] || []).find(p => p.key === k);
+                        return (
+                          <span key={k} style={{fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8}}>
+                            <strong>{def?.label || k}:</strong> {v}{def?.unidad ? ` ${def.unidad}` : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.litiasis) && ex.datos_estructurados.litiasis.length > 0 && (
+                    <div style={{marginTop:6}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🪨 Litiasis</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {ex.datos_estructurados.litiasis.map((l,i) => (
+                          <span key={i} style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
+                            {[l.ubicacion,l.tercio,l.lateralidad,l.tamano?`${l.tamano} mm`:"",l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · ")}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.tumores) && ex.datos_estructurados.tumores.length > 0 && (
+                    <div style={{marginTop:6}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🎯 Tumor</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {ex.datos_estructurados.tumores.map((t,i) => (
+                          <span key={i} style={{fontSize:11,background:"var(--peligro-bg)",color:"var(--peligro)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
+                            {[t.organo,t.sublocalizacion,t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · ")}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {ex.resultado && <div style={{fontSize:12,color:"var(--texto)",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
+                </div>
+            );
+            return (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {fechasVisibles.map(fecha => (
+                  <div key={fecha}>
+                    <div style={{fontSize:11,fontWeight:700,color:"var(--texto-sec)",marginBottom:5,padding:"3px 10px",background:"var(--fondo-suave)",borderRadius:6,display:"inline-block"}}>
+                      📅 {fecha === "s/f" ? "Sin fecha" : fecha} · {porDia[fecha].length} examen{porDia[fecha].length===1?"":"es"}
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {porDia[fecha].map(cardExamen)}
+                    </div>
+                  </div>
+                ))}
+                {fechas.length > 1 && (
+                  <button onClick={()=>setMostrarExAntiguos(!mostrarExAntiguos)} style={{padding:"8px",fontSize:12,background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                    {mostrarExAntiguos ? "▴ Ocultar exámenes anteriores" : `▾ Ver exámenes de ${fechas.length - 1} día${fechas.length - 1 === 1 ? "" : "s"} anterior${fechas.length - 1 === 1 ? "" : "es"}`}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* PENDIENTES DEL PACIENTE */}
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>✅ Pendientes del paciente</div>
+          <textarea value={nuevoPendientePac.texto} onChange={e=>setNuevoPendientePac({...nuevoPendientePac,texto:e.target.value})} placeholder="¿Qué hay que hacer con este paciente?" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+            <select value={nuevoPendientePac.prioridad} onChange={e=>setNuevoPendientePac({...nuevoPendientePac,prioridad:e.target.value})} style={{...inputStyle,marginBottom:0}}>
+              <option value="alta">🔴 Alta</option>
+              <option value="normal">🟡 Normal</option>
+              <option value="baja">🟢 Baja</option>
+            </select>
+            <input type="date" value={nuevoPendientePac.fecha_objetivo} onChange={e=>setNuevoPendientePac({...nuevoPendientePac,fecha_objetivo:e.target.value})} style={{...inputStyle,marginBottom:0}}/>
+          </div>
+          {esEquipo && miembrosEquipo.length > 0 && (
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:4}}>Encargados:</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {miembrosEquipo.map(m => {
+                  const uid = m.perfiles?.id, nombre = m.perfiles?.nombre;
+                  if (!uid || !nombre) return null;
+                  const sel = nuevoPendientePac.encargados.includes(uid);
+                  return (
+                    <button key={uid} onClick={()=>setNuevoPendientePac({...nuevoPendientePac,encargados: sel ? nuevoPendientePac.encargados.filter(x=>x!==uid) : [...nuevoPendientePac.encargados, uid]})} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)",fontWeight:sel?600:400}}>{nombre}</button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <button onClick={guardarPendientePaciente} disabled={!nuevoPendientePac.texto.trim()} style={{...btnPrimary,marginTop:0,marginBottom:pendientesPaciente.length>0?10:0,opacity:nuevoPendientePac.texto.trim()?1:0.6}}>+ Agregar pendiente</button>
+          {pendientesPaciente.map(p => (
+            <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:"var(--fondo-suave)",borderRadius:6,marginBottom:4,opacity:p.estado==="completado"?0.55:1}}>
+              <button onClick={()=>togglePendientePacCompletado(p)} style={{width:17,height:17,borderRadius:4,border:"1px solid var(--borde)",background:p.estado==="completado"?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}}>{p.estado==="completado"?"✓":""}</button>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,color:"var(--texto)",textDecoration:p.estado==="completado"?"line-through":"none"}}>{p.texto.replace(/^\[[^\]]*\]\s*/,"")}</div>
+                <div style={{fontSize:10,color:"var(--texto-ter)"}}>{p.prioridad==="alta"?"🔴":p.prioridad==="baja"?"🟢":"🟡"}{p.fecha_objetivo?` · para el ${p.fecha_objetivo}`:""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* NUEVA EVOLUCIÓN (formulario) */}
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>➕ Nueva evolución</div>
 
           {/* Selector tipo */}
           <div style={{display:"flex",gap:8,marginBottom:10}}>
@@ -3893,34 +4313,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 </div>
           )}
 
-          <button onClick={guardarEvolucion} style={{...btnPrimary, marginTop:0, marginBottom:12}}>+ Guardar evolución</button>
-
-          {/* Lista de evoluciones */}
-          {evoluciones.length === 0 ? (
-            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"10px 0"}}>No hay evoluciones registradas</div>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {evoluciones.map((e, idx) => (
-                <div key={e.id} style={{background:idx===0?"var(--fondo-suave)":"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:idx===0?"3px solid var(--primario)":"3px solid var(--borde)",border:idx===0?"0.5px solid var(--primario)":"none"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:8}}>
-                    <div style={{fontSize:11,color:"var(--texto-ter)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      {idx===0 && <span style={{fontSize:9,background:"var(--primario)",color:"var(--texto-inv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>MÁS RECIENTE</span>}
-                      {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"var(--exito)":e.tipo==="examen"?"var(--alerta)":"var(--texto-sec)",fontWeight:e.tipo==="examen"?600:400}}>{e.tipo==="examen"?"🧪 examen":e.tipo}</span>
-                    </div>
-                    {e.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
-                    )}
-                  </div>
-                  <div style={{fontSize:idx===0?13:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <button onClick={guardarEvolucion} style={{...btnPrimary, marginTop:0}}>+ Guardar evolución</button>
         </div>
 
-        {/* EXÁMENES */}
+        {/* NUEVO EXAMEN (formulario) */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>🧪 Exámenes</div>
+          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>➕ Nuevo examen</div>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
             <select value={nuevoEx.tipo} onChange={e=>setNuevoEx({...nuevoEx,tipo:e.target.value,nombre:"",pirads:"",pesoProstatico:"",lugar:"",tipoCultivo:""})} style={{...inputStyle,marginBottom:0}}>
@@ -3959,7 +4357,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {nuevoEx.tipo === "Imagen" && (
             <select value={nuevoEx.nombre} onChange={e=>setNuevoEx({...nuevoEx,nombre:e.target.value,pirads:"",pesoProstatico:""})} style={inputStyle}>
               <option value="">Selecciona imagen...</option>
-              {["UROTAC","TAC TAP","Pielotac","RM próstata","TAC tórax","Eco VP","Eco testicular","Eco renal","Eco abdominal","Cintigrama óseo","PET PSMA","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
+              {["UROTAC","TAC","Pielotac","RM próstata","Eco VP","Eco testicular","Eco renal","Eco abdominal","Cintigrama óseo","PET PSMA","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           )}
           {nuevoEx.tipo === "Anatomía patológica" && (
@@ -4041,7 +4439,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
 
           {/* CONSTRUCTOR DE TUMOR (UROTAC, TAC TAP, Eco renal) */}
-          {(nuevoEx.nombre === "UROTAC" || nuevoEx.nombre === "TAC TAP" || nuevoEx.nombre === "Eco renal") && (
+          {(nuevoEx.nombre === "UROTAC" || nuevoEx.nombre === "TAC" || nuevoEx.nombre === "Eco renal") && (
             <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
               <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🎯 Tumor</div>
               {tumores.length > 0 && (
@@ -4091,75 +4489,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
 
           <textarea value={nuevoEx.resultado} onChange={e=>setNuevoEx({...nuevoEx,resultado:e.target.value})} placeholder="Resultado (opcional)" rows={2} style={{...inputStyle,resize:"vertical"}}/>
-          <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0, marginBottom:12}}>+ Guardar examen</button>
+          <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0}}>+ Guardar examen</button>
 
-          {examenes.length === 0 ? (
-            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"10px 0"}}>No hay exámenes registrados</div>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {examenes.map(ex => (
-                <div key={ex.id} style={{background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid var(--exito)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:"var(--texto)"}}>
-                        <span style={{fontSize:9,padding:"1px 6px",background:"var(--exito)",color:"var(--texto-inv)",borderRadius:3,marginRight:6}}>{ex.tipo}</span>
-                        {ex.nombre}
-                      </div>
-                      <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>{ex.fecha_examen} | {ex.autor?.nombre || "Anónimo"}</div>
-                    </div>
-                    {ex.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
-                    )}
-                  </div>
-                  {ex.datos_estructurados && (ex.datos_estructurados.pirads || ex.datos_estructurados.pesoProstatico || ex.datos_estructurados.lugar || ex.datos_estructurados.tipoCultivo) && (
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
-                      {ex.datos_estructurados.pirads && <span style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>PI-RADS {ex.datos_estructurados.pirads}</span>}
-                      {ex.datos_estructurados.pesoProstatico && <span style={{fontSize:11,background:"var(--chip-azul-bg)",color:"var(--chip-azul)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Próstata {ex.datos_estructurados.pesoProstatico} g</span>}
-                      {ex.datos_estructurados.lugar && <span style={{fontSize:11,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>📍 {ex.datos_estructurados.lugar}</span>}
-                      {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
-                    </div>
-                  )}
-                  {ex.datos_estructurados && ex.datos_estructurados.parametros && Object.keys(ex.datos_estructurados.parametros).length > 0 && (
-                    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6}}>
-                      {Object.entries(ex.datos_estructurados.parametros).map(([k,v]) => {
-                        const def = (PARAMETROS_LAB[ex.nombre] || []).find(p => p.key === k);
-                        return (
-                          <span key={k} style={{fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8}}>
-                            <strong>{def?.label || k}:</strong> {v}{def?.unidad ? ` ${def.unidad}` : ""}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.litiasis) && ex.datos_estructurados.litiasis.length > 0 && (
-                    <div style={{marginTop:6}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🪨 Litiasis</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                        {ex.datos_estructurados.litiasis.map((l,i) => (
-                          <span key={i} style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
-                            {[l.ubicacion,l.tercio,l.lateralidad,l.tamano?`${l.tamano} mm`:"",l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · ")}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.tumores) && ex.datos_estructurados.tumores.length > 0 && (
-                    <div style={{marginTop:6}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🎯 Tumor</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                        {ex.datos_estructurados.tumores.map((t,i) => (
-                          <span key={i} style={{fontSize:11,background:"var(--peligro-bg)",color:"var(--peligro)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
-                            {[t.organo,t.sublocalizacion,t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · ")}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {ex.resultado && <div style={{fontSize:12,color:"var(--texto)",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     );
@@ -4418,6 +4749,49 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotificationBell({ currentUser }) {
+  const [abierto, setAbierto] = useState(false);
+  const [notifs, setNotifs] = useState([]);
+  const noLeidas = notifs.filter(n => !n.leida).length;
+
+  const cargar = async () => {
+    const r = await listarNotificaciones(currentUser.id);
+    if (r.ok) setNotifs(r.notificaciones);
+  };
+  useEffect(() => { cargar(); const t = setInterval(cargar, 90000); return () => clearInterval(t); }, []);
+
+  const abrir = async () => {
+    setAbierto(!abierto);
+    if (!abierto && noLeidas > 0) {
+      await marcarNotificacionesLeidas(currentUser.id);
+      setNotifs(prev => prev.map(n => ({ ...n, leida: true })));
+    }
+  };
+
+  const iconoTipo = { cirugia: "🔪", paciente: "🛏️", pendiente: "✅", general: "🔔" };
+
+  return (
+    <div style={{position:"relative"}}>
+      <button onClick={abrir} title="Notificaciones" style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",padding:0,position:"relative"}}>
+        🔔
+        {noLeidas > 0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,borderRadius:9,background:"var(--peligro)",color:"var(--texto-inv)",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{noLeidas}</span>}
+      </button>
+      {abierto && (
+        <div style={{position:"absolute",top:46,right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,minWidth:290,maxWidth:340,maxHeight:380,overflowY:"auto",zIndex:30,boxShadow:"0 4px 14px rgba(0,0,0,0.15)"}}>
+          <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",fontSize:13,fontWeight:600,color:"var(--texto)"}}>Notificaciones</div>
+          {notifs.length === 0 && <div style={{padding:"18px 14px",fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Sin notificaciones</div>}
+          {notifs.map(n => (
+            <div key={n.id} style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",background:n.leida?"transparent":"var(--fondo-suave)"}}>
+              <div style={{fontSize:12,color:"var(--texto)",lineHeight:1.4}}>{iconoTipo[n.tipo]||"🔔"} {n.texto}</div>
+              <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:3}}>{new Date(n.created_at).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -5132,6 +5506,7 @@ if (!currentUser) {
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <NotificationBell currentUser={currentUser}/>
             <button onClick={()=>setTema(tema==="light"?"dark":"light")} title={tema==="light"?"Modo oscuro":"Modo claro"} style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{tema==="light"?"🌙":"☀️"}</button>
             <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:"5px 14px 5px 5px",cursor:"pointer"}}>
               <div style={{width:38,height:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
