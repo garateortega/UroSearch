@@ -714,9 +714,7 @@ function AuthScreen({ onLogin }) {
   if (view === "welcome") {
     return (
       <div style={{padding:"48px 32px", textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
-          <Uros expresion="hero" size={168} alt="Uros, tu asistente clínico de urología" style={{filter:"drop-shadow(0 8px 20px rgba(20,60,130,0.18))"}}/>
-        </div>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:24}}><LogoUroSearch size={110}/></div>
         <div style={{fontSize:42, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
         <div style={{fontSize:17, color:"var(--texto-sec)", marginBottom:38, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
@@ -1025,11 +1023,13 @@ function PreguntasPanel({ currentUser, isAdmin }) {
           <div style={{fontSize:22,fontWeight:700,color:"var(--texto)"}}>❓ Preguntas</div>
           <div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
         </div>
-        {isAdmin && (
+        {isAdmin ? (
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
             <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
           </div>
+        ) : (
+          <Uros expresion="hero" size={104} style={{flexShrink:0,alignSelf:"flex-end"}}/>
         )}
       </div>
 
