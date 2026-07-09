@@ -250,6 +250,40 @@ function LogoUroSearch({ size = 40 }) {
   );
 }
 
+// ============================================================
+// MASCOTA "Uros" — poses en /public/uros/{expresion}.webp
+// Expresiones: hola · pensando · guinando · estudiando · bienhecho
+//              explicando · hero · frente · lateral · tres-cuartos · espalda
+// Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
+// carga, estados vacíos), nunca sobre datos clínicos.
+// ============================================================
+const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
+function Uros({ expresion = "hola", size = 96, alt = "", style = {} }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return null; // tolerante: si falta el asset, no rompe la UI
+  return (
+    <img
+      src={`${UROS_BASE}${expresion}.webp`}
+      alt={alt || `Uros ${expresion}`}
+      width={size}
+      onError={() => setOk(false)}
+      style={{ height: "auto", display: "block", userSelect: "none", pointerEvents: "none", ...style }}
+      draggable={false}
+    />
+  );
+}
+// Avatar circular (cabeza) para el chat. Cae al logo SVG si falta el asset.
+function UrosAvatar({ size = 30 }) {
+  const [ok, setOk] = useState(true);
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", background: "var(--primario)", flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {ok
+        ? <img src={`${UROS_BASE}cabeza.webp`} alt="Uros" width={size} height={size} onError={() => setOk(false)} style={{ width: size, height: size, objectFit: "cover" }} draggable={false} />
+        : <LogoUroSearch size={Math.round(size * 0.72)} />}
+    </div>
+  );
+}
+
 function MapaConceptual({ data }) {
   const colors = ["#2D7DD2","#3BB273","#E84855","#F18F01","#8338EC","#06D6A0"];
   const cx = 340, cy = 220, R = 150;
@@ -364,7 +398,8 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
       {/* Lista de conversaciones */}
       <div style={{flex: 1, overflowY: "auto", padding: "8px 6px"}}>
         {conversaciones.length === 0 ? (
-          <div style={{textAlign:"center", padding:"30px 16px", color:"var(--texto-ter)", fontSize:12, lineHeight:1.5}}>
+          <div style={{textAlign:"center", padding:"24px 16px", color:"var(--texto-ter)", fontSize:12, lineHeight:1.5}}>
+            <Uros expresion="guinando" size={84} style={{margin:"0 auto 10px"}}/>
             No tienes conversaciones aún.<br/>Empieza una con el botón de arriba.
           </div>
         ) : (
@@ -467,7 +502,7 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
   const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "var(--primario)" : "var(--superficie)", color: isUser ?"var(--texto-inv)":"var(--texto)", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid var(--borde)", whiteSpace:"pre-wrap" };
   return (
     <div style={{display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:"12px"}}>
-      {!isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"var(--texto-inv)",marginRight:8,flexShrink:0,marginTop:2}}>U</div>}
+      {!isUser && <div style={{marginRight:8,marginTop:2}}><UrosAvatar size={30}/></div>}
       <div style={{maxWidth:"82%"}}>
         {isUser
           ? <div style={bubbleStyle}>{msg.content}</div>
@@ -679,7 +714,9 @@ function AuthScreen({ onLogin }) {
   if (view === "welcome") {
     return (
       <div style={{padding:"48px 32px", textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:24}}><LogoUroSearch size={110}/></div>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
+          <Uros expresion="hero" size={168} alt="Uros, tu asistente clínico de urología" style={{filter:"drop-shadow(0 8px 20px rgba(20,60,130,0.18))"}}/>
+        </div>
         <div style={{fontSize:42, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
         <div style={{fontSize:17, color:"var(--texto-sec)", marginBottom:38, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
@@ -1032,8 +1069,16 @@ function PreguntasPanel({ currentUser, isAdmin }) {
                 );
               })}
             </div>
+            {mostrarResp && (
+              <div style={{marginTop:14,display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:seleccion===actual.correcta?"var(--exito-bg)":"var(--fondo-suave)"}}>
+                <Uros expresion={seleccion===actual.correcta?"bienhecho":"explicando"} size={44}/>
+                <div style={{fontSize:13,fontWeight:600,color:seleccion===actual.correcta?"var(--exito)":"var(--texto-sec)"}}>
+                  {seleccion===actual.correcta ? "¡Bien hecho!" : "Revisa la explicación 👇"}
+                </div>
+              </div>
+            )}
             {mostrarResp && actual.feedback && (
-              <div style={{marginTop:14,padding:"12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:"3px solid var(--primario)"}}>
+              <div style={{marginTop:10,padding:"12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:"3px solid var(--primario)"}}>
                 <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:4}}>💡 Explicación</div>
                 <div style={{fontSize:13,color:"var(--texto)",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{actual.feedback}</div>
               </div>
@@ -5649,12 +5694,14 @@ if (!currentUser) {
       Cargando conversación...
     </div>
   )}
-  {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"40px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>Como admin puedes usar el chat. Escribe una consulta.</div>}
+  {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
   {!loadingConversaciones && messages.map((m,i) => <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>)}
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
-                <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:500,color:"var(--texto-inv)"}}>U</div>
-                <div style={{padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:14,color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>Consultando...</div>
+                <UrosAvatar size={30}/>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:14,color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
+                  <Uros expresion="pensando" size={26}/> Consultando...
+                </div>
               </div>
             )}
             <div ref={bottomRef}/>
