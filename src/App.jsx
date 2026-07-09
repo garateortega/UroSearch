@@ -121,7 +121,7 @@ Al responder:
 // Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
 function saludoUros(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
-  return `Hola ${primer}, soy Uros, tu asistente clínico en urología. ¿En qué te puedo ayudar?\n\n⚠️ Recuerda que esta información es de apoyo clínico y no reemplaza el juicio médico ni la evaluación individualizada del paciente.`;
+  return `👋 Hola ${primer}. Soy **Uros**, tu asistente clínico de UroSearch.\n\n¿En qué te puedo ayudar?`;
 }
 const MAX_CONVERSACIONES = 20; // máximo por usuario; al superarlo se eliminan las más antiguas
 
@@ -276,7 +276,7 @@ function LogoUroSearch({ size = 40 }) {
 // Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
 // carga, estados vacíos), nunca sobre datos clínicos.
 // ============================================================
-const UROS_VERSION = "3"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
+const UROS_VERSION = "4"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
 const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
 function Uros({ expresion = "hola", size = 96, alt = "", style = {} }) {
@@ -304,7 +304,26 @@ function UrosAvatar({ size = 30 }) {
     </div>
   );
 }
-
+// Portada del chat: figura hero + saludo. Se muestra al entrar a la pestaña Chat.
+function PortadaChat({ nombre }) {
+  const primer = (nombre || "").split(" ")[0] || "";
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, padding:"20px 4px 8px" }}>
+      <div style={{
+        flex:"1 1 0",
+        padding:"14px 16px",
+        borderRadius:"16px 16px 16px 4px",
+        background:"var(--superficie)",
+        border:"0.5px solid var(--borde)",
+        fontSize:14.5, lineHeight:1.55, color:"var(--texto)",
+      }}>
+        👋 Hola {primer}. Soy <strong>Uros</strong>, tu asistente clínico de UroSearch.
+        <div style={{ marginTop:10 }}>¿En qué te puedo ayudar?</div>
+      </div>
+      <Uros expresion="hero" size={260} style={{ flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh" }} />
+    </div>
+  );
+}
 function MapaConceptual({ data }) {
   const colors = ["#2D7DD2","#3BB273","#E84855","#F18F01","#8338EC","#06D6A0"];
   const cx = 340, cy = 220, R = 150;
@@ -5730,13 +5749,23 @@ if (!currentUser) {
       Cargando conversación...
     </div>
   )}
-  {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
-  {!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
-    <div style={{textAlign:"center",padding:"12px 0 2px"}}>
-      <Uros expresion="hola" size={128} style={{margin:"0 auto"}}/>
-    </div>
-  )}
-  {!loadingConversaciones && messages.map((m,i) => <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>)}
+{!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
+
+{!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
+  <PortadaChat nombre={currentUser?.nombre} />
+)}
+
+{!loadingConversaciones && messages.map((m,i) => {
+  // En la portada el saludo va dentro de PortadaChat, no como burbuja duplicada
+  const esPortada = messages.length === 1 && messages[0].role === "assistant" && !isAdmin;
+  if (esPortada && i === 0) return null;
+  return <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>;
+})}
+  // En la portada el saludo va dentro de PortadaChat, no como burbuja duplicada
+  const esPortada = messages.length === 1 && messages[0].role === "assistant" && !isAdmin;
+  if (esPortada && i === 0) return null;
+  return <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>;
+})}
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
@@ -5755,6 +5784,9 @@ if (!currentUser) {
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
               <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:14,borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
               <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:14,cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
+            </div>
+            <div style={{fontSize:10.5,color:"var(--texto-ter)",lineHeight:1.4,marginTop:8,textAlign:"center"}}>
+              ⚠️ Información de apoyo clínico. No reemplaza el juicio médico ni la evaluación individualizada del paciente.
             </div>
           </div>
         </div>
