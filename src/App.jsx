@@ -116,9 +116,14 @@ Al responder:
 2. Cuando la base lo respalde, menciona guías EAU/AUA o evidencia.
 3. Estructura con claridad: opciones, indicaciones, contraindicaciones.
 4. Para fármacos, incluye dosis habituales si están en la base.
-5. Para mapas conceptuales: responde SOLO con JSON: {"tipo":"mapa","titulo":"...","nodo_central":"...","ramas":[{"rama":"...","subnodos":["...","..."]}]}
+5. Para mapas conceptuales: responde SOLO con JSON: {"tipo":"mapa","titulo":"...","nodo_central":"...","ramas":[{"rama":"...","subnodos":["...","..."]}]}`;
 
-IMPORTANTE: al final de cada respuesta clínica agrega: "⚠️ Esta información es de apoyo clínico y no reemplaza el juicio médico ni la evaluación individualizada del paciente."`;
+// Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
+function saludoUros(nombre) {
+  const primer = (nombre || "").split(" ")[0] || "";
+  return `Hola ${primer}, soy Uros, tu asistente clínico en urología. ¿En qué te puedo ayudar?\n\n⚠️ Recuerda que esta información es de apoyo clínico y no reemplaza el juicio médico ni la evaluación individualizada del paciente.`;
+}
+const MAX_CONVERSACIONES = 20; // máximo por usuario; al superarlo se eliminan las más antiguas
 
 const PRESET_MAPS = {
   "Cáncer de próstata": { titulo: "Cáncer de próstata", nodo_central: "Ca. Próstata", ramas: [
@@ -257,13 +262,15 @@ function LogoUroSearch({ size = 40 }) {
 // Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
 // carga, estados vacíos), nunca sobre datos clínicos.
 // ============================================================
+const UROS_VERSION = "3"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
+const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
 function Uros({ expresion = "hola", size = 96, alt = "", style = {} }) {
   const [ok, setOk] = useState(true);
   if (!ok) return null; // tolerante: si falta el asset, no rompe la UI
   return (
     <img
-      src={`${UROS_BASE}${expresion}.webp`}
+      src={urosSrc(expresion)}
       alt={alt || `Uros ${expresion}`}
       width={size}
       onError={() => setOk(false)}
@@ -278,7 +285,7 @@ function UrosAvatar({ size = 30 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", background: "var(--primario)", flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
       {ok
-        ? <img src={`${UROS_BASE}cabeza.webp`} alt="Uros" width={size} height={size} onError={() => setOk(false)} style={{ width: size, height: size, objectFit: "cover" }} draggable={false} />
+        ? <img src={urosSrc("cabeza")} alt="Uros" width={size} height={size} onError={() => setOk(false)} style={{ width: size, height: size, objectFit: "cover" }} draggable={false} />
         : <LogoUroSearch size={Math.round(size * 0.72)} />}
     </div>
   );
@@ -713,10 +720,10 @@ function AuthScreen({ onLogin }) {
 
   if (view === "welcome") {
     return (
-      <div style={{padding:"48px 32px", textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:24}}><LogoUroSearch size={110}/></div>
-        <div style={{fontSize:42, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
-        <div style={{fontSize:17, color:"var(--texto-sec)", marginBottom:38, lineHeight:1.5}}>Asistente Clínico de Urología</div>
+      <div style={{padding:"40px 32px", textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:18}}><LogoUroSearch size={78}/></div>
+        <div style={{fontSize:32, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
+        <div style={{fontSize:15, color:"var(--texto-sec)", marginBottom:34, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
           <button onClick={()=>{setView("login"); setError(""); setInfo("");}} style={{...btnPrimary, padding:"14px", fontSize:16}}>Iniciar sesión</button>
           <button onClick={()=>{setView("register"); setError(""); setInfo("");}} style={{...btnSecondary, padding:"14px", fontSize:16}}>Solicitar cuenta</button>
@@ -1023,13 +1030,11 @@ function PreguntasPanel({ currentUser, isAdmin }) {
           <div style={{fontSize:22,fontWeight:700,color:"var(--texto)"}}>❓ Preguntas</div>
           <div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
         </div>
-        {isAdmin ? (
+        {isAdmin && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
             <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
           </div>
-        ) : (
-          <Uros expresion="hero" size={104} style={{flexShrink:0,alignSelf:"flex-end"}}/>
         )}
       </div>
 
@@ -5056,7 +5061,7 @@ const nuevaConversacion = () => {
   if (currentUser) {
     setMessages([{ 
       role: "assistant", 
-      content: `Hola ${currentUser.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` 
+      content: saludoUros(currentUser.nombre) 
     }]);
   } else {
     setMessages([]);
@@ -5117,7 +5122,7 @@ const nuevaConversacion = () => {
   if (currentUser) {
     setMessages([{ 
       role: "assistant", 
-      content: `Hola ${currentUser.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` 
+      content: saludoUros(currentUser.nombre) 
     }]);
   } else {
     setMessages([]);
@@ -5232,9 +5237,10 @@ const videosResult = await listarVideos();
 if (videosResult.ok) {
   setVideos(videosResult.videos);
 }
-// Si no hay conversaciones, mostrar mensaje de bienvenida
-if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.length === 0)) {
-  setMessages([{ role:"assistant", content:`Hola ${perfil.nombre.split(" ")[0]}. Soy UroSearch. ¿En qué te puedo ayudar?` }]);
+// Al abrir el chat, siempre partir en una conversación nueva con el saludo de Uros
+if (perfil.rol !== "admin") {
+  setConversacionActual(null);
+  setMessages([{ role:"assistant", content:saludoUros(perfil.nombre) }]);
 }
 };
 
@@ -5372,8 +5378,16 @@ if (perfil.rol !== "admin" && (!convResult.ok || convResult.conversaciones.lengt
     if (crearResult.ok) {
       conversacionId = crearResult.conversacion.id;
       setConversacionActual(conversacionId);
-      // Agregar la nueva conversación al inicio de la lista
-      setConversaciones(prev => [crearResult.conversacion, ...prev]);
+      // Agregar la nueva conversación al inicio; limitar a MAX_CONVERSACIONES
+      setConversaciones(prev => {
+        const nueva = [crearResult.conversacion, ...prev];
+        if (nueva.length > MAX_CONVERSACIONES) {
+          const sobrantes = nueva.slice(MAX_CONVERSACIONES); // las más antiguas
+          sobrantes.forEach(c => { eliminarConversacion(c.id).catch(()=>{}); });
+          return nueva.slice(0, MAX_CONVERSACIONES);
+        }
+        return nueva;
+      });
     } else {
       console.error("Error al crear conversación:", crearResult.error);
     }
@@ -5595,10 +5609,10 @@ if (!currentUser) {
       <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <LogoUroSearch size={56}/>
+            <LogoUroSearch size={40}/>
             <div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:28,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
+                <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:21,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
                 {isAdmin && <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
               </div>
               <div style={{fontSize:14,color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
@@ -5695,6 +5709,11 @@ if (!currentUser) {
     </div>
   )}
   {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
+  {!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
+    <div style={{textAlign:"center",padding:"12px 0 2px"}}>
+      <Uros expresion="hola" size={128} style={{margin:"0 auto"}}/>
+    </div>
+  )}
   {!loadingConversaciones && messages.map((m,i) => <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>)}
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
