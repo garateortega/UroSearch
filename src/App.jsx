@@ -5761,11 +5761,6 @@ if (!currentUser) {
   if (esPortada && i === 0) return null;
   return <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>;
 })}
-  // En la portada el saludo va dentro de PortadaChat, no como burbuja duplicada
-  const esPortada = messages.length === 1 && messages[0].role === "assistant" && !isAdmin;
-  if (esPortada && i === 0) return null;
-  return <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>;
-})}
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
