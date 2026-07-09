@@ -150,6 +150,20 @@ const PRESET_MAPS = {
 const VERSION = "v0.12.0 (beta)";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
+// ─── Perfiles / roles y permisos ───────────────────────────────
+// admin: todo · urologo/residente: clínico completo · interno: estudio+chat, Hospital SOLO LECTURA
+// enfermeria: chat + Hospital (sin Biblioteca)
+const ROLES_ASIGNABLES = [["urologo","Urólogo/a"],["residente","Residente"],["interno","Interno/a"],["enfermeria","Enfermería"]];
+const ROL_LABEL = { admin:"Administrador", urologo:"Urólogo/a", residente:"Residente", interno:"Interno/a", enfermeria:"Enfermería" };
+function tabsPorRol(rol, pendientesCount = 0) {
+  const chat = ["chat","💬 Chat"];
+  const hospital = ["hospital","🏥 Hospital"];
+  const biblio = ["conocimiento","📖 Biblioteca"];
+  if (rol === "admin") return [["admin",`👤 Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`], chat, hospital, biblio];
+  if (rol === "enfermeria") return [chat, hospital];   // sin Biblioteca
+  return [chat, hospital, biblio];                      // urologo, residente, interno
+}
+
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
 
 
@@ -831,6 +845,12 @@ function AdminPanel() {
     setPerfiles(perfiles.map(u => u.id === userId ? {...u, estado: nuevoEstado} : u));
   };
 
+  const cambiarRol = async (userId, nuevoRol) => {
+    const { error } = await supabase.from("perfiles").update({ rol: nuevoRol }).eq("id", userId);
+    if (error) { alert("Error al cambiar el perfil: " + error.message); return; }
+    setPerfiles(perfiles.map(u => u.id === userId ? {...u, rol: nuevoRol} : u));
+  };
+
   const eliminar = async (userId) => {
     if (!confirm("¿Eliminar definitivamente esta cuenta?\n\nNota: el usuario seguirá registrado en el sistema de autenticación pero no podrá acceder a UroSearch hasta que un admin lo vuelva a aprobar.")) return;
     const result = await eliminarUsuario(userId);
@@ -890,6 +910,14 @@ function AdminPanel() {
               {u.fecha_registro && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
               {u.documento_nombre && (
                 <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6,fontSize:11,color:"var(--texto-sec)",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
+              )}
+              {u.rol !== "admin" && (
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                  <span style={{fontSize:11,color:"var(--texto-ter)"}}>Perfil:</span>
+                  <select value={u.rol || "urologo"} onChange={e=>cambiarRol(u.id, e.target.value)} style={{padding:"4px 8px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+                    {ROLES_ASIGNABLES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
               )}
               <div style={{display:"flex",gap:6,marginTop:8}}>
                 {u.estado === "pendiente" && (<>
@@ -1894,9 +1922,6 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
     e.miembros_equipo?.some(m => m.user_id === currentUser.id)
   );
 
-  // Etiqueta de lo que se está viendo actualmente
-  // Buscamos en TODA la lista de equipos (no solo misEquipos) para que el nombre
-  // siempre aparezca aunque el filtro de pertenencia no calce.
   const actual = contexto === "personal"
     ? { icono: "👤", nombre: "Mis Pacientes", color: "var(--primario)" }
     : (() => {
@@ -1907,31 +1932,28 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   const elegir = (valor) => { setContexto(valor); setAbierto(false); };
 
   return (
-    <div style={{padding:"8px 14px",background:"var(--superficie)",borderBottom:"0.5px solid var(--borde)",display:"flex",alignItems:"center",gap:8}}>
-      <span style={{fontSize:12,color:"var(--texto-ter)"}}>Viendo:</span>
-      <div style={{position:"relative"}}>
-        <button onClick={()=>setAbierto(!abierto)} style={{padding:"6px 12px",fontSize:13,fontWeight:600,borderRadius:14,cursor:"pointer",border:"none",background:actual.color,color:"var(--texto-inv)",display:"flex",alignItems:"center",gap:6}}>
-          {actual.icono} {actual.nombre} <span style={{fontSize:11}}>▾</span>
-        </button>
-        {abierto && (
-          <>
-            <div onClick={()=>setAbierto(false)} style={{position:"fixed",inset:0,zIndex:20}}/>
-            <div style={{position:"absolute",top:"110%",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"4px",minWidth:200,zIndex:30,boxShadow:"0 2px 8px rgba(0,0,0,0.12)"}}>
-              <div onClick={()=>elegir("personal")} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto==="personal"?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
-                <span>👤</span> Mis Pacientes {contexto==="personal" && <span style={{marginLeft:"auto",color:"var(--primario)"}}>✓</span>}
-              </div>
-              {misEquipos.map(eq => (
-                <div key={eq.id} onClick={()=>elegir(eq.id)} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto===eq.id?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
-                  <span>👥</span> {eq.nombre} {contexto===eq.id && <span style={{marginLeft:"auto",color:"var(--exito)"}}>✓</span>}
-                </div>
-              ))}
-              <div onClick={()=>{ setAbierto(false); onAbrirEquipos(); }} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,color:"var(--primario)",borderTop:"0.5px solid var(--fondo)",marginTop:4,display:"flex",alignItems:"center",gap:8}}>
-                <span>⚙️</span> Gestionar / crear equipo
-              </div>
+    <div style={{position:"relative",flexShrink:0,alignSelf:"center",marginLeft:8}}>
+      <button onClick={()=>setAbierto(!abierto)} title="Cambiar contexto (equipos / mis pacientes)" style={{padding:"5px 10px",fontSize:12,fontWeight:600,borderRadius:14,cursor:"pointer",border:"none",background:actual.color,color:"var(--texto-inv)",display:"flex",alignItems:"center",gap:5,maxWidth:150,whiteSpace:"nowrap",overflow:"hidden"}}>
+        <span>{actual.icono}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{actual.nombre}</span> <span style={{fontSize:10}}>▾</span>
+      </button>
+      {abierto && (
+        <>
+          <div onClick={()=>setAbierto(false)} style={{position:"fixed",inset:0,zIndex:20}}/>
+          <div style={{position:"absolute",top:"115%",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"4px",minWidth:210,zIndex:30,boxShadow:"0 2px 8px rgba(0,0,0,0.12)"}}>
+            <div onClick={()=>elegir("personal")} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto==="personal"?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
+              <span>👤</span> Mis Pacientes {contexto==="personal" && <span style={{marginLeft:"auto",color:"var(--primario)"}}>✓</span>}
             </div>
-          </>
-        )}
-      </div>
+            {misEquipos.map(eq => (
+              <div key={eq.id} onClick={()=>elegir(eq.id)} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto===eq.id?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
+                <span>👥</span> {eq.nombre} {contexto===eq.id && <span style={{marginLeft:"auto",color:"var(--exito)"}}>✓</span>}
+              </div>
+            ))}
+            <div onClick={()=>{ setAbierto(false); onAbrirEquipos(); }} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,color:"var(--primario)",borderTop:"0.5px solid var(--fondo)",marginTop:4,display:"flex",alignItems:"center",gap:8}}>
+              <span>⚙️</span> Gestionar / crear equipo
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1949,6 +1971,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
     catch { return "personal"; }
   });
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false); // submenú de herramientas (2do toque en la pestaña)
 
   useEffect(() => {
     try { localStorage.setItem("uro_subtab_hospital", subTab); } catch {}
@@ -1974,16 +1997,25 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
     );
   }
 
+  const soloLectura = currentUser?.rol === "interno"; // Interno: solo observa en Hospital
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
-      <div style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 12px 0",overflowX:"auto",flexShrink:0}}>
-        {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla Quirúrgica"],["notas","🗒️ Notas"]].map(([id,label]) => (
-          <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid var(--primario)":"3px solid transparent",color:subTab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
-        ))}
+      <div style={{display:"flex",alignItems:"flex-end",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 10px 0",flexShrink:0}}>
+        <div style={{display:"flex",gap:0,overflowX:"auto",flex:1,minWidth:0}}>
+          {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla"],["notas","🗒️ Notas"]].map(([id,label]) => {
+            const activo = subTab===id;
+            const conTools = id==="pacientes" || id==="tabla";
+            return (
+              <button key={id} onClick={()=>{ if(activo && conTools){ setToolsOpen(o=>!o); } else { setSubTab(id); setToolsOpen(false); } }} style={{padding:"13px 14px",fontSize:14,fontWeight:activo?600:500,background:"transparent",border:"none",borderBottom:activo?"3px solid var(--primario)":"3px solid transparent",color:activo?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}} title={conTools?"Toca de nuevo para ver opciones":undefined}>
+                {label}{activo && conTools ? (toolsOpen ? " ▴" : " ▾") : ""}
+              </button>
+            );
+          })}
+        </div>
+        <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
       </div>
-      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes}/>}
-      {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes}/>}
+      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
+      {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
     </div>
   );
@@ -2376,7 +2408,7 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
   );
 }
 
-function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias, setPacientes }) {
+function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias, setPacientes, toolsOpen, soloLectura }) {
   const [vista, setVista] = useState("tabla");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "tabla", () => { setVista("tabla"); setSeleccionado(null); });
@@ -3021,20 +3053,22 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
-        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)"}}>
-          {esEquipo ? `🔪 Tabla - ${equipoActual?.nombre}` : "🔪 Mi tabla quirúrgica"}
-        </div>
-        <div style={{display:"flex",gap:6}}>
+      {/* Submenú de herramientas (aparece al tocar de nuevo la pestaña "Tabla") */}
+      {toolsOpen && !soloLectura && (
+        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
           <label style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
             📊 Importar Excel
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
           </label>
           <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+          <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
+            <button onClick={()=>setModoVista("planner")} style={modoVista==="planner"?toggleOn:toggleOff}>📅 Planner</button>
+            <button onClick={()=>setModoVista("lista")} style={modoVista==="lista"?toggleOn:toggleOff}>☰ Lista</button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Navegación de semana + filtros */}
+      {/* Navegación de semana + filtro de estado (siempre visible) */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:4}}>
           <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()-7);setLunesSemana(d);}} style={navBtn}>‹</button>
@@ -3052,11 +3086,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
-        <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
-          <button onClick={()=>setModoVista("planner")} style={modoVista==="planner"?toggleOn:toggleOff}>📅 Planner</button>
-          <button onClick={()=>setModoVista("lista")} style={modoVista==="lista"?toggleOn:toggleOff}>☰ Lista</button>
-          <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:6}}>{cirugiasSemana.length} cx</span>
-        </div>
+        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{cirugiasSemana.length} cx</span>
       </div>
 
       {loadingCirugias && (
@@ -3159,7 +3189,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
  
 
-function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes }) {
+function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
   // Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
 function normalizarExamen(ex) {
@@ -4615,29 +4645,25 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:8,flexWrap:"wrap"}}>
-        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)"}}>
-          {esEquipo ? `🏥 Pacientes - ${equipoActual?.nombre}` : "👤 Mis Pacientes"}
+      {/* Submenú (aparece al tocar de nuevo la pestaña "Pacientes") */}
+      {toolsOpen && (
+        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
+          {!soloLectura && <button onClick={()=>setVista("servicios")} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios</button>}
+          {!soloLectura && <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>}
+          <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
+            <option value="todos">Todos los servicios</option>
+            {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
+            <option value="activo">Solo activos</option>
+            <option value="alta">Solo dados de alta</option>
+            <option value="todos">Todos</option>
+          </select>
         </div>
-        <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setVista("servicios")} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios</button>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>
-        </div>
-      </div>
+      )}
 
-      {/* Filtros */}
-      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:11,color:"var(--texto-ter)"}}>Filtrar:</span>
-        <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-          <option value="todos">Todos los servicios</option>
-          {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-          <option value="activo">Solo activos</option>
-          <option value="alta">Solo dados de alta</option>
-          <option value="todos">Todos</option>
-        </select>
-        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{pacientesFiltrados.length} pacientes</span>
+      <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:10}}>
+        {pacientesFiltrados.length} pacientes{filtroServicio!=="todos"?` · ${filtroServicio}`:""}{filtroEstado!=="activo"?` · ${filtroEstado==="alta"?"dados de alta":"todos"}`:""}
       </div>
 
       {loadingPacientes && (
@@ -4647,7 +4673,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {!loadingPacientes && pacientesFiltrados.length === 0 && (
         <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
           No hay pacientes en este contexto.<br/>
-          {esEquipo ? "Agrega uno con el botón + Nuevo" : "Crea tu primer paciente con + Nuevo"}
+          {soloLectura ? "" : (esEquipo ? "Toca de nuevo la pestaña para agregar con + Nuevo" : "Toca de nuevo la pestaña y crea tu primer paciente con + Nuevo")}
         </div>
       )}
 
@@ -5191,9 +5217,7 @@ const cargarPerfil = async (sessionData) => {
   // Respetar la pestaña guardada; si no hay, usar la por defecto según rol
   let tabGuardado = null;
   try { tabGuardado = localStorage.getItem("uro_tab"); } catch {}
-  const tabsValidos = perfil.rol === "admin"
-    ? ["admin", "chat", "hospital", "conocimiento", "videos"]
-    : ["chat", "hospital", "conocimiento", "videos"];
+  const tabsValidos = tabsPorRol(perfil.rol).map(t => t[0]);
   if (tabGuardado && tabsValidos.includes(tabGuardado)) {
     setTab(tabGuardado);
   } else {
@@ -5600,9 +5624,7 @@ if (!currentUser) {
   );
 }
 
-  const tabs = isAdmin
-    ? [["admin",`👤 Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`],["chat","💬 Chat"],["hospital","🏥 Hospital"],["conocimiento","📖 Biblioteca"]]
-    : [["chat","💬 Chat"],["hospital","🏥 Hospital"],["conocimiento","📖 Biblioteca"]];
+  const tabs = tabsPorRol(currentUser.rol, pendientesCount);
 
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)"}}>
