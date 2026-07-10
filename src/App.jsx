@@ -375,16 +375,208 @@ const TUTORIAL_VERSION = "1"; // súbelo si quieres re-mostrarlo a todos en una 
 // tab = pestaña que debe estar activa para que el elemento exista.
 function pasosTutorial(rol) {
   const base = [
-    { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro lo esencial en menos de un minuto." },
+    { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
+
+    // ─── CHAT ───
     { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías. No reemplaza tu juicio clínico." },
     { target: "modo-respuesta", tab: "chat", uros: "pensando", titulo: "Elige el tono", texto: "«Precisa» da respuestas breves y al grano; «Explicativa» las desarrolla con más detalle." },
-    { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Gestiona tus pacientes, la tabla quirúrgica y las notas del equipo desde aquí." },
-    { target: "tab-conocimiento", tab: "conocimiento", uros: "hola", titulo: "Biblioteca", texto: "Guías, videos y mapas conceptuales para estudiar y consultar rápido." },
+
+    // ─── HOSPITAL ───
+    { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
+    { target: "hosp-subtabs", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Pestañas de Hospital", texto: "Arriba tienes 👥 Pacientes · 📋 Tabla · 🗒️ Notas. Si tocas de nuevo la pestaña que ya está activa (aparece un ▾) se abren sus herramientas." },
+    { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "Al tocar otra vez «Pacientes» aparece esta barra:" },
+    { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
+    { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
+    { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "pensando", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
+    { tab: "hospital", subtab: "notas", demo: "notas", uros: "explicando", titulo: "Notas", texto: "Notas rápidas del contexto actual. Ejemplo:" },
+    { target: "selector-contexto", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Personal ↔ Equipo", texto: "Este botón cambia entre 👤 «Mis Pacientes» y 👥 un equipo. Pacientes, tabla y notas se muestran según el contexto elegido aquí." },
+
+    // ─── BIBLIOTECA ───
+    { target: "tab-conocimiento", tab: "conocimiento", uros: "hola", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
+    { target: "biblio-subtabs", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "🔪 Cirugías (protocolos) · 📚 Videos · ❓ Preguntas." },
+    { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "explicando", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
+    { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
+    { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
+    { tab: "conocimiento", subtab: "preguntas", uros: "bienhecho", titulo: "¡Pruébalo ahora!", texto: "Ya estás en Preguntas: responde una y verás la correcta en verde, la incorrecta en rojo y la explicación abajo." },
+
     { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
   ];
   // Enfermería no ve Biblioteca; internos sí. Filtramos pasos cuyo tab no aplica.
   const tabsFuera = rol === "enfermeria" ? ["conocimiento"] : [];
   return base.filter(p => !p.tab || !tabsFuera.includes(p.tab));
+}
+
+// Puente para que el tutorial cambie la sub-pestaña dentro de Hospital / Biblioteca.
+// Los paneles escuchan este evento y ajustan su estado interno de subTab.
+function tourIrSubtab(subtab) {
+  if (!subtab) return;
+  try { window.dispatchEvent(new CustomEvent("uro-tour-subtab", { detail: { subtab } })); } catch {}
+}
+
+// Mini-ilustraciones anotadas que se muestran dentro de la burbuja del tutorial.
+// Son maquetas (no datos reales) para explicar cada sección sin depender de que
+// el usuario ya tenga pacientes/cirugías cargados.
+function DemoTutorial({ tipo }) {
+  const caja = { border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px", background: "var(--fondo-suave)", marginTop: 4 };
+  const btn = (label, primary) => (
+    <span style={{ fontSize: 11, fontWeight: 500, padding: "5px 10px", borderRadius: 6, whiteSpace: "nowrap", border: "0.5px solid var(--borde)", background: primary ? "var(--primario)" : "var(--superficie)", color: primary ? "var(--texto-inv)" : "var(--primario)" }}>{label}</span>
+  );
+  const sel = (label) => (
+    <span style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }}>{label} ▾</span>
+  );
+  const fila = (et, val, nota) => (
+    <div style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "0.5px solid var(--borde)" }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", minWidth: 92, flexShrink: 0 }}>{et}</div>
+      <div style={{ fontSize: 11, color: "var(--texto)", flex: 1 }}>{val}{nota && <span style={{ color: "var(--texto-ter)" }}> — {nota}</span>}</div>
+    </div>
+  );
+
+  if (tipo === "pac-tools") {
+    return (
+      <div style={caja}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {btn("⚙️ Servicios")}{btn("+ Nuevo", true)}{sel("Todos los servicios")}{sel("Solo activos")}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.6 }}>
+          <b>⚙️ Servicios:</b> crea y gestiona tus servicios (Uro-A, UCI, etc.).<br />
+          <b>+ Nuevo:</b> agrega un paciente.<br />
+          <b>Todos los servicios:</b> filtra la lista por servicio.<br />
+          <b>Solo activos:</b> muestra hospitalizados / dados de alta / todos.
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "ficha") {
+    return (
+      <div style={caja}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>J.P.G.</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--primario)" }}>♂</span>
+          <span title="Estable">🟢</span><span title="Operado">🔪</span>
+          <span style={{ fontSize: 11, color: "var(--texto-sec)", marginLeft: "auto" }}>Cama 12 · Uro-A · Hospitalizado</span>
+        </div>
+        {fila("Ingreso", "12-05-2026", "día 3 post-op")}
+        {fila("Diagnóstico", "Litiasis ureteral izq. obstructiva")}
+        {fila("Antecedentes", "HTA · DM2")}
+        {fila("Alergias", "Penicilina")}
+        {fila("Estado clínico", "🟢 Estable")}
+        {fila("Operado", "🔪 URS + láser Holmium")}
+        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.5 }}>
+          Más abajo en la ficha: <b>Evoluciones SOAP</b> (con Diuresis/Drenaje) y <b>Exámenes</b> (labs, imágenes) con constructores estructurados.
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "colores") {
+    return (
+      <div style={caja}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8, marginBottom: 10 }}>
+          <span style={{ fontWeight: 700, color: "var(--texto)", fontSize: 13 }}>J.P.G.</span>
+          <span style={{ color: "var(--primario)", fontWeight: 700 }}>♂</span>
+          <span>🟢</span><span>🔪</span>
+          <span style={{ fontSize: 11, color: "var(--texto-sec)", marginLeft: "auto" }}>Cama 12</span>
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.7 }}>
+          🟢 <b>Estable</b> &nbsp; 🟡 <b>Regular</b> &nbsp; 🔴 <b>De cuidado</b><br />
+          🔪 <b>Operado</b> &nbsp;·&nbsp; ♂ / ♀ <b>sexo</b>
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "tabla-tools") {
+    return (
+      <div style={caja}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {btn("📊 Importar Excel")}{btn("+ Nueva", true)}{btn("📅 Planner")}{btn("☰ Lista")}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.6 }}>
+          <b>📊 Importar Excel:</b> carga varias cirugías de una planilla.<br />
+          <b>+ Nueva:</b> agrega una cirugía (fecha, hora, paciente, procedimiento, cirujano, pabellón).<br />
+          <b>📅 Planner:</b> vista por semana (usa ‹ › para cambiar de semana).<br />
+          <b>☰ Lista:</b> vista compacta en lista.<br />
+          <span style={{ color: "var(--texto-ter)" }}>Al abrir una cirugía ves fecha, pabellón, cirujano, ayudante y observaciones.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "notas") {
+    return (
+      <div style={caja}>
+        <div style={{ padding: "8px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--texto)" }}>UROTAC de control</span>
+            <span style={{ fontSize: 10, padding: "1px 8px", borderRadius: 20, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--exito)", marginLeft: "auto" }}>👥 Equipo</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.5 }}>Solicitar UROTAC de control en 3 meses para el paciente de cama 12 tras retiro de catéter JJ.</div>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.5 }}>
+          Cada nota puede ser <b>👥 Equipo</b> (la ve todo el equipo) o <b>👤 Personal</b> (solo tú). Título opcional.
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "protocolo") {
+    const secs = ["Descripción", "Indicaciones", "Contraindicaciones", "Preparación", "Técnica (pasos)", "Postoperatorio", "Complicaciones", "Duración y anestesia"];
+    return (
+      <div style={caja}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>🔪 Prostatectomía Radical</div>
+        <div style={{ fontSize: 10.5, color: "var(--texto-ter)", marginBottom: 8 }}>Categoría: Oncología</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+          {secs.map(s => (
+            <span key={s} style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 20, background: "var(--superficie)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)" }}>{s}</span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "videos") {
+    return (
+      <div style={caja}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
+          <div style={{ width: 46, height: 30, borderRadius: 6, background: "var(--fondo-suave)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>▶️</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--texto)" }}>URS flexible con láser Holmium</div>
+            <div style={{ fontSize: 10.5, color: "var(--texto-ter)" }}>Litiasis · 8 min</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tipo === "pregunta") {
+    const alt = (letra, texto, tipo) => {
+      let bg = "var(--superficie)", bd = "0.5px solid var(--borde)", col = "var(--texto)";
+      if (tipo === "ok") { bg = "var(--exito-bg)"; bd = "1px solid var(--exito)"; col = "var(--exito)"; }
+      if (tipo === "bad") { bg = "var(--peligro-bg)"; bd = "1px solid var(--peligro)"; col = "var(--peligro)"; }
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: bg, border: bd, color: col, fontSize: 11.5, fontWeight: tipo === "ok" ? 600 : 400 }}>
+          <b>{letra}.</b><span style={{ flex: 1 }}>{texto}</span>{tipo === "ok" && <span>✓</span>}{tipo === "bad" && <span>✗</span>}
+        </div>
+      );
+    };
+    return (
+      <div style={caja}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--texto)", marginBottom: 8, lineHeight: 1.4 }}>¿Tratamiento de elección en litiasis renal &gt; 2 cm?</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {alt("A", "LEOC", "bad")}
+          {alt("B", "NLP (nefrolitotomía percutánea)", "ok")}
+          {alt("C", "Manejo expectante")}
+        </div>
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: "var(--fondo-suave)", borderLeft: "3px solid var(--primario)" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--primario)", marginBottom: 2 }}>💡 Explicación</div>
+          <div style={{ fontSize: 11, color: "var(--texto)", lineHeight: 1.4 }}>Verde = correcta · Rojo = tu elección si fue incorrecta, con la explicación debajo.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function TutorialTour({ rol, onGoToTab, onClose }) {
@@ -394,9 +586,16 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
   const movil = useIsMobile();
   const paso = pasos[i];
 
-  // Asegura que la pestaña correcta esté activa antes de resaltar su botón.
+  // Asegura que la pestaña correcta esté activa antes de resaltar su botón,
+  // y navega a la sub-pestaña si el paso lo requiere (con reintento por si el
+  // panel aún no montó su listener).
   useEffect(() => {
     if (paso?.tab && onGoToTab) onGoToTab(paso.tab);
+    if (paso?.subtab) {
+      const t1 = setTimeout(() => tourIrSubtab(paso.subtab), 120);
+      const t2 = setTimeout(() => tourIrSubtab(paso.subtab), 320);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
   }, [i]);
 
   // Calcula la posición del elemento a resaltar (reintenta un instante por si recién se montó).
@@ -425,15 +624,19 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
   // Posición de la burbuja de texto.
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const vw = typeof window !== "undefined" ? window.innerWidth : 400;
-  const cardW = movil ? Math.min(vw - 24, 340) : 340;
+  const tieneDemo = !!paso.demo;
+  const cardW = movil ? Math.min(vw - 24, tieneDemo ? 360 : 340) : (tieneDemo ? 380 : 340);
   let cardStyle;
-  if (rect && !movil) {
+  if (rect && !movil && !tieneDemo) {
     const abajo = rect.y + rect.h + 14;
     const cabeAbajo = abajo + 180 < vh;
     const left = Math.min(Math.max(12, rect.x + rect.w / 2 - cardW / 2), vw - cardW - 12);
     cardStyle = cabeAbajo
       ? { top: abajo, left }
       : { top: Math.max(12, rect.y - 190), left };
+  } else if (tieneDemo) {
+    // Pasos con demostración: siempre centrado (las maquetas pueden ser altas).
+    cardStyle = { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
   } else {
     // Sin target o en móvil: centrado abajo.
     cardStyle = movil
@@ -459,7 +662,7 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
 
       {/* Tarjeta con el texto del paso */}
       <div style={{
-        position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)",
+        position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)", maxHeight: "82vh", overflowY: "auto",
         background: "var(--superficie)", border: "1px solid var(--borde)",
         borderRadius: 16, padding: "18px 18px 14px", boxShadow: "0 12px 32px rgba(15,23,42,0.28)",
         ...cardStyle
@@ -469,6 +672,7 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>{paso.titulo}</div>
         </div>
         <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--texto-sec)" }}>{paso.texto}</div>
+        {paso.demo && <DemoTutorial tipo={paso.demo} />}
 
         {/* Puntos de progreso */}
         <div style={{ display: "flex", gap: 5, justifyContent: "center", margin: "14px 0 10px" }}>
@@ -1696,9 +1900,20 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
  const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"],["preguntas","❓ Preguntas"]];
   if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
 
+  // El tutorial puede pedir cambiar de sub-pestaña de Biblioteca.
+  useEffect(() => {
+    const h = (e) => {
+      const s = e.detail && e.detail.subtab;
+      const validas = isAdmin ? ["cirugias","videos","preguntas","documentos","mapas"] : ["cirugias","videos","preguntas","mapas"];
+      if (validas.includes(s)) setSubTab(s);
+    };
+    window.addEventListener("uro-tour-subtab", h);
+    return () => window.removeEventListener("uro-tour-subtab", h);
+  }, [isAdmin]);
+
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      <div style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"0 12px",overflowX:"auto"}}>
+      <div data-tour="biblio-subtabs" style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"0 12px",overflowX:"auto"}}>
         {tabsConocimiento.map(([id,label]) => (
           <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid var(--primario)":"3px solid transparent",color:subTab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
         ))}
@@ -2119,7 +2334,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 
   return (
     <div style={{position:"relative",flexShrink:0,alignSelf:"center",marginLeft:8}}>
-      <button onClick={()=>setAbierto(!abierto)} title={`Contexto: ${actual.nombre} · cambiar equipo / mis pacientes`} style={{width:34,height:34,fontSize:16,borderRadius:"50%",cursor:"pointer",border:"1px solid var(--borde)",background:"var(--superficie)",color:actual.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <button data-tour="selector-contexto" onClick={()=>setAbierto(!abierto)} title={`Contexto: ${actual.nombre} · cambiar equipo / mis pacientes`} style={{width:34,height:34,fontSize:16,borderRadius:"50%",cursor:"pointer",border:"1px solid var(--borde)",background:"var(--superficie)",color:actual.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
         <span>{actual.icono}</span>
       </button>
       {abierto && (
@@ -2177,6 +2392,16 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
     }
   }, [contexto, equipos]);
 
+  // El tutorial puede pedir cambiar de sub-pestaña de Hospital.
+  useEffect(() => {
+    const h = (e) => {
+      const s = e.detail && e.detail.subtab;
+      if (["pacientes", "tabla", "notas"].includes(s)) { setSubTab(s); setToolsOpen(false); }
+    };
+    window.addEventListener("uro-tour-subtab", h);
+    return () => window.removeEventListener("uro-tour-subtab", h);
+  }, []);
+
   if (mostrarEquipos) {
     return (
       <EquiposPanel equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} currentUser={currentUser} onCerrar={()=>setMostrarEquipos(false)}/>
@@ -2186,7 +2411,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   const soloLectura = currentUser?.rol === "interno"; // Interno: solo observa en Hospital
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      <div style={{display:"flex",alignItems:"flex-end",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 10px 0",flexShrink:0}}>
+      <div data-tour="hosp-subtabs" style={{display:"flex",alignItems:"flex-end",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 10px 0",flexShrink:0}}>
         <div style={{display:"flex",gap:0,overflowX:"auto",flex:1,minWidth:0}}>
           {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla"],["notas","🗒️ Notas"]].map(([id,label]) => {
             const activo = subTab===id;
@@ -5637,16 +5862,53 @@ if (perfil.rol !== "admin") {
   const consultaCirugias = buscarCirugiasRelevantes(txt);
   const consultaPacientes = buscarPacientesRelevantes(txt);
 
+  // ── Flujo "responder con conocimiento propio" ──────────────────
+  // Detecta si el mensaje anterior de Uros fue una OFERTA de responder con
+  // conocimiento propio (porque no encontró nada en la base) y si el usuario
+  // acaba de aceptar/rechazar esa oferta.
+  const FRASE_OFERTA = "¿Quieres que te responda con mi propio conocimiento";
+  const ultimoAsistente = [...messages].reverse().find(m => m.role === "assistant");
+  const ofrecioConocimiento = !!(ultimoAsistente && (ultimoAsistente.ofrecioConocimiento || (ultimoAsistente.content || "").includes(FRASE_OFERTA)));
+  const esAfirmacion = /^\s*(s[ií]\b|si\b|dale\b|ok(ay)?\b|ya\b|claro\b|bueno\b|obvio\b|correcto\b|afirmativo\b|por\s*favor\b|de\s*una\b|hazlo\b|adelante\b|responde|resp[oó]ndeme|cont[eé]stame|yes\b)/i;
+  const esNegacion = /^\s*(no\b|nel\b|negativo\b|mejor\s*no\b|d[eé]jalo\b|as[ií]\s*no\b)/i;
+  const usarConocimientoPropio = ofrecioConocimiento && esAfirmacion.test(txt) && !esNegacion.test(txt);
+  const declinoConocimiento = ofrecioConocimiento && !usarConocimientoPropio && esNegacion.test(txt);
+  // Recupera la consulta original (el mensaje del usuario justo antes de la oferta)
+  let preguntaOriginal = "";
+  if (usarConocimientoPropio) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant" && (messages[i].ofrecioConocimiento || (messages[i].content || "").includes(FRASE_OFERTA))) {
+        for (let j = i - 1; j >= 0; j--) {
+          if (messages[j].role === "user") { preguntaOriginal = messages[j].content; break; }
+        }
+        break;
+      }
+    }
+  }
+
   try {
     const modoIns = modo === "precisa"
       ? "\n\nMODO PRECISA: Responde en máximo 3-4 líneas (aproximadamente 50 palabras). Sé estricto con esta extensión: solo lo esencial, directo al grano, sin introducción ni rodeos. NO te extiendas."
       : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
     let ctx = "";
-    if (tieneFuentes) {
+    if (usarConocimientoPropio) {
+      // El usuario autorizó explícitamente responder con conocimiento propio
+      ctx += "\n\n=== RESPUESTA CON CONOCIMIENTO PROPIO (AUTORIZADA POR EL USUARIO) ===\n"
+        + "El usuario NO encontró la información en la base de conocimiento de UroSearch y te ha autorizado explícitamente a responder con tu propio conocimiento clínico. "
+        + "Esta autorización tiene PRIORIDAD sobre la regla de fuente de información SOLO para esta respuesta.\n"
+        + "Responde ahora la consulta original usando tu conocimiento médico como urólogo especialista (guías EAU/AUA, criterio clínico, terminología precisa).\n"
+        + "IMPORTANTE: comienza tu respuesta EXACTAMENTE con esta línea y luego responde:\n"
+        + "\"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\"\n\n"
+        + `CONSULTA ORIGINAL DEL USUARIO: "${preguntaOriginal || txt}"`;
+    } else if (declinoConocimiento) {
+      // El usuario rechazó la oferta de conocimiento propio
+      ctx += "\n\n=== EL USUARIO DECLINÓ ===\nEl usuario NO quiere que uses conocimiento fuera de la base. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar información clínica: \"De acuerdo, me limito a la base de conocimiento de UroSearch. ¿Puedo ayudarte con otra consulta?\"";
+    } else if (tieneFuentes) {
       ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
     } else if (!consultaCirugias && !consultaPacientes) {
-      // Pregunta clínica/teórica pero SIN documentos relevantes en la base: modo estricto
-      ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE ===\nNo se encontraron documentos relevantes en la base de conocimiento para esta consulta. Responde EXACTAMENTE con este mensaje, sin agregar información propia: \"No tengo información sobre esto en mi base de conocimiento. Solo puedo responder con los documentos que han sido cargados en UroSearch.\"";
+      // Pregunta clínica/teórica pero SIN documentos relevantes en la base:
+      // en vez de rechazar, ofrece responder con conocimiento propio (como pregunta).
+      ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE ===\nNo se encontraron documentos relevantes en la base de conocimiento de UroSearch para esta consulta. NO respondas la pregunta con conocimiento propio todavía. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar ninguna información clínica: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\"";
     }
     if (consultaCirugias) {
       ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
@@ -5694,6 +5956,11 @@ if (perfil.rol !== "admin") {
     const data = await res.json();
     const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
     const respuesta = { role:"assistant", content:reply };
+    // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
+    // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
+    if (!usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes) {
+      respuesta.ofrecioConocimiento = true;
+    }
     if (videosRelevantes.length > 0) respuesta.videos = videosRelevantes;
     if (tieneFuentes) {
       const vistas = new Set();
