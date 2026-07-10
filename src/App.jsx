@@ -366,6 +366,131 @@ function PortadaChat({ nombre }) {
     </div>
   );
 }
+// ============================================================
+// TUTORIAL / ONBOARDING (modal de bienvenida + tips sobre botones reales)
+// ============================================================
+const TUTORIAL_VERSION = "1"; // súbelo si quieres re-mostrarlo a todos en una versión futura
+
+// Pasos del tour. target = data-tour del elemento a resaltar (si falta, se muestra centrado).
+// tab = pestaña que debe estar activa para que el elemento exista.
+function pasosTutorial(rol) {
+  const base = [
+    { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro lo esencial en menos de un minuto." },
+    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías. No reemplaza tu juicio clínico." },
+    { target: "modo-respuesta", tab: "chat", uros: "pensando", titulo: "Elige el tono", texto: "«Precisa» da respuestas breves y al grano; «Explicativa» las desarrolla con más detalle." },
+    { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Gestiona tus pacientes, la tabla quirúrgica y las notas del equipo desde aquí." },
+    { target: "tab-conocimiento", tab: "conocimiento", uros: "hola", titulo: "Biblioteca", texto: "Guías, videos y mapas conceptuales para estudiar y consultar rápido." },
+    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
+  ];
+  // Enfermería no ve Biblioteca; internos sí. Filtramos pasos cuyo tab no aplica.
+  const tabsFuera = rol === "enfermeria" ? ["conocimiento"] : [];
+  return base.filter(p => !p.tab || !tabsFuera.includes(p.tab));
+}
+
+function TutorialTour({ rol, onGoToTab, onClose }) {
+  const pasos = pasosTutorial(rol);
+  const [i, setI] = useState(0);
+  const [rect, setRect] = useState(null);
+  const movil = useIsMobile();
+  const paso = pasos[i];
+
+  // Asegura que la pestaña correcta esté activa antes de resaltar su botón.
+  useEffect(() => {
+    if (paso?.tab && onGoToTab) onGoToTab(paso.tab);
+  }, [i]);
+
+  // Calcula la posición del elemento a resaltar (reintenta un instante por si recién se montó).
+  useEffect(() => {
+    let raf;
+    const medir = () => {
+      if (!paso?.target) { setRect(null); return; }
+      const el = document.querySelector(`[data-tour="${paso.target}"]`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setRect({ x: r.left, y: r.top, w: r.width, h: r.height });
+      } else {
+        setRect(null);
+      }
+    };
+    raf = requestAnimationFrame(() => setTimeout(medir, 60));
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", medir); window.removeEventListener("scroll", medir, true); };
+  }, [i, paso, movil]);
+
+  const esUltimo = i === pasos.length - 1;
+  const siguiente = () => { if (esUltimo) onClose(); else setI(i + 1); };
+  const anterior = () => setI(Math.max(0, i - 1));
+
+  // Posición de la burbuja de texto.
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const cardW = movil ? Math.min(vw - 24, 340) : 340;
+  let cardStyle;
+  if (rect && !movil) {
+    const abajo = rect.y + rect.h + 14;
+    const cabeAbajo = abajo + 180 < vh;
+    const left = Math.min(Math.max(12, rect.x + rect.w / 2 - cardW / 2), vw - cardW - 12);
+    cardStyle = cabeAbajo
+      ? { top: abajo, left }
+      : { top: Math.max(12, rect.y - 190), left };
+  } else {
+    // Sin target o en móvil: centrado abajo.
+    cardStyle = movil
+      ? { bottom: 20, left: "50%", transform: "translateX(-50%)" }
+      : { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9998 }}>
+      {/* Fondo que bloquea la interacción */}
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: rect ? "transparent" : "rgba(15,23,42,0.62)" }} />
+
+      {/* Spotlight sobre el elemento real */}
+      {rect && (
+        <div style={{
+          position: "absolute",
+          left: rect.x - 8, top: rect.y - 8, width: rect.w + 16, height: rect.h + 16,
+          borderRadius: 12, border: "2px solid var(--primario)",
+          boxShadow: "0 0 0 9999px rgba(15,23,42,0.62)",
+          pointerEvents: "none", transition: "all .25s ease"
+        }} />
+      )}
+
+      {/* Tarjeta con el texto del paso */}
+      <div style={{
+        position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)",
+        background: "var(--superficie)", border: "1px solid var(--borde)",
+        borderRadius: 16, padding: "18px 18px 14px", boxShadow: "0 12px 32px rgba(15,23,42,0.28)",
+        ...cardStyle
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          {paso.uros && <Uros expresion={paso.uros} size={44} style={{ flexShrink: 0 }} />}
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>{paso.titulo}</div>
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--texto-sec)" }}>{paso.texto}</div>
+
+        {/* Puntos de progreso */}
+        <div style={{ display: "flex", gap: 5, justifyContent: "center", margin: "14px 0 10px" }}>
+          {pasos.map((_, k) => (
+            <span key={k} style={{ width: k === i ? 18 : 7, height: 7, borderRadius: 4, background: k === i ? "var(--primario)" : "var(--borde)", transition: "all .2s" }} />
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <button onClick={onClose} style={{ padding: "8px 10px", fontSize: 12, background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Saltar</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {i > 0 && <button onClick={anterior} style={{ padding: "8px 14px", fontSize: 13, borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)", cursor: "pointer" }}>Atrás</button>}
+            <button onClick={siguiente} style={{ padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 8, border: "none", background: "var(--primario)", color: "var(--texto-inv)", cursor: "pointer" }}>
+              {esUltimo ? "Entendido" : "Siguiente"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MapaConceptual({ data }) {
   const colors = ["#2D7DD2","#3BB273","#E84855","#F18F01","#8338EC","#06D6A0"];
   const cx = 340, cy = 220, R = 150;
@@ -5044,12 +5169,29 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
 const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
   try { localStorage.setItem("uro_tab", tab); }
   catch {}
 }, [tab]);
+
+  // ─── Tutorial: se muestra automáticamente la 1ª vez por usuario ───
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      const clave = `uro_tutorial_visto_${currentUser.id}_v${TUTORIAL_VERSION}`;
+      if (!localStorage.getItem(clave)) {
+        setTutorialOpen(true);
+      }
+    } catch {}
+  }, [currentUser]);
+
+  const cerrarTutorial = () => {
+    setTutorialOpen(false);
+    try { if (currentUser) localStorage.setItem(`uro_tutorial_visto_${currentUser.id}_v${TUTORIAL_VERSION}`, "1"); } catch {}
+  };
 
   // ─── Navegación con botón "atrás" del celular (PWA) ───
   // Engancha el cambio de pestaña y los overlays de nivel superior con la
@@ -5719,12 +5861,15 @@ if (!currentUser) {
             <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
             </button>
+            <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+              🧭 Ver tutorial
+            </button>
             <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
         )}
         <div style={{display:"flex",gap:0,overflowX:"auto"}}>
           {tabs.map(([id,label]) => (
-            <button key={id} onClick={() => setTab(id)} style={{flex:"1 0 auto",padding:"13px 10px",fontSize:14,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+            <button key={id} data-tour={"tab-"+id} onClick={() => setTab(id)} style={{flex:"1 0 auto",padding:"13px 10px",fontSize:14,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
           ))}
         </div>
       </div>
@@ -5814,7 +5959,7 @@ if (!currentUser) {
             <div ref={bottomRef}/>
           </div>
           <div style={{padding:"8px 12px 12px",borderTop:"0.5px solid var(--borde)"}}>
-            <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
+            <div data-tour="modo-respuesta" style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
               {[["precisa","⚡ Precisa"],["explicativa","📖 Explicativa"]].map(([id,label])=><button key={id} onClick={()=>setModo(id)} style={{padding:"5px 12px",fontSize:12,fontWeight:modo===id?500:400,borderRadius:8,cursor:"pointer",border:modo===id?"none":"0.5px solid var(--borde)",background:modo===id?"var(--primario)":"var(--superficie)",color:modo===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>)}
               <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:4}}>{modo==="precisa" ? "Definición breve" : "Explicación completa"}</span>
             </div>
@@ -5830,6 +5975,8 @@ if (!currentUser) {
       )}
 
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
+
+      {tutorialOpen && <TutorialTour rol={currentUser?.rol} onGoToTab={setTab} onClose={cerrarTutorial}/>}
 
       <div style={{padding:"8px 16px",borderTop:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"flex-end",alignItems:"center",fontSize:10,fontStyle:"italic",color:"var(--texto-sec)"}}>
         <span style={{fontStyle:"normal",fontFamily:"monospace",fontSize:9,color:"var(--texto-ter)",letterSpacing:"0.3px"}}>{VERSION}</span>
