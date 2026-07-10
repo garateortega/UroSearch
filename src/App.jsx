@@ -279,6 +279,16 @@ function LogoUroSearch({ size = 40 }) {
 const UROS_VERSION = "4"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
 const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
+// Detecta pantallas angostas (celular) para adaptar layouts inline.
+function useIsMobile(breakpoint = 640) {
+  const [movil, setMovil] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= breakpoint : false));
+  useEffect(() => {
+    const onResize = () => setMovil(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+  return movil;
+}
 function Uros({ expresion = "hola", size = 96, alt = "", style = {} }) {
   const [ok, setOk] = useState(true);
   if (!ok) return null; // tolerante: si falta el asset, no rompe la UI
@@ -307,34 +317,52 @@ function UrosAvatar({ size = 30 }) {
 // Portada del chat: figura hero + saludo. Se muestra al entrar a la pestaña Chat.
 function PortadaChat({ nombre }) {
   const primer = (nombre || "").split(" ")[0] || "";
+  const movil = useIsMobile();
+
+  // En móvil: apilado (Uros arriba grande, mensaje abajo, colita hacia arriba).
+  // En escritorio: en fila (mensaje a la izquierda, Uros a la derecha, colita al lado).
+  const bubbleTail = movil
+    ? { position:"absolute", left:"50%", top:-8, transform:"translateX(-50%) rotate(-45deg)",
+        width:16, height:16, background:"var(--superficie)",
+        borderTop:"1.5px solid var(--borde)", borderRight:"1.5px solid var(--borde)" }
+    : { position:"absolute", right:-8, top:"50%", transform:"translateY(-50%) rotate(45deg)",
+        width:16, height:16, background:"var(--superficie)",
+        borderTop:"1.5px solid var(--borde)", borderRight:"1.5px solid var(--borde)" };
+
   return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:0, padding:"20px 4px 8px", minHeight:"48vh" }}>
+    <div style={{
+      display:"flex",
+      flexDirection: movil ? "column" : "row",
+      alignItems:"center", justifyContent:"center",
+      gap: movil ? 4 : 0,
+      padding: movil ? "12px 12px 8px" : "20px 4px 8px",
+      minHeight:"48vh"
+    }}>
+      <Uros
+        expresion="hero"
+        size={movil ? 220 : 260}
+        style={ movil
+          ? { order:1, flex:"0 0 auto", width:"auto", maxWidth:"72%", maxHeight:"34vh" }
+          : { order:2, flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh", marginLeft:4 } }
+      />
+
       <div style={{
+        order: movil ? 2 : 1,
         position:"relative",
-        padding:"26px 30px",
+        padding: movil ? "18px 20px" : "26px 30px",
         borderRadius:"22px",
         background:"var(--superficie)",
         border:"1.5px solid var(--borde)",
-        fontSize:22,                       // antes 14.5 -> mucho más grande
+        fontSize: movil ? 16 : 22,          // en celular el texto ya no se ve gigante
         lineHeight:1.5,
         color:"var(--texto)",
-        maxWidth:440,                      // ya no ocupa todo el ancho
+        maxWidth: movil ? "92%" : 440,
         boxShadow:"0 10px 28px rgba(37,99,235,.15)"
       }}>
         👋 Hola {primer}. Soy <strong>Uros</strong>, tu asistente clínico.
         <div style={{ marginTop:10 }}>¿En qué te puedo ayudar?</div>
-
-        {/* colita apuntando a Uros */}
-        <div style={{
-          position:"absolute", right:-8, top:"50%",
-          transform:"translateY(-50%) rotate(45deg)",
-          width:16, height:16, background:"var(--superficie)",
-          borderTop:"1.5px solid var(--borde)",
-          borderRight:"1.5px solid var(--borde)"
-        }} />
+        <div style={bubbleTail} />
       </div>
-
-      <Uros expresion="hero" size={260} style={{ flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh", marginLeft:4 }} />
     </div>
   );
 }
@@ -1966,8 +1994,8 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 
   return (
     <div style={{position:"relative",flexShrink:0,alignSelf:"center",marginLeft:8}}>
-      <button onClick={()=>setAbierto(!abierto)} title="Cambiar contexto (equipos / mis pacientes)" style={{padding:"5px 10px",fontSize:12,fontWeight:600,borderRadius:14,cursor:"pointer",border:"none",background:actual.color,color:"var(--texto-inv)",display:"flex",alignItems:"center",gap:5,maxWidth:150,whiteSpace:"nowrap",overflow:"hidden"}}>
-        <span>{actual.icono}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{actual.nombre}</span> <span style={{fontSize:10}}>▾</span>
+      <button onClick={()=>setAbierto(!abierto)} title={`Contexto: ${actual.nombre} · cambiar equipo / mis pacientes`} style={{width:34,height:34,fontSize:16,borderRadius:"50%",cursor:"pointer",border:"1px solid var(--borde)",background:"var(--superficie)",color:actual.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <span>{actual.icono}</span>
       </button>
       {abierto && (
         <>
@@ -5795,7 +5823,7 @@ if (!currentUser) {
               <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:14,cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
             </div>
             <div style={{fontSize:10.5,color:"var(--texto-ter)",lineHeight:1.4,marginTop:8,textAlign:"center"}}>
-              ⚠️ Información de apoyo clínico. No reemplaza el juicio médico ni la evaluación individualizada del paciente.
+              ⚠️ Información de apoyo clínico. No reemplaza el juicio médico.
             </div>
           </div>
         </div>
@@ -5803,8 +5831,7 @@ if (!currentUser) {
 
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
 
-      <div style={{padding:"8px 16px",borderTop:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,fontStyle:"italic",color:"var(--texto-sec)"}}>
-        <span>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</span>
+      <div style={{padding:"8px 16px",borderTop:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"flex-end",alignItems:"center",fontSize:10,fontStyle:"italic",color:"var(--texto-sec)"}}>
         <span style={{fontStyle:"normal",fontFamily:"monospace",fontSize:9,color:"var(--texto-ter)",letterSpacing:"0.3px"}}>{VERSION}</span>
       </div>
     </div>
