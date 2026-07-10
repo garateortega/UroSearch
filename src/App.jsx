@@ -308,19 +308,33 @@ function UrosAvatar({ size = 30 }) {
 function PortadaChat({ nombre }) {
   const primer = (nombre || "").split(" ")[0] || "";
   return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, padding:"20px 4px 8px" }}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:0, padding:"20px 4px 8px", minHeight:"48vh" }}>
       <div style={{
-        flex:"1 1 0",
-        padding:"14px 16px",
-        borderRadius:"16px 16px 16px 4px",
+        position:"relative",
+        padding:"26px 30px",
+        borderRadius:"22px",
         background:"var(--superficie)",
-        border:"0.5px solid var(--borde)",
-        fontSize:14.5, lineHeight:1.55, color:"var(--texto)",
+        border:"1.5px solid var(--borde)",
+        fontSize:22,                       // antes 14.5 -> mucho más grande
+        lineHeight:1.5,
+        color:"var(--texto)",
+        maxWidth:440,                      // ya no ocupa todo el ancho
+        boxShadow:"0 10px 28px rgba(37,99,235,.15)"
       }}>
-        👋 Hola {primer}. Soy <strong>Uros</strong>, tu asistente clínico de UroSearch.
+        👋 Hola {primer}. Soy <strong>Uros</strong>, tu asistente clínico.
         <div style={{ marginTop:10 }}>¿En qué te puedo ayudar?</div>
+
+        {/* colita apuntando a Uros */}
+        <div style={{
+          position:"absolute", right:-8, top:"50%",
+          transform:"translateY(-50%) rotate(45deg)",
+          width:16, height:16, background:"var(--superficie)",
+          borderTop:"1.5px solid var(--borde)",
+          borderRight:"1.5px solid var(--borde)"
+        }} />
       </div>
-      <Uros expresion="hero" size={260} style={{ flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh" }} />
+
+      <Uros expresion="hero" size={260} style={{ flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh", marginLeft:4 }} />
     </div>
   );
 }
