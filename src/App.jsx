@@ -345,6 +345,130 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
   );
 }
 
+// ============================================================
+// CONFIGURACIÓN (funciones visibles + modo del chat)
+// Se guarda en localStorage y se propaga con un evento para que
+// cualquier panel reaccione sin prop-drilling.
+// ============================================================
+const CONFIG_DEFECTO = { chatModo: "verificada", ocultas: [] }; // chatModo: "verificada" | "general"
+function cargarConfig() {
+  try { return { ...CONFIG_DEFECTO, ...(JSON.parse(localStorage.getItem("uro_config")) || {}) }; }
+  catch { return { ...CONFIG_DEFECTO }; }
+}
+function guardarConfig(cfg) {
+  try { localStorage.setItem("uro_config", JSON.stringify(cfg)); } catch {}
+  try { window.dispatchEvent(new CustomEvent("uro-config-cambio")); } catch {}
+}
+function useConfig() {
+  const [cfg, setCfg] = useState(cargarConfig);
+  useEffect(() => {
+    const h = () => setCfg(cargarConfig());
+    window.addEventListener("uro-config-cambio", h);
+    return () => window.removeEventListener("uro-config-cambio", h);
+  }, []);
+  return cfg;
+}
+const fnOculta = (cfg, id) => Array.isArray(cfg?.ocultas) && cfg.ocultas.includes(id);
+
+// ─── Orden personalizado de servicios (se arrastra y se guarda localmente) ───
+function ordenarServicios(lista) {
+  let orden = [];
+  try { orden = JSON.parse(localStorage.getItem("uro_orden_servicios")) || []; } catch {}
+  if (!Array.isArray(orden) || orden.length === 0) return lista;
+  const pos = new Map(orden.map((id, i) => [id, i]));
+  return [...lista].sort((a, b) => {
+    const pa = pos.has(a.id) ? pos.get(a.id) : 9999;
+    const pb = pos.has(b.id) ? pos.get(b.id) : 9999;
+    return pa - pb;
+  });
+}
+function guardarOrdenServicios(lista) {
+  try { localStorage.setItem("uro_orden_servicios", JSON.stringify(lista.map(s => s.id))); } catch {}
+}
+
+// Catálogo de funciones/subfunciones que se pueden desactivar
+const FUNCIONES_CONFIGURABLES = [
+  { grupo: "Pestañas principales", items: [
+    ["tab:logbook", "🔪 Logbook"],
+    ["tab:hospital", "🏥 Hospital"],
+    ["tab:conocimiento", "📖 Biblioteca"],
+  ]},
+  { grupo: "Hospital", items: [
+    ["hosp:tabla", "📋 Tabla quirúrgica"],
+    ["hosp:notas", "🗒️ Notas"],
+    ["hosp:prescripciones", "💊 Recetas"],
+  ]},
+  { grupo: "Biblioteca", items: [
+    ["biblio:videos", "📚 Videos"],
+    ["biblio:preguntas", "❓ Preguntas"],
+    ["biblio:medicamentos", "💊 Medicamentos"],
+    ["biblio:scores", "🧮 Scores"],
+  ]},
+];
+
+function ConfigModal({ onClose }) {
+  const [cfg, setCfg] = useState(cargarConfig);
+  useBackClose(true, onClose);
+
+  const aplicar = (nueva) => { setCfg(nueva); guardarConfig(nueva); };
+  const toggleFn = (id) => {
+    const ocultas = fnOculta(cfg, id) ? cfg.ocultas.filter(x => x !== id) : [...(cfg.ocultas || []), id];
+    aplicar({ ...cfg, ocultas });
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: "20px", width: "100%", maxWidth: 460, maxHeight: "85vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)" }}>⚙️ Configuración</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 16 }}>Personaliza qué funciones ves y cómo responde el chat.</div>
+
+        {/* Modo del chat */}
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🤖 Fuente de respuestas del chat</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+          {[["verificada", "📚 Solo base de datos verificada", "Uros responde únicamente con documentos de UroSearch. Si no encuentra nada, te ofrece usar su conocimiento y tú decides."],
+            ["general", "🧠 Base + conocimiento general de la IA", "Si no hay documentos en la base, Uros responde directo con su conocimiento clínico (marcado como fuera de la base)."]].map(([id, label, desc]) => {
+            const on = (cfg.chatModo || "verificada") === id;
+            return (
+              <div key={id} onClick={() => aplicar({ ...cfg, chatModo: id })} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)" }}>
+                <span style={{ width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 2, border: "2px solid " + (on ? "var(--primario)" : "var(--borde)"), background: on ? "var(--primario)" : "transparent", boxShadow: on ? "inset 0 0 0 3px var(--superficie)" : "none" }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{label}</div>
+                  <div style={{ fontSize: 11, color: "var(--texto-sec)", lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Funciones */}
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
+        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginBottom: 10 }}>Desmarca lo que no uses para simplificar la interfaz. Puedes reactivarlo cuando quieras.</div>
+        {FUNCIONES_CONFIGURABLES.map(g => (
+          <div key={g.grupo} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--texto-sec)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>{g.grupo}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {g.items.map(([id, label]) => {
+                const activa = !fnOculta(cfg, id);
+                return (
+                  <div key={id} onClick={() => toggleFn(id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, cursor: "pointer", background: "var(--superficie)", border: "0.5px solid var(--borde)", opacity: activa ? 1 : 0.65 }}>
+                    <span style={{ fontSize: 13, color: "var(--texto)" }}>{label}</span>
+                    <span style={{ width: 40, height: 22, borderRadius: 11, background: activa ? "var(--exito)" : "var(--borde-suave)", position: "relative", transition: "background .2s", flexShrink: 0 }}>
+                      <span style={{ position: "absolute", top: 2.5, left: activa ? 20 : 3, width: 17, height: 17, borderRadius: "50%", background: "var(--superficie)", transition: "left .2s", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Marca de agua: logo UroSearch como PNG (colores fijos, las var CSS no sirven en PDF) ───
 function logoWatermarkDataUrl() {
   return new Promise((resolve) => {
@@ -427,6 +551,7 @@ function PrescripcionesPanel({ currentUser }) {
   const [cat, setCat] = useState("medicamentos");
   const [seleccionados, setSeleccionados] = useState({});   // { "medicamentos": Set(idx), ... } via objeto
   const [extra, setExtra] = useState("");                    // líneas libres adicionales
+  const [sugerenciasOpen, setSugerenciasOpen] = useState(false); // checklist de sugeridos colapsado por defecto
   const [paciente, setPaciente] = useState({ nombre: "", edad: "", rut: "", ciudad: "", domicilio: "" });
   const [perfil, setPerfil] = useState(null);
   const [generando, setGenerando] = useState(false);
@@ -483,21 +608,33 @@ function PrescripcionesPanel({ currentUser }) {
 
       const t = RX_TEMPLATES[cat];
       const nombreDr = perfil.nombre_completo || perfil.nombre || "";
-      let y = 14;
-      // Encabezado del médico
-      doc.setFont("times", "bold"); doc.setFontSize(13); doc.setTextColor(20, 20, 20);
-      doc.text(nombreDr.toUpperCase(), cx, y, { align: "center" }); y += 5;
+
+      // Encabezado: logo UroSearch a color en la esquina superior izquierda,
+      // con el texto "UroSearch" debajo, y los datos del médico alineados a la
+      // izquierda, junto al logo.
+      const logoPng = wm; // mismo PNG del logo (a color), ya generado arriba
+      const logoX = 12, logoY = 9, logoSize = 16;
+      if (logoPng) {
+        try { doc.addImage(logoPng, "PNG", logoX, logoY, logoSize, logoSize); } catch {}
+      }
+      doc.setFont("times", "bolditalic"); doc.setFontSize(8.5); doc.setTextColor(6, 90, 130);
+      doc.text("UroSearch", logoX + logoSize / 2, logoY + logoSize + 3.5, { align: "center" });
+
+      const dx = logoX + logoSize + 6; // datos del médico a la derecha del logo, alineados a la izquierda
+      let y = 13;
+      doc.setFont("times", "bold"); doc.setFontSize(12.5); doc.setTextColor(20, 20, 20);
+      doc.text(nombreDr.toUpperCase(), dx, y); y += 5;
       doc.setFont("times", "normal"); doc.setFontSize(8.5); doc.setTextColor(60, 60, 60);
-      doc.text("MÉDICO CIRUJANO · UROLOGÍA", cx, y, { align: "center" }); y += 4;
+      doc.text("MÉDICO CIRUJANO · UROLOGÍA", dx, y); y += 4;
       const idLine = ["RUT: " + (perfil.rut || "—"), "RCM: " + (perfil.rcm || "—")].join("    ");
-      doc.text(idLine, cx, y, { align: "center" }); y += 4;
-      if (perfil.centro) { doc.text(perfil.centro, cx, y, { align: "center" }); y += 4; }
-      if (perfil.direccion) { doc.text(perfil.direccion, cx, y, { align: "center" }); y += 4; }
+      doc.text(idLine, dx, y); y += 4;
+      if (perfil.centro) { doc.text(perfil.centro, dx, y); y += 4; }
+      if (perfil.direccion) { doc.text(perfil.direccion, dx, y); y += 4; }
       const loc = [perfil.ciudad, perfil.region].filter(Boolean).join(", ");
-      if (loc) { doc.text(loc, cx, y, { align: "center" }); y += 4; }
-      const contacto = [perfil.telefono ? "☎ " + perfil.telefono : "", perfil.correo || ""].filter(Boolean).join("   ");
-      if (contacto) { doc.text(contacto, cx, y, { align: "center" }); y += 4; }
-      y += 1;
+      if (loc) { doc.text(loc, dx, y); y += 4; }
+      const contacto = [perfil.telefono ? "Tel: " + perfil.telefono : "", perfil.correo || ""].filter(Boolean).join("   ");
+      if (contacto) { doc.text(contacto, dx, y); y += 4; }
+      y = Math.max(y + 1, logoY + logoSize + 6.5);
       doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3); doc.line(12, y, W - 12, y); y += 7;
 
       // Título + fecha
@@ -567,21 +704,28 @@ function PrescripcionesPanel({ currentUser }) {
         </div>
       </div>
 
-      {/* Checklist de la categoría */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
-        {RX_TEMPLATES[cat].items.map((it, idx) => {
-          const on = marcados.includes(idx);
-          return (
-            <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
-              <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 1, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
-              <span style={{ fontSize: 13, color: "var(--texto)", lineHeight: 1.4 }}>{it}</span>
-            </div>
-          );
-        })}
-      </div>
+      {/* Botón que despliega las sugerencias (checklist colapsado por defecto) */}
+      <button onClick={() => setSugerenciasOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", fontSize: 13, fontWeight: 600, background: sugerenciasOpen ? "var(--est-prog-bg)" : "var(--superficie)", color: "var(--primario)", border: "0.5px solid " + (sugerenciasOpen ? "var(--primario)" : "var(--borde)"), borderRadius: 10, cursor: "pointer", marginBottom: 10 }}>
+        <span>💡 Sugerencias{(marcados.length > 0) ? ` (${marcados.length} seleccionadas)` : ""}</span>
+        <span>{sugerenciasOpen ? "▴" : "▾"}</span>
+      </button>
 
-      {/* Líneas libres */}
-      <label style={lbl}>Agregar líneas propias (una por línea)</label>
+      {sugerenciasOpen && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
+          {RX_TEMPLATES[cat].items.map((it, idx) => {
+            const on = marcados.includes(idx);
+            return (
+              <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
+                <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 1, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
+                <span style={{ fontSize: 13, color: "var(--texto)", lineHeight: 1.4 }}>{it}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Líneas libres (siempre visibles, debajo del botón de sugerencias) */}
+      <label style={lbl}>Escribir de forma libre (una línea por ítem)</label>
       <textarea value={extra} onChange={e => setExtra(e.target.value)} rows={3} placeholder={cat === "medicamentos" ? "Ej: Omeprazol 20 mg — 1 comp en ayunas por 14 días" : "Ej: control con nefrología en 15 días"} style={{ ...inp, resize: "vertical", marginBottom: 12 }} />
 
       {msg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
@@ -598,6 +742,7 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
+  const [abiertoId, setAbiertoId] = useState(null); // medicamento expandido (colapsados por defecto)
   const [form, setForm] = useState({ nombre: "", presentacion: "", posologia: "", indicacion: "", categoria: "", notas: "" });
   const [err, setErr] = useState("");
 
@@ -671,20 +816,31 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
         <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>{lista.length === 0 ? "No hay medicamentos cargados aún." : "Sin resultados para tu búsqueda."}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtrados.map(m => (
-            <div key={m.id} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "11px 13px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>{m.nombre}{m.presentacion ? <span style={{ fontSize: 12, fontWeight: 400, color: "var(--texto-sec)" }}> · {m.presentacion}</span> : null}</div>
-                {isAdmin && <button onClick={() => eliminar(m.id)} style={{ background: "none", border: "none", color: "var(--peligro)", fontSize: 13, cursor: "pointer", padding: 0 }}>🗑</button>}
+          {filtrados.map(m => {
+            const expandido = abiertoId === m.id;
+            return (
+              <div key={m.id} onClick={() => setAbiertoId(expandido ? null : m.id)} style={{ background: "var(--superficie)", border: "0.5px solid " + (expandido ? "var(--primario)" : "var(--borde)"), borderRadius: 10, padding: expandido ? "12px 14px" : "10px 13px", cursor: "pointer", transition: "border .15s" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>{m.nombre}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    {isAdmin && expandido && <button onClick={(e) => { e.stopPropagation(); eliminar(m.id); }} style={{ background: "none", border: "none", color: "var(--peligro)", fontSize: 13, cursor: "pointer", padding: 0 }}>🗑</button>}
+                    <span style={{ fontSize: 12, color: "var(--texto-ter)" }}>{expandido ? "▴" : "▾"}</span>
+                  </div>
+                </div>
+                {expandido && (
+                  <div style={{ marginTop: 6 }}>
+                    {m.presentacion && <div style={{ fontSize: 12.5, color: "var(--texto-sec)" }}>Presentación: {m.presentacion}</div>}
+                    {m.posologia && <div style={{ fontSize: 13, color: "var(--texto)", marginTop: 3 }}>💊 {m.posologia}</div>}
+                    {m.indicacion && <div style={{ fontSize: 12, color: "var(--texto-sec)", marginTop: 2 }}>Indicación: {m.indicacion}</div>}
+                    <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                      {m.categoria && <span style={{ fontSize: 10.5, background: "var(--fondo-suave)", color: "var(--texto-sec)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{m.categoria}</span>}
+                      {m.notas && <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>{m.notas}</span>}
+                    </div>
+                  </div>
+                )}
               </div>
-              {m.posologia && <div style={{ fontSize: 13, color: "var(--texto)", marginTop: 3 }}>💊 {m.posologia}</div>}
-              {m.indicacion && <div style={{ fontSize: 12, color: "var(--texto-sec)", marginTop: 2 }}>Indicación: {m.indicacion}</div>}
-              <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
-                {m.categoria && <span style={{ fontSize: 10.5, background: "var(--fondo-suave)", color: "var(--texto-sec)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{m.categoria}</span>}
-                {m.notas && <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>{m.notas}</span>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -1185,7 +1341,7 @@ function pasosTutorial(rol) {
 
     // ─── HOSPITAL ───
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
-    { target: "hosp-subtabs", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Pestañas de Hospital", texto: "Arriba tienes 👥 Pacientes · 📋 Tabla · 🗒️ Notas. Si tocas de nuevo la pestaña que ya está activa (aparece un ▾) se abren sus herramientas." },
+    { target: "hosp-subtabs", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Este botón despliega el submenú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas y tu 🤝 Equipo de trabajo. También se abre tocando de nuevo la pestaña Hospital." },
     { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "Al tocar otra vez «Pacientes» aparece esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
     { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
@@ -1195,7 +1351,7 @@ function pasosTutorial(rol) {
 
     // ─── BIBLIOTECA ───
     { target: "tab-conocimiento", tab: "conocimiento", uros: "hola", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
-    { target: "biblio-subtabs", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "🔪 Cirugías (protocolos) · 📚 Videos · ❓ Preguntas." },
+    { target: "biblio-subtabs", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "Este botón (o tocar de nuevo la pestaña Biblioteca) despliega: 🔪 Cirugías · 📚 Videos · ❓ Preguntas · 💊 Medicamentos · 🧮 Scores." },
     { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "explicando", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
     { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
     { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
@@ -1292,13 +1448,12 @@ function DemoTutorial({ tipo }) {
     return (
       <div style={caja}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-          {btn("📊 Importar Excel")}{btn("+ Nueva", true)}{btn("📅 Planner")}{btn("☰ Lista")}
+          {btn("📊 Importar Excel")}{btn("+ Nueva", true)}{sel("🗓️ Vista")}
         </div>
         <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.6 }}>
           <b>📊 Importar Excel:</b> carga varias cirugías de una planilla.<br />
           <b>+ Nueva:</b> agrega una cirugía (fecha, hora, paciente, procedimiento, cirujano, pabellón).<br />
-          <b>📅 Planner:</b> vista por semana (usa ‹ › para cambiar de semana).<br />
-          <b>☰ Lista:</b> vista compacta en lista.<br />
+          <b>🗓️ Mensual / 📅 Semanal / ☰ Lista:</b> tres modos de ver la tabla (usa ‹ › para cambiar de mes o semana).<br />
           <span style={{ color: "var(--texto-ter)" }}>Al abrir una cirugía ves fecha, pabellón, cirujano, ayudante y observaciones.</span>
         </div>
       </div>
@@ -1462,34 +1617,40 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
         }} />
       )}
 
-      {/* Tarjeta con el texto del paso */}
+      {/* Tarjeta del paso. Estilo "hero": banner oscuro con Uros grande arriba
+          (como una tarjeta de presentación), y debajo el texto y el botón. */}
       <div style={{
         position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)", maxHeight: "82vh", overflowY: "auto",
         background: "var(--superficie)", border: "1px solid var(--borde)",
-        borderRadius: 16, padding: "18px 18px 14px", boxShadow: "0 12px 32px rgba(15,23,42,0.28)",
+        borderRadius: 18, boxShadow: "0 12px 32px rgba(15,23,42,0.28)",
         ...cardStyle
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          {paso.uros && <Uros expresion={paso.uros} size={44} style={{ flexShrink: 0 }} />}
-          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>{paso.titulo}</div>
-        </div>
-        <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--texto-sec)" }}>{paso.texto}</div>
-        {paso.demo && <DemoTutorial tipo={paso.demo} />}
+        {/* Banner con la imagen de Uros a cuerpo completo */}
+        {paso.uros && (
+          <div style={{ position: "relative", background: "linear-gradient(180deg, #052A40 0%, #0A3D57 55%, #0E4E6E 100%)", borderRadius: "17px 17px 0 0", padding: rect || paso.demo ? "14px 12px 10px" : "22px 12px 14px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <button onClick={onClose} aria-label="Cerrar tutorial" style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.22)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            <Uros expresion={paso.uros} size={rect || paso.demo ? 110 : 180} style={{ maxHeight: rect || paso.demo ? 120 : 200, width: "auto", filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.35))" }} />
+          </div>
+        )}
 
-        {/* Puntos de progreso */}
-        <div style={{ display: "flex", gap: 5, justifyContent: "center", margin: "14px 0 10px" }}>
-          {pasos.map((_, k) => (
-            <span key={k} style={{ width: k === i ? 18 : 7, height: 7, borderRadius: 4, background: k === i ? "var(--primario)" : "var(--borde)", transition: "all .2s" }} />
-          ))}
-        </div>
+        <div style={{ padding: "16px 18px 14px" }}>
+          <div style={{ fontSize: 19, fontWeight: 800, color: "var(--texto)", marginBottom: 6, lineHeight: 1.25 }}>{paso.titulo}</div>
+          <div style={{ fontSize: 14, lineHeight: 1.55, color: "var(--texto-sec)" }}>{paso.texto}</div>
+          {paso.demo && <DemoTutorial tipo={paso.demo} />}
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <button onClick={onClose} style={{ padding: "8px 10px", fontSize: 12, background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Saltar</button>
-          <div style={{ display: "flex", gap: 8 }}>
-            {i > 0 && <button onClick={anterior} style={{ padding: "8px 14px", fontSize: 13, borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)", cursor: "pointer" }}>Atrás</button>}
-            <button onClick={siguiente} style={{ padding: "8px 16px", fontSize: 13, fontWeight: 600, borderRadius: 8, border: "none", background: "var(--primario)", color: "var(--texto-inv)", cursor: "pointer" }}>
-              {esUltimo ? "Entendido" : "Siguiente"}
-            </button>
+          {/* Puntos de progreso */}
+          <div style={{ display: "flex", gap: 5, margin: "14px 0 12px" }}>
+            {pasos.map((_, k) => (
+              <span key={k} style={{ width: k === i ? 20 : 7, height: 7, borderRadius: 4, background: k === i ? "var(--primario)" : "var(--borde)", transition: "all .2s" }} />
+            ))}
+          </div>
+
+          <button onClick={siguiente} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 700, borderRadius: 12, border: "none", background: "var(--primario)", color: "var(--texto-inv)", cursor: "pointer" }}>
+            {esUltimo ? "Entendido" : "Siguiente"}
+          </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+            <button onClick={onClose} style={{ padding: "7px 4px", fontSize: 12, background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Saltar tutorial</button>
+            {i > 0 && <button onClick={anterior} style={{ padding: "7px 4px", fontSize: 12, background: "none", border: "none", color: "var(--texto-sec)", cursor: "pointer", fontWeight: 600 }}>← Atrás</button>}
           </div>
         </div>
       </div>
@@ -2715,27 +2876,70 @@ function CirugiasBiblioteca() {
 
 function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
   const [subTab, setSubTab] = useState("cirugias");
- const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"],["preguntas","❓ Preguntas"],["medicamentos","💊 Medicamentos"],["scores","🧮 Scores"]];
+  const [subMenuOpen, setSubMenuOpen] = useState(false); // desplegable de secciones de Biblioteca
+  const config = useConfig();
+  const tabsConocimiento = [
+    ["cirugias","🔪 Cirugías"],
+    ...(!fnOculta(config,"biblio:videos") ? [["videos","📚 Videos"]] : []),
+    ...(!fnOculta(config,"biblio:preguntas") ? [["preguntas","❓ Preguntas"]] : []),
+    ...(!fnOculta(config,"biblio:medicamentos") ? [["medicamentos","💊 Medicamentos"]] : []),
+    ...(!fnOculta(config,"biblio:scores") ? [["scores","🧮 Scores"]] : []),
+  ];
   if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
+  const etiquetaActual = (tabsConocimiento.find(([id]) => id === subTab) || tabsConocimiento[0])[1];
 
   // El tutorial puede pedir cambiar de sub-pestaña de Biblioteca.
   useEffect(() => {
     const h = (e) => {
       const s = e.detail && e.detail.subtab;
       const validas = isAdmin ? ["cirugias","videos","preguntas","documentos","mapas"] : ["cirugias","videos","preguntas","mapas"];
-      if (validas.includes(s)) setSubTab(s);
+      if (validas.includes(s)) { setSubTab(s); setSubMenuOpen(false); }
     };
     window.addEventListener("uro-tour-subtab", h);
     return () => window.removeEventListener("uro-tour-subtab", h);
   }, [isAdmin]);
 
+  // Si tocan de nuevo la pestaña principal "Biblioteca", se abre/cierra el submenú
+  useEffect(() => {
+    const h = (e) => { if (e.detail?.tab === "conocimiento") setSubMenuOpen(o => !o); };
+    window.addEventListener("uro-toggle-submenu", h);
+    return () => window.removeEventListener("uro-toggle-submenu", h);
+  }, []);
+
+  // Si la configuración oculta la sección activa, volver a Cirugías
+  useEffect(() => {
+    if ((subTab === "videos" && fnOculta(config,"biblio:videos")) ||
+        (subTab === "preguntas" && fnOculta(config,"biblio:preguntas")) ||
+        (subTab === "medicamentos" && fnOculta(config,"biblio:medicamentos")) ||
+        (subTab === "scores" && fnOculta(config,"biblio:scores"))) {
+      setSubTab("cirugias");
+    }
+  }, [config, subTab]);
+
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      <div data-tour="biblio-subtabs" style={{display:"flex",gap:0,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"0 12px",overflowX:"auto"}}>
-        {tabsConocimiento.map(([id,label]) => (
-          <button key={id} onClick={()=>setSubTab(id)} style={{padding:"13px 18px",fontSize:14,fontWeight:subTab===id?600:500,background:"transparent",border:"none",borderBottom:subTab===id?"3px solid var(--primario)":"3px solid transparent",color:subTab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
-        ))}
+      {/* Barra compacta: un botón despliega las secciones (aparecen al tocar
+          de nuevo "Biblioteca" o este botón, en vez de estar siempre visibles). */}
+      <div style={{display:"flex",alignItems:"center",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"6px 12px",position:"relative"}}>
+        <div style={{position:"relative"}}>
+          <button data-tour="biblio-subtabs" onClick={()=>setSubMenuOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",fontSize:13.5,fontWeight:600,background:subMenuOpen?"var(--primario)":"var(--superficie)",color:subMenuOpen?"var(--texto-inv)":"var(--primario)",border:subMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {etiquetaActual} {subMenuOpen ? "▴" : "▾"}
+          </button>
+          {subMenuOpen && (
+            <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:4,zIndex:40,boxShadow:"0 6px 18px rgba(0,0,0,0.15)",display:"flex",flexDirection:"column",gap:2,minWidth:190}}>
+              {tabsConocimiento.map(([id,label]) => {
+                const activo = subTab===id;
+                return (
+                  <button key={id} onClick={()=>{ setSubTab(id); setSubMenuOpen(false); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:7,cursor:"pointer",fontWeight:activo?700:500}}>
+                    {label}{activo ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
+      {subMenuOpen && <div onClick={()=>setSubMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:30}}/>}
 
       {subTab === "mapas" && (
   <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
@@ -3193,6 +3397,24 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   });
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false); // submenú de herramientas (2do toque en la pestaña)
+  const [subMenuOpen, setSubMenuOpen] = useState(false); // desplegable de secciones de Hospital
+  const config = useConfig();
+
+  // Si tocan de nuevo la pestaña principal "Hospital", se abre/cierra el submenú
+  useEffect(() => {
+    const h = (e) => { if (e.detail?.tab === "hospital") setSubMenuOpen(o => !o); };
+    window.addEventListener("uro-toggle-submenu", h);
+    return () => window.removeEventListener("uro-toggle-submenu", h);
+  }, []);
+
+  // Si la configuración oculta la sección activa, volver a Pacientes
+  useEffect(() => {
+    if ((subTab === "tabla" && fnOculta(config, "hosp:tabla")) ||
+        (subTab === "notas" && fnOculta(config, "hosp:notas")) ||
+        (subTab === "prescripciones" && fnOculta(config, "hosp:prescripciones"))) {
+      setSubTab("pacientes");
+    }
+  }, [config, subTab]);
 
   useEffect(() => {
     try { localStorage.setItem("uro_subtab_hospital", subTab); } catch {}
@@ -3230,22 +3452,51 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
 
   const soloLectura = currentUser?.rol === "interno"; // Interno: solo observa en Hospital
   const esUrologo = currentUser?.rol === "urologo" || currentUser?.rol === "residente";   // Prescripciones: urólogos y residentes
+
+  // Secciones disponibles (filtradas por la configuración del usuario)
+  const secciones = [
+    ["pacientes","👥 Pacientes"],
+    ...(!fnOculta(config,"hosp:tabla") ? [["tabla","📋 Tabla"]] : []),
+    ...(!fnOculta(config,"hosp:notas") ? [["notas","🗒️ Notas"]] : []),
+    ...(esUrologo && !fnOculta(config,"hosp:prescripciones") ? [["prescripciones","💊 Recetas"]] : []),
+  ];
+  const etiquetaActual = (secciones.find(([id]) => id === subTab) || secciones[0])[1];
+  const conTools = subTab === "pacientes" || subTab === "tabla";
+
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      <div data-tour="hosp-subtabs" style={{display:"flex",alignItems:"flex-end",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 10px 0",flexShrink:0}}>
-        <div style={{display:"flex",gap:0,overflowX:"auto",flex:1,minWidth:0}}>
-          {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla"],["notas","🗒️ Notas"],...(esUrologo?[["prescripciones","💊 Recetas"]]:[])].map(([id,label]) => {
-            const activo = subTab===id;
-            const conTools = id==="pacientes" || id==="tabla";
-            return (
-              <button key={id} onClick={()=>{ if(activo && conTools){ setToolsOpen(o=>!o); } else { setSubTab(id); setToolsOpen(false); } }} style={{flex:"1 1 0",minWidth:0,padding:"13px 6px",fontSize:12.5,fontWeight:activo?600:500,background:"transparent",border:"none",borderBottom:activo?"3px solid var(--primario)":"3px solid transparent",color:activo?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}} title={conTools?"Toca de nuevo para ver opciones":undefined}>
-                {label}{activo && conTools ? (toolsOpen ? " ▴" : " ▾") : ""}
+      {/* Barra compacta: un solo botón que despliega las secciones de Hospital
+          (evita mostrar todas las subpestañas siempre). */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"6px 10px",flexShrink:0,position:"relative"}}>
+        <div style={{position:"relative",minWidth:0}}>
+          <button data-tour="hosp-subtabs" onClick={()=>{setSubMenuOpen(o=>!o);}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",fontSize:13.5,fontWeight:600,background:subMenuOpen?"var(--primario)":"var(--superficie)",color:subMenuOpen?"var(--texto-inv)":"var(--primario)",border:subMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {etiquetaActual} {subMenuOpen ? "▴" : "▾"}
+          </button>
+          {subMenuOpen && (
+            <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:4,zIndex:40,boxShadow:"0 6px 18px rgba(0,0,0,0.15)",display:"flex",flexDirection:"column",gap:2,minWidth:190}}>
+              {secciones.map(([id,label]) => {
+                const activo = subTab===id;
+                return (
+                  <button key={id} onClick={()=>{ if(activo && (id==="pacientes"||id==="tabla")){ setToolsOpen(o=>!o); } else { setSubTab(id); setToolsOpen(false); } setSubMenuOpen(false); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:7,cursor:"pointer",fontWeight:activo?700:500}}>
+                    {label}{activo ? " ✓" : ""}
+                  </button>
+                );
+              })}
+              <div style={{height:1,background:"var(--borde)",margin:"3px 4px"}}/>
+              <button onClick={()=>{ setSubMenuOpen(false); setMostrarEquipos(true); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:7,cursor:"pointer",fontWeight:500}}>
+                🤝 Equipo de trabajo
               </button>
-            );
-          })}
+              {conTools && (
+                <button onClick={()=>{ setToolsOpen(o=>!o); setSubMenuOpen(false); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto-sec)",borderRadius:7,cursor:"pointer",fontWeight:500}}>
+                  🛠️ {toolsOpen ? "Ocultar herramientas" : "Ver herramientas"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
       </div>
+      {subMenuOpen && <div onClick={()=>setSubMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:30}}/>}
       {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
@@ -3296,6 +3547,7 @@ function NotasPanel({ currentUser, contexto, equipos }) {
   const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
   const [notas, setNotas] = useState([]);
   const [cargando, setCargando] = useState(false);
+  const [formAbierto, setFormAbierto] = useState(false); // el formulario aparece solo con el botón "+ Agregar nota"
   const [nueva, setNueva] = useState({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
 
   const cargar = async () => {
@@ -3345,6 +3597,7 @@ function NotasPanel({ currentUser, contexto, equipos }) {
         } catch {}
       }
       setNueva({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
+      setFormAbierto(false);
     } catch (e) { alert("Error: " + (e.message || e)); }
   };
 
@@ -3359,21 +3612,26 @@ function NotasPanel({ currentUser, contexto, equipos }) {
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>
-        {esEquipo ? `🗒️ Notas - ${equipoActual?.nombre}` : "🗒️ Mis notas"}
-      </div>
-
-      <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px",marginBottom:14}}>
-        <input value={nueva.titulo} onChange={e=>setNueva({...nueva,titulo:e.target.value})} placeholder="Título (opcional)" style={{...inputStyle,marginBottom:6}}/>
-        <textarea value={nueva.texto} onChange={e=>setNueva({...nueva,texto:e.target.value})} placeholder="Escribe una nota libre..." rows={3} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
-        {esEquipo && (
-          <div style={{display:"flex",gap:6,marginBottom:8}}>
-            <button onClick={()=>setNueva({...nueva,visibilidad:"equipo"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="equipo"?600:400,background:nueva.visibilidad==="equipo"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="equipo"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="equipo"?"none":"0.5px solid var(--borde)"}}>👥 La ve el equipo</button>
-            <button onClick={()=>setNueva({...nueva,visibilidad:"personal"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="personal"?600:400,background:nueva.visibilidad==="personal"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="personal"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="personal"?"none":"0.5px solid var(--borde)"}}>🔒 Solo yo</button>
+      {/* El formulario aparece solo al tocar "+ Agregar nota" (submenú de la pestaña) */}
+      {!formAbierto ? (
+        <button onClick={()=>setFormAbierto(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 16px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",marginBottom:14}}>+ Agregar nota</button>
+      ) : (
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px",marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>Nueva nota</div>
+            <button onClick={()=>setFormAbierto(false)} style={{background:"none",border:"none",fontSize:16,color:"var(--texto-ter)",cursor:"pointer",lineHeight:1,padding:0}}>✕</button>
           </div>
-        )}
-        <button onClick={guardar} disabled={!nueva.texto.trim()} style={{...btnPrimary,marginTop:0,opacity:nueva.texto.trim()?1:0.6}}>+ Guardar nota</button>
-      </div>
+          <input value={nueva.titulo} onChange={e=>setNueva({...nueva,titulo:e.target.value})} placeholder="Título (opcional)" style={{...inputStyle,marginBottom:6}}/>
+          <textarea value={nueva.texto} onChange={e=>setNueva({...nueva,texto:e.target.value})} placeholder="Escribe una nota libre..." rows={3} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+          {esEquipo && (
+            <div style={{display:"flex",gap:6,marginBottom:8}}>
+              <button onClick={()=>setNueva({...nueva,visibilidad:"equipo"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="equipo"?600:400,background:nueva.visibilidad==="equipo"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="equipo"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="equipo"?"none":"0.5px solid var(--borde)"}}>👥 La ve el equipo</button>
+              <button onClick={()=>setNueva({...nueva,visibilidad:"personal"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="personal"?600:400,background:nueva.visibilidad==="personal"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="personal"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="personal"?"none":"0.5px solid var(--borde)"}}>🔒 Solo yo</button>
+            </div>
+          )}
+          <button onClick={guardar} disabled={!nueva.texto.trim()} style={{...btnPrimary,marginTop:0,opacity:nueva.texto.trim()?1:0.6}}>+ Guardar nota</button>
+        </div>
+      )}
 
       {cargando && <div style={{fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Cargando...</div>}
       {!cargando && notas.length === 0 && <div style={{fontSize:12,color:"var(--texto-ter)",fontStyle:"italic",padding:"14px 0"}}>No hay notas aún.</div>}
@@ -3647,8 +3905,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   useBackClose(vista !== "tabla", () => { setVista("tabla"); setSeleccionado(null); });
   const [error, setError] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [modoVista, setModoVista] = useState("planner"); // "planner" | "lista"
+  const [modoVista, setModoVista] = useState("planner"); // "mensual" | "planner" (semanal) | "lista"
   const [vistaMenuOpen, setVistaMenuOpen] = useState(false); // submenú del botón "Vista ▾"
+  const [mesActual, setMesActual] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }); // primer día del mes (vista mensual)
   const inputFotoTablaRef = useRef(null);
   const [extrayendoTabla, setExtrayendoTabla] = useState(false);
   const [lunesSemana, setLunesSemana] = useState(() => {
@@ -3661,7 +3920,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   const [nuevo, setNuevo] = useState({
     fecha: new Date().toISOString().slice(0,10), hora: "08:00",
-    iniciales: "", edad: "", procedimiento: "", lateralidad: "",
+    iniciales: "", ficha_clinica: "", rut: "", edad: "", procedimiento: "", lateralidad: "",
     cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: ""
   });
   const [editId, setEditId] = useState(null); // id de la cirugía en edición (null = crear)
@@ -3727,6 +3986,24 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   // Lunes a viernes siempre; sábado (índice 5) y domingo (6) solo si tienen cirugías
   const diasVisibles = diasSemana.filter((fecha, i) => i < 5 || (porFecha[fecha] && porFecha[fecha].length > 0));
 
+  // ====================================================================
+  // MES MOSTRADO (vista mensual)
+  // ====================================================================
+  const mesISO = `${mesActual.getFullYear()}-${String(mesActual.getMonth() + 1).padStart(2, "0")}`;
+  const cirugiasMes = tablaCirugias.filter(c => {
+    if (filtroEstado !== "todos" && c.estado !== filtroEstado) return false;
+    return (c.fecha || "").startsWith(mesISO);
+  });
+  const porFechaMes = {};
+  cirugiasMes.forEach(c => { (porFechaMes[c.fecha] = porFechaMes[c.fecha] || []).push(c); });
+  // Celdas del calendario: relleno inicial según día de semana del día 1 (lunes = 0)
+  const primerDow = (mesActual.getDay() + 6) % 7;
+  const diasEnMes = new Date(mesActual.getFullYear(), mesActual.getMonth() + 1, 0).getDate();
+  const celdasMes = [
+    ...Array.from({ length: primerDow }, () => null),
+    ...Array.from({ length: diasEnMes }, (_, i) => `${mesISO}-${String(i + 1).padStart(2, "0")}`),
+  ];
+
   const coloresEstado = {
     programada: "var(--primario)", en_curso: "var(--alerta)", completada: "var(--exito)",
     suspendida: "var(--neutro)", cancelada: "var(--peligro)"
@@ -3766,6 +4043,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       fecha: nuevo.fecha,
       hora: nuevo.hora,
       iniciales: nuevo.iniciales.trim().toUpperCase(),
+      ficha_clinica: nuevo.ficha_clinica.trim() || null,
+      rut: nuevo.rut.trim() || null,
       edad: nuevo.edad ? parseInt(nuevo.edad) : null,
       procedimiento: nuevo.procedimiento.trim(),
       lateralidad: nuevo.lateralidad || null,
@@ -3786,7 +4065,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   const resetForm = () => {
     setEditId(null);
-    setNuevo({ fecha: new Date().toISOString().slice(0,10), hora: "08:00", iniciales: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: "" });
+    setNuevo({ fecha: new Date().toISOString().slice(0,10), hora: "08:00", iniciales: "", ficha_clinica: "", rut: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: "" });
   };
 
   // Cargar una cirugía existente en el formulario para editarla
@@ -3796,6 +4075,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       fecha: c.fecha || new Date().toISOString().slice(0,10),
       hora: (c.hora || "08:00").slice(0,5),
       iniciales: c.iniciales || "",
+      ficha_clinica: c.ficha_clinica || "",
+      rut: c.rut || "",
       edad: c.edad != null ? String(c.edad) : "",
       procedimiento: c.procedimiento || "",
       lateralidad: c.lateralidad || "",
@@ -3819,6 +4100,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       fecha: nuevo.fecha,
       hora: nuevo.hora,
       iniciales: nuevo.iniciales.trim().toUpperCase(),
+      ficha_clinica: nuevo.ficha_clinica.trim() || null,
+      rut: nuevo.rut.trim() || null,
       edad: nuevo.edad ? parseInt(nuevo.edad) : null,
       procedimiento: nuevo.procedimiento.trim(),
       lateralidad: nuevo.lateralidad || null,
@@ -4204,6 +4487,17 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           </div>
         </div>
 
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
+            <label style={labelStyle}>Ficha clínica (FC)</label>
+            <input value={nuevo.ficha_clinica} onChange={e=>setNuevo({...nuevo,ficha_clinica:e.target.value.slice(0,30)})} placeholder="123456" style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>RUT</label>
+            <input value={nuevo.rut} onChange={e=>setNuevo({...nuevo,rut:e.target.value.slice(0,15)})} placeholder="12.345.678-9" style={inputStyle}/>
+          </div>
+        </div>
+
         <label style={labelStyle}>Procedimiento</label>
         <input value={nuevo.procedimiento} onChange={e=>setNuevo({...nuevo,procedimiento:e.target.value})} placeholder="RTU-V, Nefrectomía..." style={inputStyle}/>
 
@@ -4268,6 +4562,11 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
             <div>
               <div style={{fontSize:18,fontWeight:600,color:"var(--texto)"}}>{seleccionado.iniciales}{seleccionado.edad && ` (${seleccionado.edad}a)`}</div>
+              {(seleccionado.ficha_clinica || seleccionado.rut) && (
+                <div style={{fontSize:11.5,color:"var(--texto-ter)",marginTop:2}}>
+                  {seleccionado.ficha_clinica ? `FC: ${seleccionado.ficha_clinica}` : ""}{seleccionado.ficha_clinica && seleccionado.rut ? " · " : ""}{seleccionado.rut ? `RUT: ${seleccionado.rut}` : ""}
+                </div>
+              )}
               <div style={{fontSize:13,color:"var(--texto-sec)",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
               <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
               {seleccionado.cirujano && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
@@ -4337,10 +4636,11 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
           <input ref={inputFotoTablaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoTabla}/>
           <div style={{position:"relative",marginLeft:"auto"}}>
-            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
+            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
             {vistaMenuOpen && (
               <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:4,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:2,minWidth:130}}>
-                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Planner</button>
+                <button onClick={()=>{setModoVista("mensual");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="mensual"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="mensual"?600:400}}>🗓️ Mensual</button>
+                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Semanal</button>
                 <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
               </div>
             )}
@@ -4348,16 +4648,27 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         </div>
       )}
 
-      {/* Navegación de semana + filtro de estado (siempre visible) */}
+      {/* Navegación de semana o mes + filtro de estado (siempre visible) */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <div style={{display:"flex",alignItems:"center",gap:4}}>
-          <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()-7);setLunesSemana(d);}} style={navBtn}>‹</button>
-          <span style={{fontSize:12,fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center"}}>
-            {new Date(diasSemana[0]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})} – {new Date(diasSemana[6]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})}
-          </span>
-          <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()+7);setLunesSemana(d);}} style={navBtn}>›</button>
-          <button onClick={()=>setLunesSemana(lunesDe(new Date()))} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
-        </div>
+        {modoVista === "mensual" ? (
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <button onClick={()=>{const d=new Date(mesActual);d.setMonth(d.getMonth()-1);setMesActual(d);}} style={navBtn}>‹</button>
+            <span style={{fontSize:12,fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center",textTransform:"capitalize"}}>
+              {mesActual.toLocaleDateString("es-CL",{month:"long",year:"numeric"})}
+            </span>
+            <button onClick={()=>{const d=new Date(mesActual);d.setMonth(d.getMonth()+1);setMesActual(d);}} style={navBtn}>›</button>
+            <button onClick={()=>{const d=new Date();d.setDate(1);d.setHours(0,0,0,0);setMesActual(d);}} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
+          </div>
+        ) : (
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()-7);setLunesSemana(d);}} style={navBtn}>‹</button>
+            <span style={{fontSize:12,fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center"}}>
+              {new Date(diasSemana[0]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})} – {new Date(diasSemana[6]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})}
+            </span>
+            <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()+7);setLunesSemana(d);}} style={navBtn}>›</button>
+            <button onClick={()=>setLunesSemana(lunesDe(new Date()))} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
+          </div>
+        )}
         <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="todos">Todos los estados</option>
           <option value="programada">Programadas</option>
@@ -4366,17 +4677,58 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
-        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{cirugiasSemana.length} cx</span>
+        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{modoVista==="mensual" ? cirugiasMes.length : cirugiasSemana.length} cx</span>
       </div>
 
       {loadingCirugias && (
         <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando tabla...</div>
       )}
 
-      {!loadingCirugias && cirugiasSemana.length === 0 && (
+      {!loadingCirugias && modoVista !== "mensual" && cirugiasSemana.length === 0 && (
         <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
           No hay cirugías esta semana.<br/>
           Usa ‹ › para cambiar de semana, o agrega con + Nueva / Importar Excel.
+        </div>
+      )}
+
+      {!loadingCirugias && modoVista === "mensual" && cirugiasMes.length === 0 && (
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+          No hay cirugías este mes.<br/>
+          Usa ‹ › para cambiar de mes, o agrega con + Nueva / Importar Excel.
+        </div>
+      )}
+
+      {/* ====================== VISTA MENSUAL ====================== */}
+      {!loadingCirugias && modoVista === "mensual" && cirugiasMes.length > 0 && (
+        <div style={{overflowX:"auto",paddingBottom:8}}>
+          <div style={{minWidth:560}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:4,marginBottom:4}}>
+              {["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(d => (
+                <div key={d} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"var(--texto-sec)",textTransform:"uppercase",letterSpacing:0.3,padding:"2px 0"}}>{d}</div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:4}}>
+              {celdasMes.map((fecha, idx) => {
+                if (!fecha) return <div key={"v"+idx}/>;
+                const lista = (porFechaMes[fecha] || []).slice().sort((a,b)=>(a.hora||"").localeCompare(b.hora||""));
+                const esHoy = fecha === hoyISO;
+                const diaNum = parseInt(fecha.slice(8), 10);
+                return (
+                  <div key={fecha} style={{background:esHoy?"var(--hoy-bg)":"var(--fondo-suave)",border:esHoy?"1.5px solid var(--primario)":"0.5px solid var(--borde-suave)",borderRadius:8,padding:4,minHeight:64}}>
+                    <div style={{fontSize:10,fontWeight:700,color:esHoy?"var(--primario)":"var(--texto-sec)",textAlign:"right",padding:"0 3px 3px"}}>{diaNum}</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                      {lista.map(c => (
+                        <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} title={`${c.hora?.slice(0,5)} ${c.iniciales} — ${c.procedimiento}`} style={{background:fondoEstado[c.estado],borderLeft:`3px solid ${coloresEstado[c.estado]}`,borderRadius:4,padding:"2px 4px",cursor:"pointer",overflow:"hidden"}}>
+                          <div style={{fontSize:8.5,fontWeight:700,color:coloresEstado[c.estado],whiteSpace:"nowrap"}}>{c.hora?.slice(0,5)}{c.pabellon==="CCV"?" · CCV":""}</div>
+                          <div style={{fontSize:9,color:"var(--texto)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.procedimiento}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -4400,6 +4752,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                       : c.pabellon && <span style={{fontSize:8,color:"var(--texto-ter)"}}>Pab {c.pabellon}</span>}
                   </div>
                   <div style={{fontSize:10,color:"var(--texto)",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
+                  {(c.ficha_clinica || c.rut) && <div style={{fontSize:8.5,color:"var(--texto-ter)",marginTop:1}}>{c.ficha_clinica?`FC ${c.ficha_clinica}`:""}{c.ficha_clinica&&c.rut?" · ":""}{c.rut||""}</div>}
                   <div style={{fontSize:10,color:"var(--texto-sec)",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
                   {c.cirujano && <div style={{fontSize:9,color:"var(--texto-ter)",marginTop:1}}>👨‍⚕️ {c.cirujano}</div>}
                   {c.primer_ayudante && <div style={{fontSize:9,color:"var(--texto-ter)"}}>🧑‍⚕️ {c.primer_ayudante}</div>}
@@ -4452,7 +4805,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                         {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
                       </div>
                       <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>
-                        {c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`}{c.cirujano && ` | 👨‍⚕️ ${c.cirujano}`}{c.primer_ayudante && ` | 🧑‍⚕️ ${c.primer_ayudante}`}
+                        {c.ficha_clinica && `FC ${c.ficha_clinica} | `}{c.rut && `RUT ${c.rut} | `}{c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`}{c.cirujano && ` | 👨‍⚕️ ${c.cirujano}`}{c.primer_ayudante && ` | 🧑‍⚕️ ${c.primer_ayudante}`}
                       </div>
                     </div>
                     <span style={{fontSize:9,padding:"2px 8px",background:coloresEstado[c.estado],color:"var(--texto-inv)",borderRadius:10,whiteSpace:"nowrap"}}>{textoEstado[c.estado]}</span>
@@ -4600,7 +4953,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
 
   // Form de nuevo paciente
   const [nuevo, setNuevo] = useState({
-    iniciales: "", edad: "", sexo: "M", cama: "", servicio: "",
+    iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "M", cama: "", servicio: "",
     diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10)
   });
 
@@ -4624,6 +4977,49 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   // Servicios
   const [nuevoServicio, setNuevoServicio] = useState("");
   const [serviciosEquipo, setServiciosEquipo] = useState([]);
+  // ─── Reordenar servicios arrastrándolos (mouse y táctil) ───
+  const serviciosListRef = useRef(null);
+  const [dragServicio, setDragServicio] = useState(null); // { id, dy } → el ítem "flota" siguiendo el dedo
+  const dragInfo = useRef(null);
+  const iniciarDragServicio = (e, servicio, idx) => {
+    e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const cont = serviciosListRef.current;
+    const filas = cont ? Array.from(cont.children) : [];
+    const alto = filas[0] ? filas[0].getBoundingClientRect().height + 6 : 48; // alto de fila + gap
+    dragInfo.current = { id: servicio.id, desdeIdx: idx, aIdx: idx, y0: e.clientY, alto };
+    setDragServicio({ id: servicio.id, dy: 0 });
+
+    const onMove = (ev) => {
+      const d = dragInfo.current;
+      if (!d) return;
+      const dy = ev.clientY - d.y0;
+      // ¿Sobre qué índice está flotando ahora?
+      let destino = d.desdeIdx + Math.round(dy / d.alto);
+      destino = Math.max(0, Math.min(misServiciosLista.length - 1, destino));
+      d.aIdx = destino;
+      setDragServicio({ id: d.id, dy });
+    };
+    const onUp = () => {
+      const d = dragInfo.current;
+      dragInfo.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setDragServicio(null);
+      if (!d || d.aIdx === d.desdeIdx) return;
+      setMisServiciosLista(prev => {
+        const nueva = [...prev];
+        const [item] = nueva.splice(d.desdeIdx, 1);
+        nueva.splice(d.aIdx, 0, item);
+        guardarOrdenServicios(nueva);
+        return nueva;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
 const [miembrosEquipo, setMiembrosEquipo] = useState([]);
   const esEquipo = contexto !== "personal";
   const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
@@ -4768,6 +5164,8 @@ const cargarMiembrosEquipo = async () => {
       medico_id: currentUser.id,
       equipo_id: esEquipo ? contexto : null,
       iniciales: nuevo.iniciales.trim().toUpperCase(),
+      ficha_clinica: nuevo.ficha_clinica.trim() || null,
+      rut: nuevo.rut.trim() || null,
       edad: nuevo.edad ? parseInt(nuevo.edad) : null,
       sexo: nuevo.sexo,
       cama: nuevo.cama.trim(),
@@ -4783,7 +5181,7 @@ const cargarMiembrosEquipo = async () => {
     if (!result.ok) return setError(result.error);
 
     setPacientes(prev => [result.paciente, ...prev]);
-    setNuevo({ iniciales: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10) });
+    setNuevo({ iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10) });
     setExtraccionMsg("");
     setVista("lista");
   };
@@ -4803,6 +5201,8 @@ const cargarMiembrosEquipo = async () => {
   const iniciarEdicion = () => {
   setEditForm({
     iniciales: seleccionado.iniciales || "",
+    ficha_clinica: seleccionado.ficha_clinica || "",
+    rut: seleccionado.rut || "",
     edad: seleccionado.edad || "",
     sexo: seleccionado.sexo || "M",
     cama: seleccionado.cama || "",
@@ -4818,6 +5218,8 @@ const cargarMiembrosEquipo = async () => {
 const guardarEdicion = async () => {
   const datos = {
     iniciales: editForm.iniciales.trim().toUpperCase(),
+    ficha_clinica: (editForm.ficha_clinica || "").trim() || null,
+    rut: (editForm.rut || "").trim() || null,
     edad: editForm.edad ? parseInt(editForm.edad) : null,
     sexo: editForm.sexo,
     cama: editForm.cama.trim(),
@@ -5174,6 +5576,17 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
+            <label style={labelStyle}>Ficha clínica (FC)</label>
+            <input value={nuevo.ficha_clinica} onChange={e=>setNuevo({...nuevo,ficha_clinica:e.target.value.slice(0,30)})} placeholder="123456" style={inputStyle}/>
+          </div>
+          <div>
+            <label style={labelStyle}>RUT</label>
+            <input value={nuevo.rut} onChange={e=>setNuevo({...nuevo,rut:e.target.value.slice(0,15)})} placeholder="12.345.678-9" style={inputStyle}/>
+          </div>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+          <div>
             <label style={labelStyle}>Sexo</label>
             <select value={nuevo.sexo} onChange={e=>setNuevo({...nuevo,sexo:e.target.value})} style={inputStyle}>
               <option value="M">Masculino</option>
@@ -5227,7 +5640,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{padding:"20px",overflowY:"auto"}}>
         <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>⚙️ Mis servicios</div>
-        <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>Configura los servicios/pisos del hospital donde atiendes</div>
+        <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>Configura los servicios/pisos del hospital donde atiendes. Mantén presionado ☰ y arrastra para reordenarlos.</div>
 
         <div style={{display:"flex",gap:6,marginBottom:14}}>
           <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
@@ -5237,13 +5650,34 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {misServiciosLista.length === 0 ? (
           <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13}}>No tienes servicios configurados.</div>
         ) : (
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {misServiciosLista.map(s => (
-              <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 14px"}}>
-                <div style={{fontSize:13,color:"var(--texto)"}}>{s.nombre}</div>
-                <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14}}>🗑</button>
-              </div>
-            ))}
+          <div ref={serviciosListRef} style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
+            {misServiciosLista.map((s, idx) => {
+              const arrastrando = dragServicio?.id === s.id;
+              return (
+                <div key={s.id}
+                  style={{
+                    display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,
+                    background:"var(--superficie)",borderRadius:8,padding:"10px 12px",
+                    border: arrastrando ? "1px solid var(--primario)" : "0.5px solid var(--borde)",
+                    boxShadow: arrastrando ? "0 10px 24px rgba(15,23,42,0.28)" : "none",
+                    transform: arrastrando ? `translateY(${dragServicio.dy}px) scale(1.02)` : "none",
+                    zIndex: arrastrando ? 5 : 1,
+                    position:"relative",
+                    transition: arrastrando ? "none" : "transform .15s",
+                    opacity: 1,
+                  }}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                    <span
+                      onPointerDown={(e)=>iniciarDragServicio(e, s, idx)}
+                      style={{cursor:"grab",touchAction:"none",fontSize:16,color:"var(--texto-ter)",padding:"4px 6px",userSelect:"none",flexShrink:0}}
+                      title="Arrastra para reordenar"
+                    >☰</span>
+                    <div style={{fontSize:13,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.nombre}</div>
+                  </div>
+                  <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14,flexShrink:0}}>🗑</button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -5279,6 +5713,16 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             <option value="M">M</option>
             <option value="F">F</option>
           </select>
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:1}}>
+          <label style={labelStyle}>Ficha clínica (FC)</label>
+          <input value={editForm.ficha_clinica || ""} onChange={e=>setEditForm({...editForm,ficha_clinica:e.target.value.slice(0,30)})} style={inputStyle}/>
+        </div>
+        <div style={{flex:1}}>
+          <label style={labelStyle}>RUT</label>
+          <input value={editForm.rut || ""} onChange={e=>setEditForm({...editForm,rut:e.target.value.slice(0,15)})} style={inputStyle}/>
         </div>
       </div>
       <div style={{display:"flex",gap:8}}>
@@ -5357,6 +5801,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <div style={{fontSize:16,fontWeight:600,color:"var(--texto-sec)",marginTop:4}}>
             {seleccionado.edad} años · Cama {seleccionado.cama} · {seleccionado.servicio}
           </div>
+          {(seleccionado.ficha_clinica || seleccionado.rut) && (
+            <div style={{fontSize:13,color:"var(--texto-ter)",marginTop:3}}>
+              {seleccionado.ficha_clinica ? `FC: ${seleccionado.ficha_clinica}` : ""}{seleccionado.ficha_clinica && seleccionado.rut ? " · " : ""}{seleccionado.rut ? `RUT: ${seleccionado.rut}` : ""}
+            </div>
+          )}
           <div style={{fontSize:14,color:"var(--texto-ter)",marginTop:4}}>Ingreso: {fmtFecha(seleccionado.fecha_ingreso)}</div>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -5391,7 +5840,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </div>
       {/* Operado + agregar cirugía */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:seleccionado.operado?"var(--exito-bg)":"var(--fondo-suave)",borderRadius:6,gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:14,color:"var(--texto)",fontWeight:600}}>🔪 Paciente operado</span>
+        <span style={{fontSize:14,color:"var(--texto)",fontWeight:600}}>🔪 Operado</span>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {seleccionado.operado && (
             <button onClick={abrirFormCirugia} style={{fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:500}}>+ Agregar cirugía</button>
@@ -6347,6 +6796,12 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     document.documentElement.setAttribute("data-theme", tema);
     try { localStorage.setItem("uro_tema", tema); } catch {}
   }, [tema]);
+  const config = useConfig();               // configuración del usuario (funciones + modo del chat)
+  const [configOpen, setConfigOpen] = useState(false); // modal "Configuración"
+  // Si la pestaña activa quedó oculta por configuración, volver al chat
+  useEffect(() => {
+    if (fnOculta(config, "tab:" + tab)) setTab("chat");
+  }, [config, tab]);
   const [messages, setMessages] = useState([]);
   const [conversaciones, setConversaciones] = useState([]); // lista de conversaciones del usuario
 const [conversacionActual, setConversacionActual] = useState(null); // ID de la conversación abierta
@@ -6650,10 +7105,10 @@ const invitResult = await listarMisInvitaciones();
 if (invitResult.ok) {
   setInvitacionesPendientes(invitResult.invitaciones);
 }
-// Cargar mis servicios (pisos/áreas del hospital)
+// Cargar mis servicios (pisos/áreas del hospital), respetando el orden guardado
 const serviciosResult = await listarMisServicios(perfil.id);
 if (serviciosResult.ok) {
-  setMisServiciosLista(serviciosResult.servicios);
+  setMisServiciosLista(ordenarServicios(serviciosResult.servicios));
 }
 // Cargar conocimiento (la IA lo usa para todos)
 const conocimientoResult = await listarConocimiento();
@@ -6881,9 +7336,19 @@ if (videosResult.ok) {
     } else if (tieneFuentes) {
       ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
     } else if (!consultaCirugias && !consultaPacientes) {
-      // Pregunta clínica/teórica pero SIN documentos relevantes en la base:
-      // en vez de rechazar, ofrece responder con conocimiento propio (como pregunta).
-      ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE ===\nNo se encontraron documentos relevantes en la base de conocimiento de UroSearch para esta consulta. NO respondas la pregunta con conocimiento propio todavía. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar ninguna información clínica: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\"";
+      if ((config.chatModo || "verificada") === "general") {
+        // Configuración "conocimiento general": responde directo con conocimiento
+        // propio, marcado como fuera de la base, sin pedir permiso cada vez.
+        ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE (MODO CONOCIMIENTO GENERAL ACTIVADO) ===\n"
+          + "No se encontraron documentos relevantes en la base de UroSearch, pero el usuario tiene activada en su configuración la opción de responder con conocimiento general de la IA. "
+          + "Responde la consulta usando tu conocimiento médico como urólogo especialista (guías EAU/AUA, criterio clínico, terminología precisa).\n"
+          + "IMPORTANTE: comienza tu respuesta EXACTAMENTE con esta línea y luego responde:\n"
+          + "\"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\"";
+      } else {
+        // Pregunta clínica/teórica pero SIN documentos relevantes en la base:
+        // en vez de rechazar, ofrece responder con conocimiento propio (como pregunta).
+        ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE ===\nNo se encontraron documentos relevantes en la base de conocimiento de UroSearch para esta consulta. NO respondas la pregunta con conocimiento propio todavía. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar ninguna información clínica: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\"";
+      }
     }
     if (consultaCirugias) {
       ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
@@ -6933,7 +7398,7 @@ if (videosResult.ok) {
     const respuesta = { role:"assistant", content:reply };
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
     // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
-    if (!usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes) {
+    if (!usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && (config.chatModo || "verificada") !== "general") {
       respuesta.ofrecioConocimiento = true;
     }
     if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
@@ -7069,7 +7534,7 @@ if (!currentUser) {
   );
 }
 
-  const tabs = tabsPorRol(currentUser.rol, pendientesCount);
+  const tabs = tabsPorRol(currentUser.rol, pendientesCount).filter(([id]) => !fnOculta(config, "tab:" + id));
 
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)"}}>
@@ -7103,6 +7568,9 @@ if (!currentUser) {
             <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
             </button>
+            <button onClick={()=>{ setMenuOpen(false); setConfigOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+              ⚙️ Configuración
+            </button>
             <button onClick={()=>{ setMenuOpen(false); setPerfilOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               👤 Mi perfil
             </button>
@@ -7114,7 +7582,12 @@ if (!currentUser) {
         )}
         <div style={{display:"flex",gap:0,overflowX:"auto"}}>
           {tabs.map(([id,label]) => (
-            <button key={id} data-tour={"tab-"+id} onClick={() => setTab(id)} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}}>{label}</button>
+            <button key={id} data-tour={"tab-"+id} onClick={() => {
+              if (tab === id) {
+                // Segundo toque en la pestaña activa: abre/cierra su submenú de secciones
+                try { window.dispatchEvent(new CustomEvent("uro-toggle-submenu", { detail: { tab: id } })); } catch {}
+              } else setTab(id);
+            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}}>{label}</button>
           ))}
         </div>
       </div>
@@ -7224,6 +7697,7 @@ if (!currentUser) {
 
       {tutorialOpen && <TutorialTour rol={currentUser?.rol} onGoToTab={setTab} onClose={cerrarTutorial}/>}
       {perfilOpen && <PerfilModal currentUser={currentUser} setCurrentUser={setCurrentUser} onClose={()=>setPerfilOpen(false)}/>}
+      {configOpen && <ConfigModal onClose={()=>setConfigOpen(false)}/>}
     </div>
   );
 }
