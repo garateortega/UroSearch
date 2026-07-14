@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment } from "react";
+import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
@@ -912,6 +912,7 @@ function renderMarkdown(texto) {
 
 function ChatBubble({ msg, userInitials, onPlayVideo }) {
   const isUser = msg.role === "user";
+  const [fuentesExpandidas, setFuentesExpandidas] = useState(false);
   const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "var(--primario)" : "var(--superficie)", color: isUser ?"var(--texto-inv)":"var(--texto)", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid var(--borde)", whiteSpace:"pre-wrap" };
   return (
     <div style={{display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:"12px"}}>
@@ -935,8 +936,13 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
           <div style={{marginTop:6,padding:"7px 10px",background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",borderRadius:8}}>
             <div style={{fontSize:10,fontWeight:500,color:"var(--exito)",marginBottom:4}}>📚 Basado en tu base de conocimiento:</div>
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {msg.fuentes.map(f => <div key={f.id} style={{fontSize:11,color:"var(--exito)",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"var(--texto-ter)"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"var(--texto-ter)"}}> ({f.categoria})</span> : null)}</div>)}
+              {(fuentesExpandidas ? msg.fuentes : msg.fuentes.slice(0,2)).map(f => <div key={f.id} style={{fontSize:11,color:"var(--exito)",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"var(--texto-ter)"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"var(--texto-ter)"}}> ({f.categoria})</span> : null)}</div>)}
             </div>
+            {msg.fuentes.length > 2 && (
+              <button onClick={()=>setFuentesExpandidas(v=>!v)} style={{marginTop:5,padding:0,background:"none",border:"none",color:"var(--exito)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                {fuentesExpandidas ? "▴ Ver menos" : `▾ Ver ${msg.fuentes.length - 2} fuente${msg.fuentes.length - 2 === 1 ? "" : "s"} más`}
+              </button>
+            )}
           </div>
         )}
         {msg.videos && msg.videos.length > 0 && (
@@ -1348,7 +1354,19 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   useEffect(() => { cargar(); }, []);
 
   const categorias = ["Todas", ...Array.from(new Set(preguntas.map(p => p.categoria || "General")))];
-  const filtradas = filtroCat === "Todas" ? preguntas : preguntas.filter(p => (p.categoria||"General") === filtroCat);
+  // Preguntas en orden ALEATORIO: se barajan al cargar o al cambiar de categoría,
+  // pero se mantienen estables mientras el usuario navega (no se re-barajan en cada render).
+  const filtradas = useMemo(() => {
+    const base = filtroCat === "Todas" ? preguntas : preguntas.filter(p => (p.categoria||"General") === filtroCat);
+    const arr = [...base];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, [preguntas, filtroCat]);
+  // Al re-barajar (cambio de categoría o recarga) volver a la primera pregunta.
+  useEffect(() => { setIdx(0); setSeleccion(null); setMostrarResp(false); }, [filtradas]);
   const actual = filtradas[idx] || null;
 
   const responder = (i) => {
@@ -1446,9 +1464,7 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
-        <div>
-          <div style={{fontSize:22,fontWeight:700,color:"var(--texto)"}}>❓ Preguntas</div>
-          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
+        <div>          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
         </div>
         {isAdmin && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -1866,9 +1882,7 @@ function CirugiasBiblioteca() {
 
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:22,fontWeight:700,color:"var(--texto)",marginBottom:2}}>🔪 Protocolos quirúrgicos</div>
-        <div style={{fontSize:13,color:"var(--texto-sec)"}}>{PROTOCOLOS_CIRUGIAS.length} procedimientos urológicos estándar</div>
+      <div style={{marginBottom:14}}>        <div style={{fontSize:13,color:"var(--texto-sec)"}}>{PROTOCOLOS_CIRUGIAS.length} procedimientos urológicos estándar</div>
       </div>
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar cirugía..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
@@ -5258,9 +5272,7 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,gap:10}}>
-        <div>
-          <div style={{fontSize:22,fontWeight:700,color:"var(--texto)",marginBottom:2}}>Biblioteca quirúrgica</div>
-          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{videos.length} videos</div>
+        <div>          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{videos.length} videos</div>
         </div>
         {isAdmin && <button onClick={()=>setAgregando(!agregando)} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background: agregando?"var(--superficie)":"var(--primario)",color: agregando?"var(--primario)":"var(--texto-inv)",border: agregando?"1px solid var(--primario)":"none",borderRadius:8,cursor:"pointer"}}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
       </div>
@@ -5654,6 +5666,14 @@ const cargarPerfil = async (sessionData) => {
     setTab(perfil.rol === "admin" ? "admin" : "chat");
   }
 
+  // Mostrar el saludo de Uros DE INMEDIATO (antes de las cargas pesadas de
+  // Supabase). Así aparece al instante y no queda un hueco en el que el usuario
+  // pueda escribir sobre un chat vacío que luego se sobrescribe.
+  if (perfil.rol !== "admin") {
+    setConversacionActual(null);
+    setMessages([{ role:"assistant", content:saludoUros(perfil.nombre) }]);
+  }
+
 // Cargar conversaciones del usuario
 const convResult = await listarConversaciones();
 if (convResult.ok) {
@@ -5691,11 +5711,9 @@ const videosResult = await listarVideos();
 if (videosResult.ok) {
   setVideos(videosResult.videos);
 }
-// Al abrir el chat, siempre partir en una conversación nueva con el saludo de Uros
-if (perfil.rol !== "admin") {
-  setConversacionActual(null);
-  setMessages([{ role:"assistant", content:saludoUros(perfil.nombre) }]);
-}
+// (El saludo de Uros ya se fijó al inicio de esta función, antes de las cargas
+// pesadas, para que aparezca de inmediato y no se sobrescriba lo que el usuario
+// haya empezado a escribir.)
 };
 
  const userInitials = currentUser ? currentUser.nombre.split(" ").map(p=>p[0]||"").filter(c=>c && c.match(/[A-Z]/i)).slice(0,2).join("").toUpperCase() : "";
@@ -5963,8 +5981,8 @@ if (perfil.rol !== "admin") {
     if (!usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes) {
       respuesta.ofrecioConocimiento = true;
     }
-    if (videosRelevantes.length > 0) respuesta.videos = videosRelevantes;
-    if (tieneFuentes) {
+    if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
+    if (tieneFuentes && !usarConocimientoPropio && !declinoConocimiento) {
       const vistas = new Set();
       respuesta.fuentes = docsRelevantes
         .filter(d => { if (vistas.has(d.titulo)) return false; vistas.add(d.titulo); return true; })
@@ -6138,7 +6156,7 @@ if (!currentUser) {
         )}
         <div style={{display:"flex",gap:0,overflowX:"auto"}}>
           {tabs.map(([id,label]) => (
-            <button key={id} data-tour={"tab-"+id} onClick={() => setTab(id)} style={{flex:"1 0 auto",padding:"13px 10px",fontSize:14,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}}>{label}</button>
+            <button key={id} data-tour={"tab-"+id} onClick={() => setTab(id)} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}}>{label}</button>
           ))}
         </div>
       </div>
@@ -6247,10 +6265,6 @@ if (!currentUser) {
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
 
       {tutorialOpen && <TutorialTour rol={currentUser?.rol} onGoToTab={setTab} onClose={cerrarTutorial}/>}
-
-      <div style={{padding:"8px 16px",borderTop:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"0 0 var(--border-radius-lg) var(--border-radius-lg)",display:"flex",justifyContent:"flex-end",alignItems:"center",fontSize:10,fontStyle:"italic",color:"var(--texto-sec)"}}>
-        <span style={{fontStyle:"normal",fontFamily:"monospace",fontSize:9,color:"var(--texto-ter)",letterSpacing:"0.3px"}}>{VERSION}</span>
-      </div>
     </div>
   );
 }

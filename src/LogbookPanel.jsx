@@ -442,7 +442,7 @@ export default function LogbookPanel({ currentUser }) {
   }, [registros]);
 
   // ─── Estilos compartidos ───
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box" };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
   const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
   const btnPrim = { padding: "10px 18px", fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
   const btnSec = { padding: "10px 14px", fontSize: 13, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
@@ -454,7 +454,8 @@ export default function LogbookPanel({ currentUser }) {
   if (!currentUser) return null;
 
   return (
-    <div style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px 40px" }}>
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", width: "100%", boxSizing: "border-box" }}>
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px 40px" }}>
       {/* ─── Encabezado + sub-pestañas ─── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 19, color: "var(--texto)" }}>📓 Logbook quirúrgico</h2>
@@ -699,6 +700,7 @@ export default function LogbookPanel({ currentUser }) {
           <img src={fotoUrl} alt="Protocolo operatorio" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
         </div>
       )}
+      </div>
     </div>
   );
 }
