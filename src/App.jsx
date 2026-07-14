@@ -299,6 +299,253 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
   );
 }
 
+// ─── Marca de agua: logo UroSearch como PNG (colores fijos, las var CSS no sirven en PDF) ───
+function logoWatermarkDataUrl() {
+  return new Promise((resolve) => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 50 50">
+      <circle cx="25" cy="25" r="23.5" fill="#ffffff" stroke="#065A82" stroke-width="2"/>
+      <path d="M 15 11 C 10 11, 8 14, 8 19 C 8 24, 10 27, 15 27 C 17.5 27, 19 26, 19.5 24 C 20 21, 20 16, 19.5 13.5 C 19 12, 17.5 11, 15 11 Z" fill="#065A82"/>
+      <path d="M 17 27 C 19 30, 16 33, 18.5 36 C 21 39, 23 40, 25 42" stroke="#065A82" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      <path d="M 35 11 C 40 11, 42 14, 42 19 C 42 24, 40 27, 35 27 C 32.5 27, 31 26, 30.5 24 C 30 21, 30 16, 30.5 13.5 C 31 12, 32.5 11, 35 11 Z" fill="#1C7293"/>
+      <path d="M 33 27 C 31 30, 34 33, 31.5 36 C 29 39, 27 40, 25 42" stroke="#1C7293" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      <path d="M 19 43 C 19 41.5, 21 40.5, 25 40.5 C 22 42, 28 45.5, 25 47 C 21 47, 19 45.5, 19 43 Z" fill="#065A82"/>
+      <path d="M 31 43 C 31 41.5, 29 40.5, 25 40.5 C 22 42, 28 45.5, 25 47 C 29 47, 31 45.5, 31 43 Z" fill="#1C7293"/>
+    </svg>`;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = 320; c.height = 320;
+      c.getContext("2d").drawImage(img, 0, 0, 320, 320);
+      resolve(c.toDataURL("image/png"));
+    };
+    img.onerror = () => resolve(null);
+    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+  });
+}
+
+// ─── Plantillas de prescripción (checklists pre-hechos, urología) ───
+const RX_TEMPLATES = {
+  medicamentos: {
+    titulo: "RECETA MÉDICA", verbo: "Rp.",
+    items: [
+      "Ciprofloxacino 500 mg — 1 comprimido cada 12 h VO por 7 días",
+      "Cefadroxilo 500 mg — 1 cápsula cada 12 h VO por 7 días",
+      "Nitrofurantoína 100 mg — 1 cápsula cada 8 h VO por 5 días",
+      "Fosfomicina 3 g — 1 sobre en dosis única VO",
+      "Ceftriaxona 1 g — 1 ampolla cada 24 h EV",
+      "Tamsulosina 0,4 mg — 1 comprimido cada 24 h VO (noche)",
+      "Finasterida 5 mg — 1 comprimido cada 24 h VO",
+      "Dutasterida/Tamsulosina 0,5/0,4 mg — 1 comprimido cada 24 h VO",
+      "Solifenacina 5 mg — 1 comprimido cada 24 h VO",
+      "Oxibutinina 5 mg — 1 comprimido cada 8–12 h VO",
+      "Paracetamol 1 g — 1 comprimido cada 8 h VO",
+      "Ketoprofeno 100 mg — 1 comprimido cada 12 h VO con alimentos",
+      "Ketorolaco 10 mg — 1 comprimido cada 8 h VO SOS dolor",
+      "Tramadol 50 mg — 1 comprimido cada 8 h VO SOS dolor intenso",
+    ],
+  },
+  laboratorio: {
+    titulo: "SOLICITUD DE EXÁMENES DE LABORATORIO", verbo: "Solicito:",
+    items: [
+      "Hemograma completo", "VHS / PCR", "Creatinina plasmática", "Nitrógeno ureico (BUN)",
+      "Electrolitos plasmáticos (Na/K/Cl)", "Perfil bioquímico", "Perfil hepático", "Glicemia",
+      "Pruebas de coagulación (TP/INR, TTPA)", "Grupo sanguíneo y Rh", "Orina completa", "Urocultivo",
+      "PSA total", "PSA libre", "Testosterona total", "Calcio / Fósforo", "Ácido úrico",
+      "Relación proteína/creatinina en orina",
+    ],
+  },
+  imagen: {
+    titulo: "SOLICITUD DE IMÁGENES", verbo: "Solicito:",
+    items: [
+      "Ecografía renal y vesical", "Ecografía vesicoprostática con residuo post-miccional",
+      "UroTAC (TAC abdomen y pelvis, fase urográfica)", "TAC de abdomen y pelvis con contraste",
+      "Resonancia multiparamétrica de próstata", "Pielo-TAC", "Cistografía",
+      "Uretrocistografía retrógrada y miccional", "Radiografía renal-vesical simple (Rx RVS)",
+      "Cintigrama renal DMSA", "Cintigrama renal DTPA / MAG3", "Ecografía testicular con doppler",
+    ],
+  },
+  indicaciones: {
+    titulo: "INDICACIONES MÉDICAS", verbo: "Indicaciones:",
+    items: [
+      "Reposo relativo", "Régimen liviano según tolerancia", "Abundante ingesta de líquidos (> 2 litros/día)",
+      "Aseo genital prolijo", "Control en policlínico de Urología", "Retiro de sonda Foley según indicación",
+      "Retiro de catéter doble J (JJ) por cistoscopía", "Curaciones planas según indicación",
+      "Mantener catéter permeable y bolsa bajo nivel vesical",
+      "Consultar en Urgencias si: fiebre > 38,5 °C, hematuria con coágulos, retención urinaria o dolor no controlado",
+    ],
+  },
+};
+const RX_CATS = [["medicamentos", "💊 Medicamentos"], ["laboratorio", "🧪 Laboratorio"], ["imagen", "🩻 Imagen"], ["indicaciones", "📋 Indicaciones"]];
+
+// ─── Panel de Prescripciones (exclusivo urólogo): checklists → PDF tipo receta ───
+function PrescripcionesPanel({ currentUser }) {
+  const [cat, setCat] = useState("medicamentos");
+  const [seleccionados, setSeleccionados] = useState({});   // { "medicamentos": Set(idx), ... } via objeto
+  const [extra, setExtra] = useState("");                    // líneas libres adicionales
+  const [paciente, setPaciente] = useState({ nombre: "", edad: "", rut: "", ciudad: "", domicilio: "" });
+  const [perfil, setPerfil] = useState(null);
+  const [generando, setGenerando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const { data } = await supabase.from("perfiles").select("*").eq("id", currentUser.id).single();
+        if (vivo) setPerfil(data || {});
+      } catch { if (vivo) setPerfil({}); }
+    })();
+    return () => { vivo = false; };
+  }, [currentUser.id]);
+
+  const marcados = seleccionados[cat] || [];
+  const toggle = (idx) => {
+    setSeleccionados(prev => {
+      const arr = prev[cat] || [];
+      return { ...prev, [cat]: arr.includes(idx) ? arr.filter(i => i !== idx) : [...arr, idx] };
+    });
+  };
+
+  const lineasActuales = () => {
+    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => RX_TEMPLATES[cat].items[i]);
+    const libres = extra.split("\n").map(s => s.trim()).filter(Boolean);
+    return [...base, ...libres];
+  };
+
+  const generarPDF = async () => {
+    const lineas = lineasActuales();
+    if (lineas.length === 0) { setMsg("⚠️ Selecciona al menos un ítem o agrega una línea."); return; }
+    if (!perfil?.nombre_completo && !perfil?.nombre) { setMsg("⚠️ Completa tu perfil (Mi perfil) antes de generar recetas."); return; }
+    setGenerando(true); setMsg("");
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "mm", format: "a5" });
+      const W = doc.internal.pageSize.getWidth();
+      const H = doc.internal.pageSize.getHeight();
+      const cx = W / 2;
+
+      // Marca de agua (logo tenue, centrado). Solo si jspdf soporta opacidad.
+      const wm = await logoWatermarkDataUrl();
+      if (wm && doc.GState) {
+        try {
+          doc.saveGraphicsState();
+          doc.setGState(new doc.GState({ opacity: 0.07 }));
+          const size = 90;
+          doc.addImage(wm, "PNG", cx - size / 2, H / 2 - size / 2, size, size);
+          doc.restoreGraphicsState();
+        } catch {}
+      }
+
+      const t = RX_TEMPLATES[cat];
+      const nombreDr = perfil.nombre_completo || perfil.nombre || "";
+      let y = 14;
+      // Encabezado del médico
+      doc.setFont("times", "bold"); doc.setFontSize(13); doc.setTextColor(20, 20, 20);
+      doc.text(nombreDr.toUpperCase(), cx, y, { align: "center" }); y += 5;
+      doc.setFont("times", "normal"); doc.setFontSize(8.5); doc.setTextColor(60, 60, 60);
+      doc.text("MÉDICO CIRUJANO · UROLOGÍA", cx, y, { align: "center" }); y += 4;
+      const idLine = ["RUT: " + (perfil.rut || "—"), "RCM: " + (perfil.rcm || "—")].join("    ");
+      doc.text(idLine, cx, y, { align: "center" }); y += 4;
+      if (perfil.centro) { doc.text(perfil.centro, cx, y, { align: "center" }); y += 4; }
+      if (perfil.direccion) { doc.text(perfil.direccion, cx, y, { align: "center" }); y += 4; }
+      const loc = [perfil.ciudad, perfil.region].filter(Boolean).join(", ");
+      if (loc) { doc.text(loc, cx, y, { align: "center" }); y += 4; }
+      const contacto = [perfil.telefono ? "☎ " + perfil.telefono : "", perfil.correo || ""].filter(Boolean).join("   ");
+      if (contacto) { doc.text(contacto, cx, y, { align: "center" }); y += 4; }
+      y += 1;
+      doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3); doc.line(12, y, W - 12, y); y += 7;
+
+      // Título + fecha
+      doc.setFont("times", "bold"); doc.setFontSize(10.5); doc.setTextColor(6, 90, 130);
+      doc.text(t.titulo, 12, y);
+      doc.setFont("times", "normal"); doc.setFontSize(9); doc.setTextColor(40, 40, 40);
+      doc.text("Fecha: " + fmtFecha(new Date().toISOString().slice(0, 10)), W - 12, y, { align: "right" }); y += 7;
+
+      // Datos del paciente
+      doc.setFontSize(9.5); doc.setTextColor(20, 20, 20);
+      doc.text("Paciente: " + (paciente.nombre || "_______________________________"), 12, y); y += 6;
+      const l2 = "Edad: " + (paciente.edad || "____") + "    RUT: " + (paciente.rut || "____________") + "    Ciudad: " + (paciente.ciudad || "__________");
+      doc.text(l2, 12, y); y += 6;
+      doc.text("Domicilio: " + (paciente.domicilio || "_______________________________"), 12, y); y += 8;
+
+      // Cuerpo (Rp. / Solicito)
+      doc.setFont("times", "bold"); doc.setFontSize(11); doc.text(t.verbo, 12, y); y += 6;
+      doc.setFont("times", "normal"); doc.setFontSize(10);
+      const maxW = W - 24;
+      lineas.forEach((ln, i) => {
+        const wrapped = doc.splitTextToSize((cat === "medicamentos" ? `${i + 1}. ` : "• ") + ln, maxW);
+        wrapped.forEach(w => {
+          if (y > H - 16) { doc.addPage(); y = 16; }
+          doc.text(w, 14, y); y += 5.2;
+        });
+        y += 1.5;
+      });
+
+      // Pie
+      y = Math.max(y, H - 22);
+      doc.setDrawColor(120, 120, 120); doc.line(cx - 28, y, cx + 28, y); y += 4;
+      doc.setFontSize(8); doc.setTextColor(90, 90, 90);
+      doc.text("Firma y timbre", cx, y, { align: "center" });
+
+      const nombreArch = `${t.titulo.toLowerCase().replace(/[^a-z]+/g, "-")}-${(paciente.nombre || "paciente").replace(/\s+/g, "_")}.pdf`;
+      doc.save(nombreArch);
+      setMsg("✓ Receta generada.");
+    } catch (e) {
+      setMsg("⚠️ No se pudo generar el PDF: " + String(e?.message || e));
+    }
+    setGenerando(false);
+  };
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
+  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px" }}>
+      {/* Submenú de categorías */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {RX_CATS.map(([id, label]) => (
+          <button key={id} onClick={() => { setCat(id); setMsg(""); }} style={{ padding: "7px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 20, cursor: "pointer", border: cat === id ? "none" : "0.5px solid var(--borde)", background: cat === id ? "var(--primario)" : "var(--superficie)", color: cat === id ? "var(--texto-inv)" : "var(--primario)" }}>
+            {label}{(seleccionados[id]?.length || 0) > 0 ? ` (${seleccionados[id].length})` : ""}
+          </button>
+        ))}
+      </div>
+
+      {/* Datos del paciente */}
+      <div style={{ background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "12px", marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 8 }}>Datos del paciente (opcional)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>Nombre</label><input value={paciente.nombre} onChange={e => setPaciente({ ...paciente, nombre: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>Edad</label><input value={paciente.edad} onChange={e => setPaciente({ ...paciente, edad: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>RUT</label><input value={paciente.rut} onChange={e => setPaciente({ ...paciente, rut: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>Ciudad</label><input value={paciente.ciudad} onChange={e => setPaciente({ ...paciente, ciudad: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>Domicilio</label><input value={paciente.domicilio} onChange={e => setPaciente({ ...paciente, domicilio: e.target.value })} style={inp} /></div>
+        </div>
+      </div>
+
+      {/* Checklist de la categoría */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
+        {RX_TEMPLATES[cat].items.map((it, idx) => {
+          const on = marcados.includes(idx);
+          return (
+            <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
+              <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 1, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
+              <span style={{ fontSize: 13, color: "var(--texto)", lineHeight: 1.4 }}>{it}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Líneas libres */}
+      <label style={lbl}>Agregar líneas propias (una por línea)</label>
+      <textarea value={extra} onChange={e => setExtra(e.target.value)} rows={3} placeholder={cat === "medicamentos" ? "Ej: Omeprazol 20 mg — 1 comp en ayunas por 14 días" : "Ej: control con nefrología en 15 días"} style={{ ...inp, resize: "vertical", marginBottom: 12 }} />
+
+      {msg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
+
+      <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: "12px", fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1 }}>{generando ? "Generando…" : "📄 Generar receta en PDF"}</button>
+      <div style={{ fontSize: 10.5, color: "var(--texto-ter)", textAlign: "center", marginTop: 8, lineHeight: 1.4 }}>Los datos del médico salen de tu perfil. La receta lleva la marca de agua de UroSearch.</div>
+    </div>
+  );
+}
+
 // Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
 function saludoUros(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
@@ -2605,11 +2852,12 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   }
 
   const soloLectura = currentUser?.rol === "interno"; // Interno: solo observa en Hospital
+  const esUrologo = currentUser?.rol === "urologo";   // Prescripciones: exclusivo urólogo
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       <div data-tour="hosp-subtabs" style={{display:"flex",alignItems:"flex-end",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"4px 10px 0",flexShrink:0}}>
         <div style={{display:"flex",gap:0,overflowX:"auto",flex:1,minWidth:0}}>
-          {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla"],["notas","🗒️ Notas"]].map(([id,label]) => {
+          {[["pacientes","👥 Pacientes"],["tabla","📋 Tabla"],["notas","🗒️ Notas"],...(esUrologo?[["prescripciones","💊 Recetas"]]:[])].map(([id,label]) => {
             const activo = subTab===id;
             const conTools = id==="pacientes" || id==="tabla";
             return (
@@ -2624,6 +2872,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
+      {subTab === "prescripciones" && esUrologo && <PrescripcionesPanel currentUser={currentUser}/>}
     </div>
   );
 }
