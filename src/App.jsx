@@ -119,6 +119,85 @@ Al responder:
 4. Para fármacos, incluye dosis habituales si están en la base.
 5. Para mapas conceptuales: responde SOLO con JSON: {"tipo":"mapa","titulo":"...","nodo_central":"...","ramas":[{"rama":"...","subnodos":["...","..."]}]}`;
 
+// Formatea una fecha ISO (YYYY-MM-DD) a dd/mm/aaaa. Deja pasar otros formatos tal cual.
+function fmtFecha(f) {
+  if (!f) return "—";
+  const m = String(f).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(f);
+}
+
+// ─── Compresión de imagen para envío a la IA (mismo patrón que el Logbook) ───
+async function comprimirImagenPac(file, maxDim = 1568, calidad = 0.85) {
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("No se pudo leer la imagen"));
+    i.src = URL.createObjectURL(file);
+  });
+  const escala = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * escala));
+  canvas.height = Math.max(1, Math.round(img.height * escala));
+  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(img.src);
+  const dataUrl = canvas.toDataURL("image/jpeg", calidad);
+  return dataUrl.split(",")[1];
+}
+
+// ─── Extracción de datos de ingreso de un paciente desde foto(s) (visión IA) ───
+// Reutiliza la misma edge function del chat. Devuelve un objeto con los campos.
+async function extraerIngresoPaciente(imagenesBase64) {
+  const instrucciones = `Analiza la(s) foto(s) de esta ficha/hoja de ingreso hospitalario de urología y extrae los datos en JSON.
+Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
+Si un dato no aparece, usa null. NO inventes datos.
+
+Esquema exacto:
+{
+  "iniciales": "iniciales del paciente (2-4 letras mayúsculas, derivadas del nombre) o null",
+  "edad": numero o null,
+  "sexo": "M" | "F" | null,
+  "diagnostico": "diagnóstico principal de ingreso o null",
+  "antecedentes": "antecedentes mórbidos, quirúrgicos, alergias y hábitos, en texto corrido o null",
+  "examenes": "exámenes de ingreso relevantes con sus valores (laboratorio, imágenes) o null",
+  "historia": "resumen de la anamnesis / historia actual del ingreso (máx 6 frases) o null",
+  "plan_manejo": "plan o indicaciones de ingreso si aparecen o null"
+}
+IMPORTANTE: NUNCA incluyas el nombre completo ni el RUT del paciente, solo iniciales. No transcribas datos identificatorios.`;
+
+  const content = imagenesBase64.map((b64) => ({
+    type: "image",
+    source: { type: "base64", media_type: "image/jpeg", data: b64 },
+  }));
+  content.push({ type: "text", text: instrucciones });
+
+  const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-5",
+      max_tokens: 1800,
+      system: "Eres un extractor de datos clínicos de hojas de ingreso de urología. Respondes exclusivamente con JSON válido. Nunca incluyes nombre completo ni RUT del paciente.",
+      messages: [{ role: "user", content }],
+    }),
+  });
+  const data = await res.json();
+  const txt = data.content?.find((b) => b.type === "text")?.text || "";
+  const clean = txt.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
+// Une los campos clínicos extraídos en un texto de historia legible y editable.
+function componerHistoriaIngreso(x) {
+  const partes = [];
+  if (x.historia) partes.push(x.historia.trim());
+  if (x.antecedentes) partes.push("ANTECEDENTES: " + x.antecedentes.trim());
+  if (x.examenes) partes.push("EXÁMENES DE INGRESO: " + x.examenes.trim());
+  return partes.join("\n\n");
+}
+
 // Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
 function saludoUros(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
@@ -2842,6 +2921,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const [error, setError] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [modoVista, setModoVista] = useState("planner"); // "planner" | "lista"
+  const [vistaMenuOpen, setVistaMenuOpen] = useState(false); // submenú del botón "Vista ▾"
   const [lunesSemana, setLunesSemana] = useState(() => {
     const d = new Date();
     const dow = (d.getDay() + 6) % 7; // 0 = lunes
@@ -3483,14 +3563,19 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       {/* Submenú de herramientas (aparece al tocar de nuevo la pestaña "Tabla") */}
       {toolsOpen && !soloLectura && (
         <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
           <label style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
             📊 Importar Excel
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
           </label>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
-          <div style={{display:"flex",gap:4,marginLeft:"auto",alignItems:"center"}}>
-            <button onClick={()=>setModoVista("planner")} style={modoVista==="planner"?toggleOn:toggleOff}>📅 Planner</button>
-            <button onClick={()=>setModoVista("lista")} style={modoVista==="lista"?toggleOn:toggleOff}>☰ Lista</button>
+          <div style={{position:"relative",marginLeft:"auto"}}>
+            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
+            {vistaMenuOpen && (
+              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:4,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:2,minWidth:130}}>
+                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Planner</button>
+                <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3738,13 +3823,17 @@ const SUGERENCIAS_SOAP = {
   const [abrirFormPendiente, setAbrirFormPendiente] = useState(false);
   const [abrirFormEvo, setAbrirFormEvo] = useState(false);
   const [abrirFormExamen, setAbrirFormExamen] = useState(false);
+  const inputFotoIngresoRef = useRef(null);          // input de foto para "nuevo por foto"
+  const inputFotoFichaRef = useRef(null);            // input de foto para "agregar ingreso" en la ficha
+  const [extrayendoIngreso, setExtrayendoIngreso] = useState(false);
+  const [extraccionMsg, setExtraccionMsg] = useState("");
 const [editForm, setEditForm] = useState({});
 const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando se está agregando una cirugía
 
   // Form de nuevo paciente
   const [nuevo, setNuevo] = useState({
     iniciales: "", edad: "", sexo: "M", cama: "", servicio: "",
-    diagnostico: "", plan_manejo: "", fecha_ingreso: new Date().toISOString().slice(0, 10)
+    diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10)
   });
 
   // Form de evoluciones
@@ -3762,6 +3851,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [formLitiasis, setFormLitiasis] = useState({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
   const [tumores, setTumores] = useState([]); // lista de tumores agregados
   const [formTumor, setFormTumor] = useState({ organo: "", sublocalizacion: "", tamano: "" });
+  const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
 
   // Servicios
   const [nuevoServicio, setNuevoServicio] = useState("");
@@ -3845,6 +3935,59 @@ const cargarMiembrosEquipo = async () => {
   // CRUD PACIENTES
   // ============================================================
 
+  // ── Extracción por foto: NUEVO paciente ──────────────────────────
+  const onFotoNuevoIngreso = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3);
+    e.target.value = "";
+    if (!files.length) return;
+    setError(""); setExtraccionMsg(""); setExtrayendoIngreso(true);
+    try {
+      const b64s = [];
+      for (const f of files) b64s.push(await comprimirImagenPac(f));
+      const x = await extraerIngresoPaciente(b64s);
+      setNuevo(prev => ({
+        ...prev,
+        iniciales: x.iniciales ? String(x.iniciales).toUpperCase().slice(0, 5) : prev.iniciales,
+        edad: (x.edad ?? "") !== "" ? String(x.edad) : prev.edad,
+        sexo: x.sexo === "F" ? "F" : (x.sexo === "M" ? "M" : prev.sexo),
+        diagnostico: x.diagnostico || prev.diagnostico,
+        plan_manejo: x.plan_manejo || prev.plan_manejo,
+        historia: componerHistoriaIngreso(x) || prev.historia,
+      }));
+      setExtraccionMsg("✓ Datos extraídos. Revísalos y completa cama/servicio antes de guardar.");
+    } catch (err) {
+      setError("No se pudo leer la foto. Intenta con mejor luz o ingresa los datos a mano.");
+    } finally {
+      setExtrayendoIngreso(false);
+    }
+  };
+
+  // ── Extracción por foto: AGREGAR ingreso a un paciente existente ──
+  const onFotoFichaIngreso = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3);
+    e.target.value = "";
+    if (!files.length || !seleccionado) return;
+    setExtraccionMsg(""); setExtrayendoIngreso(true);
+    try {
+      const b64s = [];
+      for (const f of files) b64s.push(await comprimirImagenPac(f));
+      const x = await extraerIngresoPaciente(b64s);
+      const textoNuevo = componerHistoriaIngreso(x);
+      const historiaFinal = [seleccionado.historia, textoNuevo].filter(Boolean).join("\n\n");
+      const patch = { historia: historiaFinal };
+      if (x.diagnostico && !seleccionado.diagnostico) patch.diagnostico = x.diagnostico;
+      const result = await actualizarPaciente(seleccionado.id, patch);
+      if (!result.ok) { setExtraccionMsg("⚠️ Error al guardar: " + result.error); return; }
+      setSeleccionado(result.paciente);
+      setPacientes(prev => prev.map(p => p.id === result.paciente.id ? result.paciente : p));
+      setExtraccionMsg("✓ Ingreso agregado a la historia desde la foto.");
+    } catch (err) {
+      setExtraccionMsg("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
+    } finally {
+      setExtrayendoIngreso(false);
+    }
+  };
+
   const guardarNuevo = async () => {
     setError("");
     if (!nuevo.iniciales.trim()) return setError("Ingresa las iniciales");
@@ -3863,6 +4006,7 @@ const cargarMiembrosEquipo = async () => {
       servicio: nuevo.servicio.trim(),
       diagnostico: nuevo.diagnostico.trim(),
       plan_manejo: nuevo.plan_manejo.trim() || null,
+      historia: nuevo.historia.trim() || null,
       fecha_ingreso: nuevo.fecha_ingreso,
       estado: 'activo'
     };
@@ -3871,7 +4015,8 @@ const cargarMiembrosEquipo = async () => {
     if (!result.ok) return setError(result.error);
 
     setPacientes(prev => [result.paciente, ...prev]);
-    setNuevo({ iniciales: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", fecha_ingreso: new Date().toISOString().slice(0, 10) });
+    setNuevo({ iniciales: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10) });
+    setExtraccionMsg("");
     setVista("lista");
   };
 
@@ -4231,7 +4376,23 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{padding:"20px",overflowY:"auto"}}>
         <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nuevo paciente {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
-        
+
+        {/* Captura por foto: autocompleta desde la hoja de ingreso */}
+        <div style={{textAlign:"center",border:"1.5px dashed var(--borde)",borderRadius:12,padding:"14px",marginBottom:14,background:"var(--fondo-suave)"}}>
+          <input ref={inputFotoIngresoRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoNuevoIngreso}/>
+          {extrayendoIngreso ? (
+            <div style={{fontSize:13,color:"var(--texto-sec)"}}>🔍 Leyendo la hoja de ingreso…</div>
+          ) : (
+            <>
+              <div style={{fontSize:24,marginBottom:4}}>📷</div>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:2}}>Crear desde foto del ingreso</div>
+              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:10}}>La IA extrae diagnóstico, antecedentes, exámenes e historia. Hasta 3 fotos.</div>
+              <button onClick={()=>inputFotoIngresoRef.current?.click()} style={{padding:"8px 16px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Tomar / subir foto</button>
+            </>
+          )}
+        </div>
+        {extraccionMsg && <div style={{fontSize:12,padding:"8px 10px",marginBottom:12,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
+
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
             <label style={labelStyle}>Nombre o iniciales</label>
@@ -4278,6 +4439,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         <label style={labelStyle}>Plan de manejo (opcional)</label>
         <textarea value={nuevo.plan_manejo} onChange={e=>setNuevo({...nuevo,plan_manejo:e.target.value})} placeholder="Plan inicial" rows={3} style={{...inputStyle,resize:"vertical"}}/>
+
+        <label style={labelStyle}>Historia / ingreso (opcional)</label>
+        <textarea value={nuevo.historia} onChange={e=>setNuevo({...nuevo,historia:e.target.value})} placeholder="Se autocompleta desde la foto del ingreso. Puedes editarla." rows={4} style={{...inputStyle,resize:"vertical"}}/>
 
         {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
 
@@ -4421,14 +4585,18 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
         <div>
-          <div style={{fontSize:24,fontWeight:700,color:"var(--texto)"}}>{seleccionado.iniciales} <span style={{fontSize:28,fontWeight:700,color:seleccionado.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{seleccionado.sexo==="F"?"♀":"♂"}</span></div>
+          <div style={{fontSize:18,fontWeight:700,color:"var(--texto)"}}>{seleccionado.iniciales} <span style={{fontSize:20,fontWeight:700,color:seleccionado.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{seleccionado.sexo==="F"?"♀":"♂"}</span></div>
           <div style={{fontSize:16,fontWeight:600,color:"var(--texto-sec)",marginTop:4}}>
             {seleccionado.edad} años · Cama {seleccionado.cama} · {seleccionado.servicio}
           </div>
-          <div style={{fontSize:14,color:"var(--texto-ter)",marginTop:4}}>Ingreso: {seleccionado.fecha_ingreso}</div>
+          <div style={{fontSize:14,color:"var(--texto-ter)",marginTop:4}}>Ingreso: {fmtFecha(seleccionado.fecha_ingreso)}</div>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          <button onClick={iniciarEdicion} style={{padding:"5px 10px",fontSize:11,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏ Editar</button>
+          <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:14,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏️</button>
+          {!soloLectura && <>
+            <input ref={inputFotoFichaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoFichaIngreso}/>
+            <button onClick={()=>inputFotoFichaRef.current?.click()} disabled={extrayendoIngreso} title="Agregar ingreso desde foto" aria-label="Agregar ingreso desde foto" style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoIngreso?"default":"pointer",fontWeight:500,opacity:extrayendoIngreso?0.6:1}}>{extrayendoIngreso?"🔍 Leyendo…":"📷 Ingreso"}</button>
+          </>}
           {seleccionado.estado === "activo" ? (
             <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
           ) : (
@@ -4439,6 +4607,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
         </div>
       </div>
+      {extraccionMsg && <div style={{fontSize:12,padding:"8px 10px",marginTop:8,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
       <div style={{fontSize:14,color:"var(--texto)",marginTop:8,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
         <strong>Diagnóstico:</strong> {seleccionado.diagnostico}
       </div>
@@ -5074,18 +5243,34 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <div style={{padding:"16px",overflowY:"auto"}}>
       {/* Submenú (aparece al tocar de nuevo la pestaña "Pacientes") */}
       {toolsOpen && (
-        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-          {!soloLectura && <button onClick={()=>setVista("servicios")} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios</button>}
-          {!soloLectura && <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>}
-          <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-            <option value="todos">Todos los servicios</option>
-            {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-            <option value="activo">Solo activos</option>
-            <option value="alta">Solo dados de alta</option>
-            <option value="todos">Todos</option>
-          </select>
+        <div style={{marginBottom:12,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            {!soloLectura && (
+              <button onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios {serviciosMenuOpen?"▴":"▾"}</button>
+            )}
+            {!soloLectura && <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>}
+          </div>
+
+          {serviciosMenuOpen && !soloLectura && (
+            <div style={{marginTop:10,paddingTop:10,borderTop:"0.5px solid var(--borde)",display:"flex",flexDirection:"column",gap:10}}>
+              <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🗂️ Mis servicios</button>
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Servicio a visualizar</label>
+                <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
+                  <option value="todos">Todos los servicios</option>
+                  {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Estado</label>
+                <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
+                  <option value="activo">Solo activos</option>
+                  <option value="alta">Solo dados de alta</option>
+                  <option value="todos">Todos</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
