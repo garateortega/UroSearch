@@ -198,6 +198,52 @@ function componerHistoriaIngreso(x) {
   return partes.join("\n\n");
 }
 
+// ─── Extracción de una TABLA quirúrgica desde foto(s): devuelve arreglo ───
+async function extraerTablaCirugias(imagenesBase64) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const instrucciones = `Analiza la(s) foto(s) de esta tabla/programación quirúrgica de urología y extrae TODAS las cirugías en JSON.
+Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
+Si un dato no aparece, usa null. NO inventes datos. La fecha de referencia de hoy es ${hoy}.
+
+Esquema exacto:
+{
+  "cirugias": [
+    {
+      "fecha": "YYYY-MM-DD (si la tabla indica día/fecha) o null",
+      "hora": "HH:MM o null",
+      "nombre": "nombre del paciente tal como aparece o null",
+      "edad": numero o null,
+      "diagnostico": "diagnóstico o null",
+      "procedimiento": "cirugía programada o null",
+      "lateralidad": "Derecha" | "Izquierda" | "Bilateral" | null,
+      "cirujano": "cirujano responsable o null",
+      "pabellon": "número o nombre de pabellón o null"
+    }
+  ]
+}
+Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre completo si aparece.`;
+
+  const content = imagenesBase64.map((b64) => ({
+    type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 },
+  }));
+  content.push({ type: "text", text: instrucciones });
+
+  const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({
+      model: "claude-sonnet-5", max_tokens: 3000,
+      system: "Eres un extractor de tablas quirúrgicas de urología. Respondes exclusivamente con JSON válido.",
+      messages: [{ role: "user", content }],
+    }),
+  });
+  const data = await res.json();
+  const txt = data.content?.find((b) => b.type === "text")?.text || "";
+  const clean = txt.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(clean);
+  return Array.isArray(parsed?.cirugias) ? parsed.cirugias : [];
+}
+
 // ─── Modal "Mi perfil": datos que alimentan las recetas/prescripciones ───
 function PerfilModal({ currentUser, setCurrentUser, onClose }) {
   const [form, setForm] = useState({
@@ -675,6 +721,10 @@ const SCORES = [
     id: "renal", nombre: "RENAL", desc: "Complejidad de masa renal",
     tipo: "custom",
   },
+  {
+    id: "briganti", nombre: "Briganti", desc: "Riesgo de invasión ganglionar (cáncer de próstata)",
+    tipo: "custom",
+  },
 ];
 
 function ScoresPanel() {
@@ -692,6 +742,7 @@ function ScoresPanel() {
         {score.tipo === "checks" && <ScoreChecks score={score} />}
         {score.id === "damico" && <ScoreDAmico />}
         {score.id === "renal" && <ScoreRENAL />}
+        {score.id === "briganti" && <ScoreBriganti />}
       </div>
     );
   }
@@ -812,6 +863,55 @@ function ScoreRENAL() {
         <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}{ap}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 12</span></div>
         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{compl}</div>
       </div>
+    </div>
+  );
+}
+
+// Coeficientes del nomograma de Briganti. VACÍOS a propósito: deben cargarse
+// desde la publicación oficial (Briganti 2012, Eur Urol; Gandaglia/Briganti 2019)
+// antes de calcular un % real. Mientras estén en null, la calculadora recoge los
+// datos y muestra el punto de corte validado, pero no inventa una probabilidad.
+const BRIGANTI_COEF = { "2012": null, "2019": null };
+
+function ScoreBriganti() {
+  const [ver, setVer] = useState("2019");
+  const [psa, setPsa] = useState("");
+  const [t, setT] = useState("cT1c");
+  const [isup, setIsup] = useState("1");
+  const [cores, setCores] = useState("");       // % cores positivos (2012) / cores positivos+negativos (2019)
+  const cutoff = ver === "2012" ? "5 %" : "7 %";
+  const coef = BRIGANTI_COEF[ver];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        {["2012", "2019"].map(v => (
+          <button key={v} onClick={() => setVer(v)} style={{ flex: 1, padding: "8px", fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: ver === v ? "none" : "0.5px solid var(--borde)", background: ver === v ? "var(--primario)" : "var(--superficie)", color: ver === v ? "var(--texto-inv)" : "var(--primario)" }}>Briganti {v}</button>
+        ))}
+      </div>
+
+      <div><label style={lblScore}>PSA (ng/mL)</label><input value={psa} onChange={e => setPsa(e.target.value)} placeholder="Ej: 8.5" style={{ ...selScore, cursor: "text" }} /></div>
+      <div><label style={lblScore}>Estadio clínico (cT)</label>
+        <select value={t} onChange={e => setT(e.target.value)} style={selScore}>
+          <option value="cT1c">cT1c</option><option value="cT2a">cT2a</option><option value="cT2b">cT2b</option><option value="cT2c">cT2c</option><option value="cT3">cT3</option>
+        </select></div>
+      <div><label style={lblScore}>ISUP (grupo grado biopsia)</label>
+        <select value={isup} onChange={e => setIsup(e.target.value)} style={selScore}>
+          <option value="1">ISUP 1</option><option value="2">ISUP 2</option><option value="3">ISUP 3</option><option value="4">ISUP 4</option><option value="5">ISUP 5</option>
+        </select></div>
+      <div><label style={lblScore}>{ver === "2012" ? "% de cilindros positivos" : "% de cilindros positivos (o positivos/total)"}</label><input value={cores} onChange={e => setCores(e.target.value)} placeholder="Ej: 40" style={{ ...selScore, cursor: "text" }} /></div>
+
+      {coef ? (
+        <div style={scoreBox}>{/* Aquí iría el % calculado cuando se carguen los coeficientes */}</div>
+      ) : (
+        <div style={{ background: "var(--alerta-bg)", border: "0.5px solid var(--alerta)", borderRadius: 10, padding: "12px 13px" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--alerta)", marginBottom: 4 }}>⚠️ Falta cargar los coeficientes de Briganti {ver}</div>
+          <div style={{ fontSize: 12, color: "var(--texto-sec)", lineHeight: 1.5 }}>
+            Para no arriesgar un % incorrecto en una decisión de linfadenectomía, la probabilidad exacta requiere los coeficientes de la publicación oficial. Punto de corte validado sugerido para omitir ePLND: <strong>&lt; {cutoff}</strong>.
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>Pásame los coeficientes de la versión que uses y activo el cálculo del % exacto aquí mismo.</div>
     </div>
   );
 }
@@ -1075,6 +1175,9 @@ const TUTORIAL_VERSION = "1"; // súbelo si quieres re-mostrarlo a todos en una 
 function pasosTutorial(rol) {
   const base = [
     { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
+
+    // ─── RECORDATORIO ───
+    { uros: "pensando", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
 
     // ─── CHAT ───
     { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías. No reemplaza tu juicio clínico." },
@@ -3544,6 +3647,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [modoVista, setModoVista] = useState("planner"); // "planner" | "lista"
   const [vistaMenuOpen, setVistaMenuOpen] = useState(false); // submenú del botón "Vista ▾"
+  const inputFotoTablaRef = useRef(null);
+  const [extrayendoTabla, setExtrayendoTabla] = useState(false);
   const [lunesSemana, setLunesSemana] = useState(() => {
     const d = new Date();
     const dow = (d.getDay() + 6) % 7; // 0 = lunes
@@ -3643,8 +3748,6 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     };
   };
   const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
-  const toggleOn = { padding: "4px 10px", fontSize: 11, background: "var(--primario)", color:"var(--texto-inv)", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
-  const toggleOff = { padding: "4px 10px", fontSize: 11, background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 500 };
 
   // ============================================================
   // CRUD
@@ -3801,6 +3904,45 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   // ============================================================
   // IMPORTAR EXCEL
   // ============================================================
+
+  const onFotoTabla = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3);
+    e.target.value = "";
+    if (!files.length) return;
+    setExtrayendoTabla(true);
+    try {
+      const b64s = [];
+      for (const f of files) b64s.push(await comprimirImagenPac(f));
+      const cxs = await extraerTablaCirugias(b64s);
+      const esEquipoCtx = contexto !== "personal";
+      const filas = cxs
+        .filter(c => c && (c.procedimiento || c.diagnostico || c.nombre))
+        .map(c => ({
+          cirujano_id: currentUser.id,
+          equipo_id: esEquipoCtx ? contexto : null,
+          fecha: (c.fecha && /^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) ? c.fecha : new Date().toISOString().slice(0, 10),
+          hora: (c.hora && /^\d{1,2}:\d{2}/.test(c.hora)) ? c.hora.slice(0, 5) : "08:00",
+          iniciales: (c.nombre || "").slice(0, 100),
+          edad: c.edad ? parseInt(c.edad) : null,
+          procedimiento: (c.procedimiento || c.diagnostico || "Cirugía").slice(0, 200),
+          lateralidad: ["Derecha", "Izquierda", "Bilateral"].includes(c.lateralidad) ? c.lateralidad : null,
+          cirujano: c.cirujano ? String(c.cirujano).slice(0, 100) : null,
+          pabellon: c.pabellon ? String(c.pabellon).slice(0, 20) : "5",
+          estado: "programada",
+          observaciones: c.diagnostico ? ("Dg: " + c.diagnostico).slice(0, 500) : null,
+        }));
+      if (filas.length === 0) { alert("No se pudo extraer ninguna cirugía de la foto. Intenta con mejor luz o encuadre."); return; }
+      if (!window.confirm(`Se detectaron ${filas.length} cirugías en la foto. ¿Importarlas?`)) return;
+      const result = await crearCirugiasBulk(filas);
+      if (!result.ok) { alert("Error al importar: " + result.error); return; }
+      setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora)));
+      alert(`✓ ${result.cirugias.length} cirugías importadas desde la foto`);
+    } catch (err) {
+      alert("No se pudo leer la foto de la tabla: " + (err?.message || err));
+    } finally {
+      setExtrayendoTabla(false);
+    }
+  };
 
   const importarExcel = async (e) => {
   const file = e.target.files?.[0];
@@ -4190,6 +4332,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
             📊 Importar Excel
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
           </label>
+          <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
+          <input ref={inputFotoTablaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoTabla}/>
           <div style={{position:"relative",marginLeft:"auto"}}>
             <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
             {vistaMenuOpen && (
@@ -6019,6 +6163,7 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
 function VideoPlayer({ video, onClose }) {
   const ytId = getYouTubeId(video.url);
   const vimeoId = getVimeoId(video.url);
+  useBackClose(true, onClose);
   return (
     <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.85)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",borderRadius:"var(--border-radius-lg)"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"var(--superficie)",borderRadius:12,maxWidth:720,width:"100%",overflow:"hidden"}}>
