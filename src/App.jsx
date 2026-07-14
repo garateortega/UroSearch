@@ -2112,9 +2112,11 @@ function AdminPanel() {
               {u.rol !== "admin" && (
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
                   <span style={{fontSize:11,color:"var(--texto-ter)"}}>Perfil:</span>
-                  <select value={u.rol || "urologo"} onChange={e=>cambiarRol(u.id, e.target.value)} style={{padding:"4px 8px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+                  <select value={ROLES_ASIGNABLES.some(([v])=>v===u.rol) ? u.rol : ""} onChange={e=>{ if(e.target.value) cambiarRol(u.id, e.target.value); }} style={{padding:"4px 8px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+                    <option value="" disabled>— Asignar rol —</option>
                     {ROLES_ASIGNABLES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
                   </select>
+                  {!ROLES_ASIGNABLES.some(([v])=>v===u.rol) && u.rol!=="admin" && <span style={{fontSize:10,color:"var(--alerta)",fontWeight:600}}>sin asignar</span>}
                 </div>
               )}
               <div style={{display:"flex",gap:6,marginTop:8}}>
@@ -3236,7 +3238,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
             const activo = subTab===id;
             const conTools = id==="pacientes" || id==="tabla";
             return (
-              <button key={id} onClick={()=>{ if(activo && conTools){ setToolsOpen(o=>!o); } else { setSubTab(id); setToolsOpen(false); } }} style={{padding:"13px 14px",fontSize:14,fontWeight:activo?600:500,background:"transparent",border:"none",borderBottom:activo?"3px solid var(--primario)":"3px solid transparent",color:activo?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap"}} title={conTools?"Toca de nuevo para ver opciones":undefined}>
+              <button key={id} onClick={()=>{ if(activo && conTools){ setToolsOpen(o=>!o); } else { setSubTab(id); setToolsOpen(false); } }} style={{flex:"1 1 0",minWidth:0,padding:"13px 6px",fontSize:12.5,fontWeight:activo?600:500,background:"transparent",border:"none",borderBottom:activo?"3px solid var(--primario)":"3px solid transparent",color:activo?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}} title={conTools?"Toca de nuevo para ver opciones":undefined}>
                 {label}{activo && conTools ? (toolsOpen ? " ▴" : " ▾") : ""}
               </button>
             );
