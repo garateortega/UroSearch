@@ -3361,6 +3361,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   }
 
   const soloLectura = currentUser?.rol === "interno"; // Interno: solo observa en Hospital
+  const esUrologo = currentUser?.rol === "urologo" || currentUser?.rol === "residente"; // Recetas: urólogos y residentes
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
