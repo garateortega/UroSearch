@@ -148,7 +148,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v0.12.0 (beta)";
+const VERSION = "v1.0.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
