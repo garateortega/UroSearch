@@ -198,6 +198,107 @@ function componerHistoriaIngreso(x) {
   return partes.join("\n\n");
 }
 
+// ─── Modal "Mi perfil": datos que alimentan las recetas/prescripciones ───
+function PerfilModal({ currentUser, setCurrentUser, onClose }) {
+  const [form, setForm] = useState({
+    nombre_completo: "", sexo: "", rut: "", rcm: "", correo: "",
+    centro: "", direccion: "", ciudad: "", region: "", telefono: "",
+  });
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+  useBackClose(true, onClose);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const { data } = await supabase.from("perfiles").select("*").eq("id", currentUser.id).single();
+        if (vivo && data) {
+          setForm(f => ({
+            ...f,
+            nombre_completo: data.nombre_completo || data.nombre || "",
+            sexo: data.sexo || "", rut: data.rut || "", rcm: data.rcm || "",
+            correo: data.correo || currentUser.correo || "",
+            centro: data.centro || "", direccion: data.direccion || "",
+            ciudad: data.ciudad || "", region: data.region || "", telefono: data.telefono || "",
+          }));
+        }
+      } catch {}
+      if (vivo) setCargando(false);
+    })();
+    return () => { vivo = false; };
+  }, [currentUser.id]);
+
+  const guardar = async () => {
+    setGuardando(true); setMsg("");
+    try {
+      const { error } = await supabase.from("perfiles").update({
+        nombre_completo: form.nombre_completo.trim() || null,
+        sexo: form.sexo || null,
+        rut: form.rut.trim() || null,
+        rcm: form.rcm.trim() || null,
+        centro: form.centro.trim() || null,
+        direccion: form.direccion.trim() || null,
+        ciudad: form.ciudad.trim() || null,
+        region: form.region.trim() || null,
+        telefono: form.telefono.trim() || null,
+      }).eq("id", currentUser.id);
+      if (error) { setMsg("⚠️ " + error.message); }
+      else {
+        setMsg("✓ Perfil guardado.");
+        setCurrentUser(u => u ? { ...u, nombre_completo: form.nombre_completo } : u);
+        setTimeout(onClose, 700);
+      }
+    } catch (e) { setMsg("⚠️ " + String(e)); }
+    setGuardando(false);
+  };
+
+  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 10 };
+  const campo = (etiqueta, key, placeholder = "") => (
+    <div><label style={lbl}>{etiqueta}</label><input value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} style={inp} /></div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: "20px", width: "100%", maxWidth: 460, maxHeight: "85vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)" }}>👤 Mi perfil</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 14 }}>Estos datos se usan para generar tus recetas y prescripciones.</div>
+        {cargando ? (
+          <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div>
+        ) : (<>
+          {campo("Nombre completo", "nombre_completo", "Dr. Sebastián Gárate Ortega")}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={lbl}>Sexo</label>
+              <select value={form.sexo} onChange={e => setForm({ ...form, sexo: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
+                <option value="">—</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="Otro">Otro</option>
+              </select>
+            </div>
+            {campo("Teléfono", "telefono", "+56 9 …")}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {campo("RUT", "rut", "12.345.678-9")}
+            {campo("RCM (RUT Colegio Médico)", "rcm", "")}
+          </div>
+          {campo("Correo", "correo", "")}
+          {campo("Centro / Hospital", "centro", "Hospital Base Valdivia")}
+          {campo("Dirección", "direccion", "")}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {campo("Ciudad", "ciudad", "Valdivia")}
+            {campo("Región", "region", "Los Ríos")}
+          </div>
+          {msg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
+          <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: "11px", fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 4 }}>{guardando ? "Guardando…" : "Guardar perfil"}</button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 // Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
 function saludoUros(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
@@ -5594,6 +5695,7 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [perfilOpen, setPerfilOpen] = useState(false); // modal "Mi perfil"
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -6333,6 +6435,9 @@ if (!currentUser) {
             <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
             </button>
+            <button onClick={()=>{ setMenuOpen(false); setPerfilOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+              👤 Mi perfil
+            </button>
             <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🧭 Ver tutorial
             </button>
@@ -6450,6 +6555,7 @@ if (!currentUser) {
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
 
       {tutorialOpen && <TutorialTour rol={currentUser?.rol} onGoToTab={setTab} onClose={cerrarTutorial}/>}
+      {perfilOpen && <PerfilModal currentUser={currentUser} setCurrentUser={setCurrentUser} onClose={()=>setPerfilOpen(false)}/>}
     </div>
   );
 }
