@@ -546,6 +546,276 @@ function PrescripcionesPanel({ currentUser }) {
   );
 }
 
+// ─── Panel Medicamentos (Biblioteca): buscador + edición solo admin ───
+function MedicamentosPanel({ currentUser, isAdmin }) {
+  const [lista, setLista] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [busqueda, setBusqueda] = useState("");
+  const [agregando, setAgregando] = useState(false);
+  const [form, setForm] = useState({ nombre: "", presentacion: "", posologia: "", indicacion: "", categoria: "", notas: "" });
+  const [err, setErr] = useState("");
+
+  const cargar = async () => {
+    setCargando(true);
+    try {
+      const { data } = await supabase.from("medicamentos").select("*").order("nombre", { ascending: true });
+      setLista(data || []);
+    } catch { setLista([]); }
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const guardar = async () => {
+    setErr("");
+    if (!form.nombre.trim()) return setErr("Ingresa el nombre del medicamento");
+    try {
+      const { data, error } = await supabase.from("medicamentos").insert({
+        nombre: form.nombre.trim(), presentacion: form.presentacion.trim() || null,
+        posologia: form.posologia.trim() || null, indicacion: form.indicacion.trim() || null,
+        categoria: form.categoria.trim() || null, notas: form.notas.trim() || null, autor_id: currentUser.id,
+      }).select().single();
+      if (error) return setErr(error.message);
+      setLista(prev => [...prev, data].sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "")));
+      setForm({ nombre: "", presentacion: "", posologia: "", indicacion: "", categoria: "", notas: "" });
+      setAgregando(false);
+    } catch (e) { setErr(String(e)); }
+  };
+
+  const eliminar = async (id) => {
+    if (!window.confirm("¿Eliminar este medicamento?")) return;
+    try {
+      const { error } = await supabase.from("medicamentos").delete().eq("id", id);
+      if (error) return alert("Error: " + error.message);
+      setLista(prev => prev.filter(m => m.id !== id));
+    } catch (e) { alert(String(e)); }
+  };
+
+  const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const q = norm(busqueda);
+  const filtrados = q ? lista.filter(m => norm(m.nombre).includes(q) || norm(m.categoria).includes(q) || norm(m.indicacion).includes(q)) : lista;
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 8 };
+
+  return (
+    <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
+      <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 10 }}>{lista.length} medicamentos frecuentes en urología</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔎 Buscar por nombre, categoría o indicación…" style={{ ...inp, flex: "1 1 200px", marginBottom: 0 }} />
+        {isAdmin && <button onClick={() => { setAgregando(!agregando); setErr(""); }} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 500, background: agregando ? "var(--superficie)" : "var(--primario)", color: agregando ? "var(--primario)" : "var(--texto-inv)", border: agregando ? "0.5px solid var(--primario)" : "none", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
+      </div>
+
+      {isAdmin && agregando && (
+        <div style={{ background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 12, marginBottom: 14 }}>
+          <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre (ej: Ciprofloxacino)" style={inp} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <input value={form.presentacion} onChange={e => setForm({ ...form, presentacion: e.target.value })} placeholder="Presentación (500 mg comp)" style={inp} />
+            <input value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} placeholder="Categoría (Antibiótico)" style={inp} />
+          </div>
+          <input value={form.posologia} onChange={e => setForm({ ...form, posologia: e.target.value })} placeholder="Posología (1 comp c/12 h VO por 7 días)" style={inp} />
+          <input value={form.indicacion} onChange={e => setForm({ ...form, indicacion: e.target.value })} placeholder="Indicación (ITU, prostatitis)" style={inp} />
+          <input value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Notas (opcional)" style={inp} />
+          {err && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 8 }}>{err}</div>}
+          <button onClick={guardar} style={{ padding: "9px 16px", fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar</button>
+        </div>
+      )}
+
+      {cargando ? (
+        <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>{lista.length === 0 ? "No hay medicamentos cargados aún." : "Sin resultados para tu búsqueda."}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtrados.map(m => (
+            <div key={m.id} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "11px 13px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>{m.nombre}{m.presentacion ? <span style={{ fontSize: 12, fontWeight: 400, color: "var(--texto-sec)" }}> · {m.presentacion}</span> : null}</div>
+                {isAdmin && <button onClick={() => eliminar(m.id)} style={{ background: "none", border: "none", color: "var(--peligro)", fontSize: 13, cursor: "pointer", padding: 0 }}>🗑</button>}
+              </div>
+              {m.posologia && <div style={{ fontSize: 13, color: "var(--texto)", marginTop: 3 }}>💊 {m.posologia}</div>}
+              {m.indicacion && <div style={{ fontSize: 12, color: "var(--texto-sec)", marginTop: 2 }}>Indicación: {m.indicacion}</div>}
+              <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                {m.categoria && <span style={{ fontSize: 10.5, background: "var(--fondo-suave)", color: "var(--texto-sec)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{m.categoria}</span>}
+                {m.notas && <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>{m.notas}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Definición de scores urológicos con sus calculadoras ───
+const SCORES = [
+  {
+    id: "ipss", nombre: "IPSS", desc: "Síntomas prostáticos (HBP)",
+    tipo: "suma",
+    preguntas: [
+      "Vaciamiento incompleto", "Frecuencia (< 2 h)", "Intermitencia", "Urgencia",
+      "Chorro débil", "Esfuerzo miccional", "Nicturia (veces por noche)",
+    ],
+    opciones: ["0 · Nunca", "1", "2", "3", "4", "5 · Casi siempre"],
+    interpretar: (s) => s <= 7 ? "Leve (0–7)" : s <= 19 ? "Moderado (8–19)" : "Severo (20–35)",
+  },
+  {
+    id: "imdc", nombre: "IMDC", desc: "Pronóstico CCR metastásico",
+    tipo: "checks",
+    factores: [
+      "Karnofsky < 80 %", "< 1 año desde diagnóstico a tratamiento sistémico",
+      "Hemoglobina < límite inferior normal", "Calcio corregido > límite superior normal",
+      "Neutrófilos > límite superior normal", "Plaquetas > límite superior normal",
+    ],
+    interpretar: (s) => s === 0 ? "Favorable (0 factores)" : s <= 2 ? "Intermedio (1–2 factores)" : "Pobre (≥ 3 factores)",
+  },
+  {
+    id: "damico", nombre: "D'Amico", desc: "Riesgo cáncer de próstata localizado",
+    tipo: "custom",
+  },
+  {
+    id: "renal", nombre: "RENAL", desc: "Complejidad de masa renal",
+    tipo: "custom",
+  },
+];
+
+function ScoresPanel() {
+  const [abierto, setAbierto] = useState(null);
+  const score = SCORES.find(s => s.id === abierto);
+  useBackClose(!!abierto, () => setAbierto(null));
+
+  if (score) {
+    return (
+      <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
+        <button onClick={() => setAbierto(null)} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver a scores</button>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>{score.nombre}</div>
+        <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 14 }}>{score.desc}</div>
+        {score.tipo === "suma" && <ScoreSuma score={score} />}
+        {score.tipo === "checks" && <ScoreChecks score={score} />}
+        {score.id === "damico" && <ScoreDAmico />}
+        {score.id === "renal" && <ScoreRENAL />}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
+      <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 12 }}>Calculadoras de los principales scores urológicos</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {SCORES.map(s => (
+          <div key={s.id} onClick={() => setAbierto(s.id)} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "13px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--texto)" }}>{s.nombre}</div>
+              <div style={{ fontSize: 12, color: "var(--texto-sec)" }}>{s.desc}</div>
+            </div>
+            <span style={{ color: "var(--primario)", fontSize: 18 }}>›</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 14, lineHeight: 1.5 }}>Falta el nomograma de Briganti (invasión ganglionar en cáncer de próstata): requiere los coeficientes de una versión específica (2012/2019). Si me dices cuál usas, lo agrego.</div>
+    </div>
+  );
+}
+
+const scoreBox = { background: "var(--exito-bg)", border: "0.5px solid var(--exito-borde)", borderRadius: 10, padding: "14px", textAlign: "center", marginTop: 14 };
+const selScore = { padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", cursor: "pointer", width: "100%" };
+const lblScore = { fontSize: 12, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4, display: "block" };
+
+function ScoreSuma({ score }) {
+  const [vals, setVals] = useState(score.preguntas.map(() => 0));
+  const total = vals.reduce((a, b) => a + b, 0);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {score.preguntas.map((p, i) => (
+        <div key={i}>
+          <label style={lblScore}>{p}</label>
+          <select value={vals[i]} onChange={e => { const v = [...vals]; v[i] = parseInt(e.target.value); setVals(v); }} style={selScore}>
+            {score.opciones.map((o, j) => <option key={j} value={j}>{o}</option>)}
+          </select>
+        </div>
+      ))}
+      <div style={scoreBox}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: "var(--exito)" }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 35</span></div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreChecks({ score }) {
+  const [on, setOn] = useState(score.factores.map(() => false));
+  const total = on.filter(Boolean).length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {score.factores.map((f, i) => (
+        <div key={i} onClick={() => { const v = [...on]; v[i] = !v[i]; setOn(v); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 11px", borderRadius: 8, cursor: "pointer", background: on[i] ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on[i] ? "var(--exito-borde)" : "var(--borde)") }}>
+          <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on[i] ? "var(--exito)" : "var(--borde)"), background: on[i] ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on[i] ? "✓" : ""}</span>
+          <span style={{ fontSize: 13, color: "var(--texto)" }}>{f}</span>
+        </div>
+      ))}
+      <div style={scoreBox}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: "var(--exito)" }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> factores</span></div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreDAmico() {
+  const [psa, setPsa] = useState("intermedio");     // <10 / 10-20 / >20
+  const [isup, setIsup] = useState("1");             // ISUP 1 / 2-3 / 4-5
+  const [t, setT] = useState("t2a");                 // ≤T2a / T2b / ≥T2c
+  const alto = psa === "alto" || isup === "45" || t === "t2c";
+  const intermedio = !alto && (psa === "intermedio" || isup === "23" || t === "t2b");
+  const grupo = alto ? "Alto riesgo" : intermedio ? "Riesgo intermedio" : "Bajo riesgo";
+  const color = alto ? "var(--peligro)" : intermedio ? "var(--alerta)" : "var(--exito)";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div><label style={lblScore}>PSA</label>
+        <select value={psa} onChange={e => setPsa(e.target.value)} style={selScore}>
+          <option value="bajo">&lt; 10 ng/mL</option><option value="intermedio">10 – 20 ng/mL</option><option value="alto">&gt; 20 ng/mL</option>
+        </select></div>
+      <div><label style={lblScore}>ISUP (Gleason)</label>
+        <select value={isup} onChange={e => setIsup(e.target.value)} style={selScore}>
+          <option value="1">ISUP 1 (Gleason ≤ 6)</option><option value="23">ISUP 2–3 (Gleason 7)</option><option value="45">ISUP 4–5 (Gleason 8–10)</option>
+        </select></div>
+      <div><label style={lblScore}>Estadio clínico</label>
+        <select value={t} onChange={e => setT(e.target.value)} style={selScore}>
+          <option value="t2a">≤ T2a</option><option value="t2b">T2b</option><option value="t2c">≥ T2c</option>
+        </select></div>
+      <div style={{ ...scoreBox, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color }}>{grupo}</div>
+        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 4 }}>Clasificación de D'Amico. El grupo lo determina el factor de mayor riesgo.</div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreRENAL() {
+  const [r, setR] = useState(1), [e, setE] = useState(1), [n, setN] = useState(1), [l, setL] = useState(1);
+  const [ap, setAp] = useState("x"); // sufijo a/p/x (no suma puntos)
+  const total = r + e + n + l;
+  const compl = total <= 6 ? "Baja complejidad (4–6)" : total <= 9 ? "Complejidad moderada (7–9)" : "Alta complejidad (10–12)";
+  const color = total <= 6 ? "var(--exito)" : total <= 9 ? "var(--alerta)" : "var(--peligro)";
+  const sel = (val, setter, opts) => (
+    <select value={val} onChange={ev => setter(ev.target.value === "x" ? "x" : parseInt(ev.target.value))} style={selScore}>
+      {opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+    </select>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div><label style={lblScore}>(R) Radio / tamaño máximo</label>{sel(r, setR, [[1, "≤ 4 cm (1 pt)"], [2, "> 4 y < 7 cm (2 pt)"], [3, "≥ 7 cm (3 pt)"]])}</div>
+      <div><label style={lblScore}>(E) Exofítico / endofítico</label>{sel(e, setE, [[1, "≥ 50 % exofítico (1 pt)"], [2, "< 50 % exofítico (2 pt)"], [3, "Totalmente endofítico (3 pt)"]])}</div>
+      <div><label style={lblScore}>(N) Cercanía al sistema colector/seno</label>{sel(n, setN, [[1, "≥ 7 mm (1 pt)"], [2, "> 4 y < 7 mm (2 pt)"], [3, "≤ 4 mm (3 pt)"]])}</div>
+      <div><label style={lblScore}>(L) Ubicación respecto a líneas polares</label>{sel(l, setL, [[1, "Sobre/bajo polos (1 pt)"], [2, "Cruza línea polar (2 pt)"], [3, "> 50 % cruza línea media (3 pt)"]])}</div>
+      <div><label style={lblScore}>(A) Anterior / Posterior (sufijo)</label>
+        <select value={ap} onChange={ev => setAp(ev.target.value)} style={selScore}><option value="x">x (indeterminado)</option><option value="a">a (anterior)</option><option value="p">p (posterior)</option></select></div>
+      <div style={{ ...scoreBox }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}{ap}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 12</span></div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{compl}</div>
+      </div>
+    </div>
+  );
+}
+
 // Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
 function saludoUros(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
@@ -2340,7 +2610,7 @@ function CirugiasBiblioteca() {
 
 function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
   const [subTab, setSubTab] = useState("cirugias");
- const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"],["preguntas","❓ Preguntas"]];
+ const tabsConocimiento = [["cirugias","🔪 Cirugías"],["videos","📚 Videos"],["preguntas","❓ Preguntas"],["medicamentos","💊 Medicamentos"],["scores","🧮 Scores"]];
   if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
 
   // El tutorial puede pedir cambiar de sub-pestaña de Biblioteca.
@@ -2485,6 +2755,8 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
 
       {subTab === "cirugias" && <CirugiasBiblioteca/>}
       {subTab === "preguntas" && <PreguntasPanel currentUser={currentUser} isAdmin={isAdmin}/>}
+      {subTab === "medicamentos" && <MedicamentosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
+      {subTab === "scores" && <ScoresPanel/>}
 
       {subTab === "documentos" && isAdmin && <ConocimientoPanel conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin}/>}
     </div>
