@@ -193,12 +193,10 @@ function BarrasHorizontales({ items, color = "var(--primario)" }) {
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
-export default function LogbookPanel({ currentUser, equipos = [] }) {
+export default function LogbookPanel({ currentUser, equipos = [], vista = "lista", setVista }) {
   const [registros, setRegistros] = useState([]);
   const [cargando, setCargando] = useState(false);
-  const [vista, setVista] = useState("lista"); // lista | nueva | metricas
   const [error, setError] = useState("");
-  const [subMenuOpen, setSubMenuOpen] = useState(false); // desplegable de secciones del Logbook
   const [compartirOpen, setCompartirOpen] = useState(false); // modal "compartir"
   const [compartirQue, setCompartirQue] = useState("registros"); // "registros" | "metricas"
 
@@ -230,12 +228,21 @@ export default function LogbookPanel({ currentUser, equipos = [] }) {
     });
   }, [currentUser]);
 
-  // Al tocar de nuevo la pestaña principal "Logbook", abrir/cerrar el submenú
+  // Acciones enviadas desde el submenú de la pestaña Logbook
   useEffect(() => {
-    const h = (e) => { if (e.detail?.tab === "logbook") setSubMenuOpen(o => !o); };
-    window.addEventListener("uro-toggle-submenu", h);
-    return () => window.removeEventListener("uro-toggle-submenu", h);
-  }, []);
+    const h = (e) => {
+      if (e.detail?.tab !== "logbook") return;
+      if (e.detail.accion === "compartir") { setCompartirQue(vista === "metricas" ? "metricas" : "registros"); setCompartirOpen(true); }
+    };
+    window.addEventListener("uro-submenu-accion", h);
+    return () => window.removeEventListener("uro-submenu-accion", h);
+  }, [vista]);
+
+  // Al entrar a "Nueva" desde el submenú, partir con el formulario limpio
+  useEffect(() => {
+    if (vista === "nueva" && !editId) resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vista]);
 
   const set = (campo, valor) => setReg((prev) => ({ ...prev, [campo]: valor }));
 
@@ -560,33 +567,6 @@ export default function LogbookPanel({ currentUser, equipos = [] }) {
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", width: "100%", boxSizing: "border-box" }}>
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px 40px" }}>
-      {/* ─── Barra compacta con submenú desplegable (sin título "Logbook quirúrgico") ─── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12, position: "relative" }}>
-        <div style={{ position: "relative" }}>
-          <button onClick={() => setSubMenuOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", fontSize: 13.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: subMenuOpen ? "none" : "0.5px solid var(--borde)", background: subMenuOpen ? "var(--primario)" : "var(--superficie)", color: subMenuOpen ? "var(--texto-inv)" : "var(--primario)", whiteSpace: "nowrap" }}>
-            {vista === "lista" ? "📋 Registros" : vista === "nueva" ? "📷 Nueva" : "📊 Métricas"} {subMenuOpen ? "▴" : "▾"}
-          </button>
-          {subMenuOpen && (
-            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 4, zIndex: 40, boxShadow: "0 6px 18px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: 2, minWidth: 180 }}>
-              {[["lista", "📋 Registros"], ["nueva", "📷 Nueva"], ["metricas", "📊 Métricas"]].map(([id, label]) => {
-                const activo = vista === id;
-                return (
-                  <button key={id} onClick={() => { if (id === "nueva" && vista !== "nueva") resetForm(); setVista(id); setSubMenuOpen(false); }} style={{ padding: "9px 12px", fontSize: 13, textAlign: "left", background: activo ? "var(--fondo-suave)" : "none", border: "none", color: activo ? "var(--primario)" : "var(--texto)", borderRadius: 7, cursor: "pointer", fontWeight: activo ? 700 : 500 }}>
-                    {label}{activo ? " ✓" : ""}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {registros.length > 0 && (
-          <button onClick={() => { setCompartirQue(vista === "metricas" ? "metricas" : "registros"); setCompartirOpen(true); }} style={{ padding: "8px 14px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--primario)", whiteSpace: "nowrap" }}>
-            🔗 Compartir
-          </button>
-        )}
-      </div>
-      {subMenuOpen && <div onClick={() => setSubMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />}
-
       {error && <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: 13, background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>{error}</div>}
 
       {/* ============ VISTA: NUEVA / EDITAR ============ */}

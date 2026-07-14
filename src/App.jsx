@@ -1341,8 +1341,8 @@ function pasosTutorial(rol) {
 
     // ─── HOSPITAL ───
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
-    { target: "hosp-subtabs", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Este botón despliega el submenú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas y tu 🤝 Equipo de trabajo. También se abre tocando de nuevo la pestaña Hospital." },
-    { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "Al tocar otra vez «Pacientes» aparece esta barra:" },
+    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas, tu 🤝 Equipo de trabajo y el cambio entre tus pacientes y los del equipo." },
+    { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "En el menú de Hospital, la opción 🛠️ Herramientas muestra esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
     { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
     { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "pensando", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
@@ -1351,7 +1351,7 @@ function pasosTutorial(rol) {
 
     // ─── BIBLIOTECA ───
     { target: "tab-conocimiento", tab: "conocimiento", uros: "hola", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
-    { target: "biblio-subtabs", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "Este botón (o tocar de nuevo la pestaña Biblioteca) despliega: 🔪 Cirugías · 📚 Videos · ❓ Preguntas · 💊 Medicamentos · 🧮 Scores." },
+    { target: "tab-conocimiento", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "Toca de nuevo la pestaña Biblioteca y se despliega: 🔪 Cirugías · 📚 Videos · ❓ Preguntas · 💊 Medicamentos · 🧮 Scores." },
     { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "explicando", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
     { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
     { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
@@ -1579,7 +1579,7 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
   const anterior = () => setI(Math.max(0, i - 1));
 
   // Posición de la burbuja de texto.
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const vh = typeof window !== "undefined" ? (window.visualViewport?.height || window.innerHeight) : 800;
   const vw = typeof window !== "undefined" ? window.innerWidth : 400;
   const tieneDemo = !!paso.demo;
   const cardW = movil ? Math.min(vw - 24, tieneDemo ? 360 : 340) : (tieneDemo ? 380 : 340);
@@ -1594,15 +1594,21 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
   } else if (tieneDemo) {
     // Pasos con demostración: siempre centrado (las maquetas pueden ser altas).
     cardStyle = { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
+  } else if (movil && rect) {
+    // En móvil: si el elemento resaltado está en la mitad inferior, la tarjeta va
+    // ARRIBA (si no, taparía el elemento y quedaría bajo la barra del navegador).
+    const enMitadInferior = rect.y + rect.h / 2 > vh / 2;
+    cardStyle = enMitadInferior
+      ? { top: 12, left: "50%", transform: "translateX(-50%)" }
+      : { bottom: 12, left: "50%", transform: "translateX(-50%)" };
   } else {
-    // Sin target o en móvil: centrado abajo.
     cardStyle = movil
-      ? { bottom: 20, left: "50%", transform: "translateX(-50%)" }
+      ? { bottom: 12, left: "50%", transform: "translateX(-50%)" }
       : { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9998 }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 9998, paddingBottom: "env(safe-area-inset-bottom)" }}>
       {/* Fondo que bloquea la interacción */}
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: rect ? "transparent" : "rgba(15,23,42,0.62)" }} />
 
@@ -1620,7 +1626,7 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
       {/* Tarjeta del paso. Estilo "hero": banner oscuro con Uros grande arriba
           (como una tarjeta de presentación), y debajo el texto y el botón. */}
       <div style={{
-        position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)", maxHeight: "82vh", overflowY: "auto",
+        position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", WebkitOverflowScrolling: "touch",
         background: "var(--superficie)", border: "1px solid var(--borde)",
         borderRadius: 18, boxShadow: "0 12px 32px rgba(15,23,42,0.28)",
         ...cardStyle
@@ -2874,72 +2880,9 @@ function CirugiasBiblioteca() {
   );
 }
 
-function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa }) {
-  const [subTab, setSubTab] = useState("cirugias");
-  const [subMenuOpen, setSubMenuOpen] = useState(false); // desplegable de secciones de Biblioteca
-  const config = useConfig();
-  const tabsConocimiento = [
-    ["cirugias","🔪 Cirugías"],
-    ...(!fnOculta(config,"biblio:videos") ? [["videos","📚 Videos"]] : []),
-    ...(!fnOculta(config,"biblio:preguntas") ? [["preguntas","❓ Preguntas"]] : []),
-    ...(!fnOculta(config,"biblio:medicamentos") ? [["medicamentos","💊 Medicamentos"]] : []),
-    ...(!fnOculta(config,"biblio:scores") ? [["scores","🧮 Scores"]] : []),
-  ];
-  if (isAdmin) tabsConocimiento.push(["documentos","📄 Documentos"]);
-  const etiquetaActual = (tabsConocimiento.find(([id]) => id === subTab) || tabsConocimiento[0])[1];
-
-  // El tutorial puede pedir cambiar de sub-pestaña de Biblioteca.
-  useEffect(() => {
-    const h = (e) => {
-      const s = e.detail && e.detail.subtab;
-      const validas = isAdmin ? ["cirugias","videos","preguntas","documentos","mapas"] : ["cirugias","videos","preguntas","mapas"];
-      if (validas.includes(s)) { setSubTab(s); setSubMenuOpen(false); }
-    };
-    window.addEventListener("uro-tour-subtab", h);
-    return () => window.removeEventListener("uro-tour-subtab", h);
-  }, [isAdmin]);
-
-  // Si tocan de nuevo la pestaña principal "Biblioteca", se abre/cierra el submenú
-  useEffect(() => {
-    const h = (e) => { if (e.detail?.tab === "conocimiento") setSubMenuOpen(o => !o); };
-    window.addEventListener("uro-toggle-submenu", h);
-    return () => window.removeEventListener("uro-toggle-submenu", h);
-  }, []);
-
-  // Si la configuración oculta la sección activa, volver a Cirugías
-  useEffect(() => {
-    if ((subTab === "videos" && fnOculta(config,"biblio:videos")) ||
-        (subTab === "preguntas" && fnOculta(config,"biblio:preguntas")) ||
-        (subTab === "medicamentos" && fnOculta(config,"biblio:medicamentos")) ||
-        (subTab === "scores" && fnOculta(config,"biblio:scores"))) {
-      setSubTab("cirugias");
-    }
-  }, [config, subTab]);
-
+function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa, subTab, setSubTab }) {
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      {/* Barra compacta: un botón despliega las secciones (aparecen al tocar
-          de nuevo "Biblioteca" o este botón, en vez de estar siempre visibles). */}
-      <div style={{display:"flex",alignItems:"center",background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"6px 12px",position:"relative"}}>
-        <div style={{position:"relative"}}>
-          <button data-tour="biblio-subtabs" onClick={()=>setSubMenuOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",fontSize:13.5,fontWeight:600,background:subMenuOpen?"var(--primario)":"var(--superficie)",color:subMenuOpen?"var(--texto-inv)":"var(--primario)",border:subMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>
-            {etiquetaActual} {subMenuOpen ? "▴" : "▾"}
-          </button>
-          {subMenuOpen && (
-            <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:4,zIndex:40,boxShadow:"0 6px 18px rgba(0,0,0,0.15)",display:"flex",flexDirection:"column",gap:2,minWidth:190}}>
-              {tabsConocimiento.map(([id,label]) => {
-                const activo = subTab===id;
-                return (
-                  <button key={id} onClick={()=>{ setSubTab(id); setSubMenuOpen(false); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:7,cursor:"pointer",fontWeight:activo?700:500}}>
-                    {label}{activo ? " ✓" : ""}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-      {subMenuOpen && <div onClick={()=>setSubMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:30}}/>}
 
       {subTab === "mapas" && (
   <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
@@ -3383,46 +3326,23 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   );
 }
 
-function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users }) {
-  const [subTab, setSubTab] = useState(() => {
-    try {
-      const guardada = localStorage.getItem("uro_subtab_hospital");
-      return (guardada && guardada !== "pendientes") ? guardada : "pacientes";
-    }
-    catch { return "pacientes"; }
-  });
-  const [contexto, setContexto] = useState(() => {
-    try { return localStorage.getItem("uro_contexto") || "personal"; }
-    catch { return "personal"; }
-  });
+function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto }) {
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false); // submenú de herramientas (2do toque en la pestaña)
-  const [subMenuOpen, setSubMenuOpen] = useState(false); // desplegable de secciones de Hospital
+  const [toolsOpen, setToolsOpen] = useState(false); // herramientas de la sección (desde el submenú)
   const config = useConfig();
 
-  // Si tocan de nuevo la pestaña principal "Hospital", se abre/cierra el submenú
+  // Acciones enviadas desde el submenú de la pestaña Hospital
   useEffect(() => {
-    const h = (e) => { if (e.detail?.tab === "hospital") setSubMenuOpen(o => !o); };
-    window.addEventListener("uro-toggle-submenu", h);
-    return () => window.removeEventListener("uro-toggle-submenu", h);
+    const h = (e) => {
+      if (e.detail?.tab !== "hospital") return;
+      if (e.detail.accion === "equipos") setMostrarEquipos(true);
+      if (e.detail.accion === "tools") setToolsOpen(o => !o);
+    };
+    window.addEventListener("uro-submenu-accion", h);
+    return () => window.removeEventListener("uro-submenu-accion", h);
   }, []);
 
-  // Si la configuración oculta la sección activa, volver a Pacientes
-  useEffect(() => {
-    if ((subTab === "tabla" && fnOculta(config, "hosp:tabla")) ||
-        (subTab === "notas" && fnOculta(config, "hosp:notas")) ||
-        (subTab === "prescripciones" && fnOculta(config, "hosp:prescripciones"))) {
-      setSubTab("pacientes");
-    }
-  }, [config, subTab]);
-
-  useEffect(() => {
-    try { localStorage.setItem("uro_subtab_hospital", subTab); } catch {}
-  }, [subTab]);
-
-  useEffect(() => {
-    try { localStorage.setItem("uro_contexto", contexto); } catch {}
-  }, [contexto]);
+  useEffect(() => { setToolsOpen(false); }, [subTab]);
 
   const equipoActual = contexto !== "personal" ? equipos.find(e => e.id === contexto) : null;
   const esEquipo = !!equipoActual;
@@ -3434,16 +3354,6 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
     }
   }, [contexto, equipos]);
 
-  // El tutorial puede pedir cambiar de sub-pestaña de Hospital.
-  useEffect(() => {
-    const h = (e) => {
-      const s = e.detail && e.detail.subtab;
-      if (["pacientes", "tabla", "notas"].includes(s)) { setSubTab(s); setToolsOpen(false); }
-    };
-    window.addEventListener("uro-tour-subtab", h);
-    return () => window.removeEventListener("uro-tour-subtab", h);
-  }, []);
-
   if (mostrarEquipos) {
     return (
       <EquiposPanel equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} currentUser={currentUser} onCerrar={()=>setMostrarEquipos(false)}/>
@@ -3451,52 +3361,9 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
   }
 
   const soloLectura = currentUser?.rol === "interno"; // Interno: solo observa en Hospital
-  const esUrologo = currentUser?.rol === "urologo" || currentUser?.rol === "residente";   // Prescripciones: urólogos y residentes
-
-  // Secciones disponibles (filtradas por la configuración del usuario)
-  const secciones = [
-    ["pacientes","👥 Pacientes"],
-    ...(!fnOculta(config,"hosp:tabla") ? [["tabla","📋 Tabla"]] : []),
-    ...(!fnOculta(config,"hosp:notas") ? [["notas","🗒️ Notas"]] : []),
-    ...(esUrologo && !fnOculta(config,"hosp:prescripciones") ? [["prescripciones","💊 Recetas"]] : []),
-  ];
-  const etiquetaActual = (secciones.find(([id]) => id === subTab) || secciones[0])[1];
-  const conTools = subTab === "pacientes" || subTab === "tabla";
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      {/* Barra compacta: un solo botón que despliega las secciones de Hospital
-          (evita mostrar todas las subpestañas siempre). */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:"var(--fondo-suave)",borderBottom:"0.5px solid var(--borde)",padding:"6px 10px",flexShrink:0,position:"relative"}}>
-        <div style={{position:"relative",minWidth:0}}>
-          <button data-tour="hosp-subtabs" onClick={()=>{setSubMenuOpen(o=>!o);}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",fontSize:13.5,fontWeight:600,background:subMenuOpen?"var(--primario)":"var(--superficie)",color:subMenuOpen?"var(--texto-inv)":"var(--primario)",border:subMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>
-            {etiquetaActual} {subMenuOpen ? "▴" : "▾"}
-          </button>
-          {subMenuOpen && (
-            <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:4,zIndex:40,boxShadow:"0 6px 18px rgba(0,0,0,0.15)",display:"flex",flexDirection:"column",gap:2,minWidth:190}}>
-              {secciones.map(([id,label]) => {
-                const activo = subTab===id;
-                return (
-                  <button key={id} onClick={()=>{ if(activo && (id==="pacientes"||id==="tabla")){ setToolsOpen(o=>!o); } else { setSubTab(id); setToolsOpen(false); } setSubMenuOpen(false); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:7,cursor:"pointer",fontWeight:activo?700:500}}>
-                    {label}{activo ? " ✓" : ""}
-                  </button>
-                );
-              })}
-              <div style={{height:1,background:"var(--borde)",margin:"3px 4px"}}/>
-              <button onClick={()=>{ setSubMenuOpen(false); setMostrarEquipos(true); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:7,cursor:"pointer",fontWeight:500}}>
-                🤝 Equipo de trabajo
-              </button>
-              {conTools && (
-                <button onClick={()=>{ setToolsOpen(o=>!o); setSubMenuOpen(false); }} style={{padding:"9px 12px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto-sec)",borderRadius:7,cursor:"pointer",fontWeight:500}}>
-                  🛠️ {toolsOpen ? "Ocultar herramientas" : "Ver herramientas"}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <SelectorContexto contexto={contexto} setContexto={setContexto} equipos={equipos} currentUser={currentUser} onAbrirEquipos={()=>setMostrarEquipos(true)}/>
-      </div>
-      {subMenuOpen && <div onClick={()=>setSubMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:30}}/>}
       {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
@@ -6725,6 +6592,7 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
 function NotificationBell({ currentUser }) {
   const [abierto, setAbierto] = useState(false);
   const [notifs, setNotifs] = useState([]);
+  const btnRef = useRef(null);
   const noLeidas = notifs.filter(n => !n.leida).length;
 
   const cargar = async () => {
@@ -6742,24 +6610,32 @@ function NotificationBell({ currentUser }) {
   };
 
   const iconoTipo = { cirugia: "🔪", paciente: "🛏️", pendiente: "✅", general: "🔔" };
+  // El panel va en position:fixed para que no lo recorte el contenedor de la app en el celular
+  const top = (btnRef.current?.getBoundingClientRect().bottom || 60) + 6;
 
   return (
     <div style={{position:"relative"}}>
-      <button onClick={abrir} title="Notificaciones" style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",padding:0,position:"relative"}}>
+      <button ref={btnRef} onClick={abrir} title="Notificaciones" style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",padding:0,position:"relative"}}>
         🔔
         {noLeidas > 0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,borderRadius:9,background:"var(--peligro)",color:"var(--texto-inv)",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{noLeidas}</span>}
       </button>
       {abierto && (
-        <div style={{position:"absolute",top:46,right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,minWidth:290,maxWidth:340,maxHeight:380,overflowY:"auto",zIndex:30,boxShadow:"0 4px 14px rgba(0,0,0,0.15)"}}>
-          <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",fontSize:13,fontWeight:600,color:"var(--texto)"}}>Notificaciones</div>
-          {notifs.length === 0 && <div style={{padding:"18px 14px",fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Sin notificaciones</div>}
-          {notifs.map(n => (
-            <div key={n.id} style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",background:n.leida?"transparent":"var(--fondo-suave)"}}>
-              <div style={{fontSize:12,color:"var(--texto)",lineHeight:1.4}}>{iconoTipo[n.tipo]||"🔔"} {n.texto}</div>
-              <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:3}}>{new Date(n.created_at).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+        <>
+          <div onClick={()=>setAbierto(false)} style={{position:"fixed",inset:0,zIndex:70}}/>
+          <div style={{position:"fixed",top,right:8,left:"auto",zIndex:71,width:"min(340px, calc(100vw - 16px))",maxHeight:"calc(100dvh - 120px)",overflowY:"auto",WebkitOverflowScrolling:"touch",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 10px 28px rgba(0,0,0,0.28)"}}>
+            <div style={{position:"sticky",top:0,background:"var(--superficie)",padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",fontSize:13,fontWeight:600,color:"var(--texto)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>Notificaciones</span>
+              <button onClick={()=>setAbierto(false)} style={{background:"none",border:"none",fontSize:16,color:"var(--texto-ter)",cursor:"pointer",lineHeight:1,padding:0}}>✕</button>
             </div>
-          ))}
-        </div>
+            {notifs.length === 0 && <div style={{padding:"18px 14px",fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Sin notificaciones</div>}
+            {notifs.map(n => (
+              <div key={n.id} style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",background:n.leida?"transparent":"var(--fondo-suave)"}}>
+                <div style={{fontSize:12,color:"var(--texto)",lineHeight:1.45,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{iconoTipo[n.tipo]||"🔔"} {n.texto}</div>
+                <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:3}}>{new Date(n.created_at).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -6798,6 +6674,46 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   }, [tema]);
   const config = useConfig();               // configuración del usuario (funciones + modo del chat)
   const [configOpen, setConfigOpen] = useState(false); // modal "Configuración"
+
+  // ─── Sub-secciones de cada pestaña (viven aquí para que el submenú se
+  // despliegue desde la pestaña principal, sin barras extra en los paneles) ───
+  const [subTabHospital, setSubTabHospital] = useState(() => {
+    try { return localStorage.getItem("uro_subtab_hospital") || "pacientes"; } catch { return "pacientes"; }
+  });
+  const [subTabLogbook, setSubTabLogbook] = useState("lista");
+  const [subTabBiblio, setSubTabBiblio] = useState("cirugias");
+  const [contexto, setContexto] = useState(() => {
+    try { return localStorage.getItem("uro_contexto") || "personal"; } catch { return "personal"; }
+  });
+  const [submenuOpen, setSubmenuOpen] = useState(false); // desplegable bajo la pestaña activa
+  const tabBarRef = useRef(null);
+
+  useEffect(() => { try { localStorage.setItem("uro_subtab_hospital", subTabHospital); } catch {} }, [subTabHospital]);
+  useEffect(() => { try { localStorage.setItem("uro_contexto", contexto); } catch {} }, [contexto]);
+  useEffect(() => { setSubmenuOpen(false); }, [tab]); // al cambiar de pestaña, cerrar el submenú
+
+  // El tutorial puede pedir cambiar de sub-sección
+  useEffect(() => {
+    const h = (e) => {
+      const s = e.detail?.subtab;
+      if (["pacientes", "tabla", "notas", "prescripciones"].includes(s)) setSubTabHospital(s);
+      if (["cirugias", "videos", "preguntas", "medicamentos", "scores", "documentos", "mapas"].includes(s)) setSubTabBiblio(s);
+    };
+    window.addEventListener("uro-tour-subtab", h);
+    return () => window.removeEventListener("uro-tour-subtab", h);
+  }, []);
+
+  // Si la configuración oculta la sección activa, volver a la primera
+  useEffect(() => {
+    if ((subTabHospital === "tabla" && fnOculta(config, "hosp:tabla")) ||
+        (subTabHospital === "notas" && fnOculta(config, "hosp:notas")) ||
+        (subTabHospital === "prescripciones" && fnOculta(config, "hosp:prescripciones"))) setSubTabHospital("pacientes");
+    if ((subTabBiblio === "videos" && fnOculta(config, "biblio:videos")) ||
+        (subTabBiblio === "preguntas" && fnOculta(config, "biblio:preguntas")) ||
+        (subTabBiblio === "medicamentos" && fnOculta(config, "biblio:medicamentos")) ||
+        (subTabBiblio === "scores" && fnOculta(config, "biblio:scores"))) setSubTabBiblio("cirugias");
+  }, [config, subTabHospital, subTabBiblio]);
+
   // Si la pestaña activa quedó oculta por configuración, volver al chat
   useEffect(() => {
     if (fnOculta(config, "tab:" + tab)) setTab("chat");
@@ -7536,6 +7452,54 @@ if (!currentUser) {
 
   const tabs = tabsPorRol(currentUser.rol, pendientesCount).filter(([id]) => !fnOculta(config, "tab:" + id));
 
+  // ─── Contenido del submenú que se despliega al volver a tocar la pestaña activa ───
+  const esUrologo = currentUser.rol === "urologo" || currentUser.rol === "residente";
+  const accion = (nombre) => { try { window.dispatchEvent(new CustomEvent("uro-submenu-accion", { detail: { tab, accion: nombre } })); } catch {} };
+  const equipoActualNombre = contexto !== "personal" ? (equipos.find(e => e.id === contexto)?.nombre || "Equipo") : "Mis pacientes";
+
+  let submenu = null;
+  if (tab === "hospital") {
+    submenu = {
+      titulo: "Hospital",
+      secciones: [
+        ["pacientes", "👥 Pacientes"],
+        ...(!fnOculta(config, "hosp:tabla") ? [["tabla", "📋 Tabla"]] : []),
+        ...(!fnOculta(config, "hosp:notas") ? [["notas", "🗒️ Notas"]] : []),
+        ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
+      ],
+      activo: subTabHospital,
+      elegir: setSubTabHospital,
+      extras: [
+        ...((subTabHospital === "pacientes" || subTabHospital === "tabla") ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
+        ["🤝 Equipo de trabajo", () => accion("equipos")],
+      ],
+      contexto: { actual: contexto, elegir: setContexto, opciones: [["personal", "👤 Mis pacientes"], ...equipos.map(e => [e.id, `👥 ${e.nombre}`])] },
+    };
+  } else if (tab === "logbook") {
+    submenu = {
+      titulo: "Logbook",
+      secciones: [["lista", "📋 Registros"], ["nueva", "📷 Nueva"], ["metricas", "📊 Métricas"]],
+      activo: subTabLogbook,
+      elegir: setSubTabLogbook,
+      extras: [["🔗 Compartir con el equipo", () => accion("compartir")]],
+    };
+  } else if (tab === "conocimiento") {
+    submenu = {
+      titulo: "Biblioteca",
+      secciones: [
+        ["cirugias", "🔪 Cirugías"],
+        ...(!fnOculta(config, "biblio:videos") ? [["videos", "📚 Videos"]] : []),
+        ...(!fnOculta(config, "biblio:preguntas") ? [["preguntas", "❓ Preguntas"]] : []),
+        ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
+        ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
+        ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
+      ],
+      activo: subTabBiblio,
+      elegir: setSubTabBiblio,
+      extras: [],
+    };
+  }
+
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)"}}>
       <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
@@ -7559,7 +7523,9 @@ if (!currentUser) {
           </div>
         </div>
         {menuOpen && (
-          <div style={{position:"absolute",top:60,right:20,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"8px 0",minWidth:220,zIndex:10,boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>
+          <>
+          <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:70}}/>
+          <div style={{position:"fixed",top:72,right:8,zIndex:71,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:12,padding:"8px 0",width:"min(260px, calc(100vw - 16px))",maxHeight:"calc(100dvh - 96px)",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:"0 10px 28px rgba(0,0,0,0.28)"}}>
             <div style={{padding:"8px 14px",borderBottom:"0.5px solid var(--fondo)"}}>
               <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{currentUser.nombre}</div>
               <div style={{fontSize:11,color:"var(--texto-sec)"}}>{currentUser.correo}</div>
@@ -7579,23 +7545,70 @@ if (!currentUser) {
             </button>
             <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
+          </>
         )}
-        <div style={{display:"flex",gap:0,overflowX:"auto"}}>
+        <div ref={tabBarRef} style={{display:"flex",gap:0,overflowX:"auto"}}>
           {tabs.map(([id,label]) => (
             <button key={id} data-tour={"tab-"+id} onClick={() => {
-              if (tab === id) {
-                // Segundo toque en la pestaña activa: abre/cierra su submenú de secciones
-                try { window.dispatchEvent(new CustomEvent("uro-toggle-submenu", { detail: { tab: id } })); } catch {}
-              } else setTab(id);
-            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}}>{label}</button>
+              if (tab === id) setSubmenuOpen(o => !o); // 2º toque: despliega las secciones
+              else { setTab(id); setSubmenuOpen(false); }
+            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}}>
+              {label}{tab===id && submenu ? (submenuOpen ? " ▴" : " ▾") : ""}
+            </button>
           ))}
         </div>
       </div>
 
+      {/* Submenú desplegable de la pestaña activa (fijo, para que no lo recorte el contenedor) */}
+      {submenuOpen && submenu && (
+        <>
+          <div onClick={()=>setSubmenuOpen(false)} style={{position:"fixed",inset:0,zIndex:60}}/>
+          <div style={{
+            position:"fixed", zIndex:61,
+            top: (tabBarRef.current?.getBoundingClientRect().bottom || 100) + 4,
+            left: 8, right: 8, margin:"0 auto", maxWidth: 340,
+            maxHeight: "calc(100dvh - 160px)", overflowY:"auto",
+            background:"var(--superficie)", border:"0.5px solid var(--borde)", borderRadius:12,
+            padding:5, boxShadow:"0 10px 28px rgba(0,0,0,0.28)",
+            display:"flex", flexDirection:"column", gap:2,
+          }}>
+            <div style={{fontSize:10.5,fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>{submenu.titulo}</div>
+            {submenu.secciones.map(([id,label]) => {
+              const activo = submenu.activo === id;
+              return (
+                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:13.5,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
+                  {label}{activo ? "  ✓" : ""}
+                </button>
+              );
+            })}
+            {submenu.extras.length > 0 && <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>}
+            {submenu.extras.map(([label,fn]) => (
+              <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:13.5,textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                {label}
+              </button>
+            ))}
+            {submenu.contexto && (
+              <>
+                <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>
+                <div style={{fontSize:10.5,fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>Viendo: {equipoActualNombre}</div>
+                {submenu.contexto.opciones.map(([id,label]) => {
+                  const activo = submenu.contexto.actual === id;
+                  return (
+                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:13,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
+                      {label}{activo ? "  ✓" : ""}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </>
+      )}
+
       {tab==="admin" && isAdmin && <AdminPanel/>}
-      {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos}/>}
-      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
-      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
+      {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
+      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={subTabHospital} setSubTab={setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
+      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa} subTab={subTabBiblio} setSubTab={setSubTabBiblio}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
