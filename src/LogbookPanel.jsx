@@ -10,18 +10,23 @@ import {
   listarLogbook, crearRegistroLogbook, actualizarRegistroLogbook,
   eliminarRegistroLogbook, subirFotoLogbook, obtenerUrlFoto, eliminarFotoLogbook,
 } from "./logbook";
+import { supabase } from "./supabase";
 
 const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Otro"];
 const ROLES = [["cirujano", "Cirujano principal"], ["primer_ayudante", "1er ayudante"], ["segundo_ayudante", "2do ayudante"], ["observador", "Observador"]];
+const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante"]; // cuentan como "ayudante" en las métricas
 const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
 
 const REGISTRO_VACIO = {
   fecha: new Date().toISOString().slice(0, 10),
-  iniciales: "", edad: "", sexo: "", diagnostico_pre: "", diagnostico_post: "",
+  iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "", diagnostico_pre: "", diagnostico_post: "",
   procedimiento: "", categoria: "", lateralidad: "", rol: "cirujano",
   cirujano: "", ayudantes: "", anestesia: "", hora_inicio: "", hora_termino: "",
-  duracion_min: "", sangrado_ml: "", hallazgos: "", tecnica: "",
+  duracion_min: "", sangrado_ml: "", tamano_litiasis_mm: "", tamano_prostata_cc: "",
+  hallazgos: "", tecnica: "",
   complicacion: false, clavien: "", detalles_complicacion: "", observaciones: "",
+  // Complementos posteriores (biopsia / control imagenológico)
+  biopsia_resultado: "", biopsia_isup: "", control_stone_free: "", control_imagen_detalle: "",
 };
 
 // ─── Comprime la foto en el navegador antes de enviarla (máx 1568 px, JPEG) ───
@@ -188,11 +193,14 @@ function BarrasHorizontales({ items, color = "var(--primario)" }) {
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
-export default function LogbookPanel({ currentUser }) {
+export default function LogbookPanel({ currentUser, equipos = [] }) {
   const [registros, setRegistros] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [vista, setVista] = useState("lista"); // lista | nueva | metricas
   const [error, setError] = useState("");
+  const [subMenuOpen, setSubMenuOpen] = useState(false); // desplegable de secciones del Logbook
+  const [compartirOpen, setCompartirOpen] = useState(false); // modal "compartir"
+  const [compartirQue, setCompartirQue] = useState("registros"); // "registros" | "metricas"
 
   // Formulario / extracción
   const [reg, setReg] = useState({ ...REGISTRO_VACIO });
@@ -201,6 +209,7 @@ export default function LogbookPanel({ currentUser }) {
   const [extraidoOk, setExtraidoOk] = useState(false);
   const [fotos, setFotos] = useState([]); // [{dataUrl, blob, base64}]
   const [guardando, setGuardando] = useState(false);
+  const [complementoOpen, setComplementoOpen] = useState(false); // sección biopsia/control colapsable
   const inputFotoRef = useRef(null);
 
   // Lista
@@ -220,6 +229,13 @@ export default function LogbookPanel({ currentUser }) {
       setCargando(false);
     });
   }, [currentUser]);
+
+  // Al tocar de nuevo la pestaña principal "Logbook", abrir/cerrar el submenú
+  useEffect(() => {
+    const h = (e) => { if (e.detail?.tab === "logbook") setSubMenuOpen(o => !o); };
+    window.addEventListener("uro-toggle-submenu", h);
+    return () => window.removeEventListener("uro-toggle-submenu", h);
+  }, []);
 
   const set = (campo, valor) => setReg((prev) => ({ ...prev, [campo]: valor }));
 
@@ -297,6 +313,8 @@ export default function LogbookPanel({ currentUser }) {
     const datos = {
       fecha: reg.fecha,
       iniciales: reg.iniciales.trim().toUpperCase() || null,
+      ficha_clinica: reg.ficha_clinica.trim() || null,
+      rut: reg.rut.trim() || null,
       edad: reg.edad ? parseInt(reg.edad) : null,
       sexo: reg.sexo || null,
       diagnostico_pre: reg.diagnostico_pre.trim() || null,
@@ -312,6 +330,12 @@ export default function LogbookPanel({ currentUser }) {
       hora_termino: reg.hora_termino || null,
       duracion_min: reg.duracion_min ? parseInt(reg.duracion_min) : null,
       sangrado_ml: reg.sangrado_ml ? parseInt(reg.sangrado_ml) : null,
+      tamano_litiasis_mm: reg.tamano_litiasis_mm ? parseFloat(reg.tamano_litiasis_mm) : null,
+      tamano_prostata_cc: reg.tamano_prostata_cc ? parseFloat(reg.tamano_prostata_cc) : null,
+      biopsia_resultado: reg.biopsia_resultado.trim() || null,
+      biopsia_isup: reg.biopsia_isup || null,
+      control_stone_free: reg.control_stone_free || null,
+      control_imagen_detalle: reg.control_imagen_detalle.trim() || null,
       hallazgos: reg.hallazgos.trim() || null,
       tecnica: reg.tecnica.trim() || null,
       complicacion: !!reg.complicacion,
@@ -349,12 +373,15 @@ export default function LogbookPanel({ currentUser }) {
     setExtraidoOk(false);
     setReg({
       fecha: r.fecha || new Date().toISOString().slice(0, 10),
-      iniciales: r.iniciales || "", edad: r.edad != null ? String(r.edad) : "", sexo: r.sexo || "",
+      iniciales: r.iniciales || "", ficha_clinica: r.ficha_clinica || "", rut: r.rut || "", edad: r.edad != null ? String(r.edad) : "", sexo: r.sexo || "",
       diagnostico_pre: r.diagnostico_pre || "", diagnostico_post: r.diagnostico_post || "",
       procedimiento: r.procedimiento || "", categoria: r.categoria || "Otro", lateralidad: r.lateralidad || "",
       rol: r.rol || "cirujano", cirujano: r.cirujano || "", ayudantes: r.ayudantes || "",
       anestesia: r.anestesia || "", hora_inicio: (r.hora_inicio || "").slice(0, 5), hora_termino: (r.hora_termino || "").slice(0, 5),
       duracion_min: r.duracion_min != null ? String(r.duracion_min) : "", sangrado_ml: r.sangrado_ml != null ? String(r.sangrado_ml) : "",
+      tamano_litiasis_mm: r.tamano_litiasis_mm != null ? String(r.tamano_litiasis_mm) : "", tamano_prostata_cc: r.tamano_prostata_cc != null ? String(r.tamano_prostata_cc) : "",
+      biopsia_resultado: r.biopsia_resultado || "", biopsia_isup: r.biopsia_isup || "",
+      control_stone_free: r.control_stone_free || "", control_imagen_detalle: r.control_imagen_detalle || "",
       hallazgos: r.hallazgos || "", tecnica: r.tecnica || "",
       complicacion: !!r.complicacion, clavien: r.clavien || "", detalles_complicacion: r.detalles_complicacion || "",
       observaciones: r.observaciones || "",
@@ -377,9 +404,9 @@ export default function LogbookPanel({ currentUser }) {
     else alert("No se pudo cargar la foto: " + r.error);
   };
 
-  // ─── Exportar CSV ───
+  // ─── Exportar CSV (incluye complicaciones y complementos) ───
   const exportarCSV = () => {
-    const cols = ["fecha", "iniciales", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "complicacion", "clavien", "hallazgos", "observaciones"];
+    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -402,9 +429,11 @@ export default function LogbookPanel({ currentUser }) {
   }, [registros, busqueda, filtroCat, filtroRol]);
 
   // ─── Métricas ───
+  const prom = (arr) => (arr.length ? Math.round((arr.reduce((s, x) => s + x, 0) / arr.length) * 10) / 10 : null);
   const met = useMemo(() => {
     const total = registros.length;
     const comoCirujano = registros.filter((r) => r.rol === "cirujano").length;
+    const comoAyudante = registros.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
     const conComplicacion = registros.filter((r) => r.complicacion).length;
     const clavienAlto = registros.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
     const duraciones = registros.filter((r) => r.duracion_min > 0);
@@ -415,11 +444,17 @@ export default function LogbookPanel({ currentUser }) {
     registros.forEach((r) => {
       porCat[r.categoria || "Otro"] = (porCat[r.categoria || "Otro"] || 0) + 1;
       const p = r.procedimiento || "—";
-      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, dur: [], compl: 0 };
-      porProc[p].n++;
-      if (r.rol === "cirujano") porProc[p].cx++;
-      if (r.duracion_min > 0) porProc[p].dur.push(r.duracion_min);
-      if (r.complicacion) porProc[p].compl++;
+      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0 };
+      const v = porProc[p];
+      v.n++;
+      if (r.rol === "cirujano") v.cx++;
+      if (ROLES_AYUDANTE.includes(r.rol)) v.ayud++;
+      if (r.duracion_min > 0) v.dur.push(r.duracion_min);
+      if (r.sangrado_ml > 0) v.sangrado.push(r.sangrado_ml);
+      if (r.tamano_litiasis_mm > 0) v.litiasis.push(r.tamano_litiasis_mm);
+      if (r.tamano_prostata_cc > 0) v.prostata.push(r.tamano_prostata_cc);
+      if (r.complicacion) v.compl++;
+      if (r.control_stone_free) { v.stoneTotal++; if (r.control_stone_free === "stone_free") v.stoneFree++; }
     });
 
     const meses = ultimosMeses(12).map((mes) => ({
@@ -428,17 +463,27 @@ export default function LogbookPanel({ currentUser }) {
       cirujano: registros.filter((r) => mesClave(r.fecha) === mes && r.rol === "cirujano").length,
     }));
 
-    const topProc = Object.entries(porProc)
+    // Detalle completo por procedimiento (para tarjetas de métricas)
+    const detalleProc = Object.entries(porProc)
       .sort((a, b) => b[1].n - a[1].n)
-      .slice(0, 8)
       .map(([label, v]) => ({
-        label, n: v.n,
-        extra: v.dur.length ? `${Math.round(v.dur.reduce((s, d) => s + d, 0) / v.dur.length)} min prom` : null,
+        label, n: v.n, cx: v.cx, ayud: v.ayud,
+        durProm: prom(v.dur), sangradoProm: prom(v.sangrado),
+        litiasisProm: prom(v.litiasis), prostataProm: prom(v.prostata),
+        compl: v.compl,
+        stoneFree: v.stoneTotal > 0 ? { free: v.stoneFree, total: v.stoneTotal } : null,
       }));
+
+    const topProc = detalleProc.slice(0, 8).map((d) => ({
+      label: d.label, n: d.n, extra: d.durProm != null ? `${d.durProm} min prom` : null,
+    }));
+
+    // Resumen de ayudantías separado por procedimiento
+    const ayudantiasPorProc = detalleProc.filter((d) => d.ayud > 0).map((d) => ({ label: d.label, n: d.ayud }));
 
     const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([label, n]) => ({ label, n }));
 
-    return { total, comoCirujano, conComplicacion, clavienAlto, durProm, meses, topProc, cats };
+    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, durProm, meses, topProc, cats, detalleProc, ayudantiasPorProc };
   }, [registros]);
 
   // ─── Estilos compartidos ───
@@ -450,24 +495,97 @@ export default function LogbookPanel({ currentUser }) {
   const kpi = { ...card, flex: "1 1 130px", textAlign: "center" };
   const campo = (etiqueta, hijo) => (<div><label style={lbl}>{etiqueta}</label>{hijo}</div>);
   const rolLabel = (r) => (ROLES.find(([id]) => id === r) || [r, r])[1];
+  // Chip compacto para las métricas por cirugía
+  const Chip = ({ label, val, ok }) => (
+    <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 20, background: ok ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (ok ? "var(--exito-borde)" : "var(--borde)"), color: ok ? "var(--exito)" : "var(--texto-sec)", whiteSpace: "nowrap" }}>
+      <span style={{ color: "var(--texto-ter)" }}>{label}:</span> <b style={{ color: ok ? "var(--exito)" : "var(--texto)" }}>{val}</b>
+    </span>
+  );
+
+  // ─── Compartir registros/métricas con el equipo o personas seleccionadas ───
+  const [destinatarios, setDestinatarios] = useState([]); // ids seleccionados
+  const [equipoDestino, setEquipoDestino] = useState(""); // id de equipo o ""
+  const [miembrosCompartir, setMiembrosCompartir] = useState([]);
+  const [compartiendo, setCompartiendo] = useState(false);
+  const [compartirMsg, setCompartirMsg] = useState("");
+
+  useEffect(() => {
+    if (!compartirOpen || !equipoDestino) { setMiembrosCompartir([]); return; }
+    (async () => {
+      try {
+        const { data } = await supabase.from("miembros_equipo").select("user_id, perfiles(id, nombre, correo)").eq("equipo_id", equipoDestino);
+        setMiembrosCompartir((data || []).map(m => m.perfiles).filter(p => p && p.id !== currentUser.id));
+      } catch { setMiembrosCompartir([]); }
+    })();
+  }, [compartirOpen, equipoDestino, currentUser.id]);
+
+  const resumenCompartir = () => {
+    if (compartirQue === "metricas") {
+      const lineas = [
+        `Métricas de logbook — ${currentUser.nombre}`,
+        `Total: ${met.total} · Como cirujano: ${met.comoCirujano} · Como ayudante: ${met.comoAyudante}`,
+        met.durProm != null ? `Duración promedio: ${met.durProm} min` : "",
+        "",
+        "Por procedimiento:",
+        ...met.detalleProc.map(d => `• ${d.label}: ${d.n} (cirujano ${d.cx}, ayudante ${d.ayud})${d.durProm != null ? `, ${d.durProm} min prom` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}`),
+      ];
+      return lineas.filter(Boolean).join("\n");
+    }
+    return `Registros de logbook compartidos por ${currentUser.nombre} (${registros.length} cirugías). Revisa el detalle en la app.`;
+  };
+
+  const enviarCompartir = async () => {
+    if (destinatarios.length === 0) { setCompartirMsg("⚠️ Selecciona al menos una persona."); return; }
+    setCompartiendo(true); setCompartirMsg("");
+    const texto = resumenCompartir();
+    try {
+      // Notifica a cada destinatario (nivel app). El contenido va como notificación.
+      for (const uid of destinatarios) {
+        await supabase.from("notificaciones").insert({
+          user_id: uid,
+          texto: `${currentUser.nombre} compartió sus ${compartirQue === "metricas" ? "métricas" : "registros"} de logbook:\n${texto}`,
+          tipo: "logbook",
+        });
+      }
+      setCompartirMsg(`✓ Compartido con ${destinatarios.length} persona(s).`);
+      setTimeout(() => { setCompartirOpen(false); setDestinatarios([]); setCompartirMsg(""); }, 1200);
+    } catch (e) {
+      setCompartirMsg("⚠️ No se pudo compartir: " + (e.message || e));
+    }
+    setCompartiendo(false);
+  };
 
   if (!currentUser) return null;
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", width: "100%", boxSizing: "border-box" }}>
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px 40px" }}>
-      {/* ─── Encabezado + sub-pestañas ─── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 19, color: "var(--texto)" }}>📓 Logbook quirúrgico</h2>
-        <div style={{ display: "flex", gap: 6 }}>
-          {[["lista", "📋 Registros"], ["nueva", "📷 Nueva"], ["metricas", "📊 Métricas"]].map(([id, label]) => (
-            <button key={id} onClick={() => { if (id === "nueva" && vista !== "nueva") resetForm(); setVista(id); }}
-              style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 20, cursor: "pointer", border: "0.5px solid var(--borde)", background: vista === id ? "var(--primario)" : "var(--superficie)", color: vista === id ? "var(--texto-inv)" : "var(--primario)" }}>
-              {label}
-            </button>
-          ))}
+      {/* ─── Barra compacta con submenú desplegable (sin título "Logbook quirúrgico") ─── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12, position: "relative" }}>
+        <div style={{ position: "relative" }}>
+          <button onClick={() => setSubMenuOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", fontSize: 13.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: subMenuOpen ? "none" : "0.5px solid var(--borde)", background: subMenuOpen ? "var(--primario)" : "var(--superficie)", color: subMenuOpen ? "var(--texto-inv)" : "var(--primario)", whiteSpace: "nowrap" }}>
+            {vista === "lista" ? "📋 Registros" : vista === "nueva" ? "📷 Nueva" : "📊 Métricas"} {subMenuOpen ? "▴" : "▾"}
+          </button>
+          {subMenuOpen && (
+            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 4, zIndex: 40, boxShadow: "0 6px 18px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: 2, minWidth: 180 }}>
+              {[["lista", "📋 Registros"], ["nueva", "📷 Nueva"], ["metricas", "📊 Métricas"]].map(([id, label]) => {
+                const activo = vista === id;
+                return (
+                  <button key={id} onClick={() => { if (id === "nueva" && vista !== "nueva") resetForm(); setVista(id); setSubMenuOpen(false); }} style={{ padding: "9px 12px", fontSize: 13, textAlign: "left", background: activo ? "var(--fondo-suave)" : "none", border: "none", color: activo ? "var(--primario)" : "var(--texto)", borderRadius: 7, cursor: "pointer", fontWeight: activo ? 700 : 500 }}>
+                    {label}{activo ? " ✓" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
+        {registros.length > 0 && (
+          <button onClick={() => { setCompartirQue(vista === "metricas" ? "metricas" : "registros"); setCompartirOpen(true); }} style={{ padding: "8px 14px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--primario)", whiteSpace: "nowrap" }}>
+            🔗 Compartir
+          </button>
+        )}
       </div>
+      {subMenuOpen && <div onClick={() => setSubMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 30 }} />}
 
       {error && <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: 13, background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>{error}</div>}
 
@@ -509,6 +627,8 @@ export default function LogbookPanel({ currentUser }) {
           <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
             {campo("Fecha *", <input type="date" style={inp} value={reg.fecha} onChange={(e) => set("fecha", e.target.value)} />)}
             {campo("Iniciales paciente", <input style={inp} value={reg.iniciales} onChange={(e) => set("iniciales", e.target.value.toUpperCase())} placeholder="JPG" maxLength={5} />)}
+            {campo("Ficha clínica (FC)", <input style={inp} value={reg.ficha_clinica} onChange={(e) => set("ficha_clinica", e.target.value.slice(0, 30))} placeholder="123456" />)}
+            {campo("RUT", <input style={inp} value={reg.rut} onChange={(e) => set("rut", e.target.value.slice(0, 15))} placeholder="12.345.678-9" />)}
             {campo("Edad", <input type="number" style={inp} value={reg.edad} onChange={(e) => set("edad", e.target.value)} />)}
             {campo("Sexo", (
               <select style={inp} value={reg.sexo} onChange={(e) => set("sexo", e.target.value)}>
@@ -539,26 +659,59 @@ export default function LogbookPanel({ currentUser }) {
             {campo("Hora término", <input type="time" style={inp} value={reg.hora_termino} onChange={(e) => set("hora_termino", e.target.value)} />)}
             {campo("Duración (min)", <input type="number" style={inp} value={reg.duracion_min} onChange={(e) => set("duracion_min", e.target.value)} />)}
             {campo("Sangrado (ml)", <input type="number" style={inp} value={reg.sangrado_ml} onChange={(e) => set("sangrado_ml", e.target.value)} />)}
+            {campo("Tamaño litiasis (mm)", <input type="number" step="0.1" style={inp} value={reg.tamano_litiasis_mm} onChange={(e) => set("tamano_litiasis_mm", e.target.value)} placeholder="Ej: 12" />)}
+            {campo("Tamaño próstata (cc)", <input type="number" step="0.1" style={inp} value={reg.tamano_prostata_cc} onChange={(e) => set("tamano_prostata_cc", e.target.value)} placeholder="Ej: 55" />)}
             <div style={{ gridColumn: "1 / -1" }}>{campo("Diagnóstico preoperatorio", <input style={inp} value={reg.diagnostico_pre} onChange={(e) => set("diagnostico_pre", e.target.value)} />)}</div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Diagnóstico postoperatorio", <input style={inp} value={reg.diagnostico_post} onChange={(e) => set("diagnostico_post", e.target.value)} />)}</div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Hallazgos", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.hallazgos} onChange={(e) => set("hallazgos", e.target.value)} />)}</div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Técnica (resumen)", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.tecnica} onChange={(e) => set("tecnica", e.target.value)} />)}</div>
 
-            {/* Complicación */}
-            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--texto)", cursor: "pointer" }}>
-                <input type="checkbox" checked={reg.complicacion} onChange={(e) => set("complicacion", e.target.checked)} />
-                Hubo complicación
-              </label>
-              {reg.complicacion && (
-                <select style={{ ...inp, width: "auto" }} value={reg.clavien} onChange={(e) => set("clavien", e.target.value)}>
-                  {CLAVIEN.map((c) => <option key={c} value={c}>{c ? `Clavien-Dindo ${c}` : "Clavien-Dindo…"}</option>)}
-                </select>
+            {/* Complemento posterior: biopsia / control imagenológico (colapsable) */}
+            <div style={{ gridColumn: "1 / -1", marginTop: 2 }}>
+              <button type="button" onClick={() => setComplementoOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--primario)" }}>
+                🔬 Complementar después (biopsia / control) {complementoOpen ? "▴" : "▾"}
+              </button>
+              {complementoOpen && (
+                <div style={{ marginTop: 8, padding: "10px 12px", border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--texto-ter)", lineHeight: 1.4 }}>Puedes dejar esto vacío ahora y editarlo cuando llegue la biopsia o el control con imagen (p.ej. para saber si quedó <i>stone free</i>).</div>
+                  {campo("Resultado de biopsia", <input style={inp} value={reg.biopsia_resultado} onChange={(e) => set("biopsia_resultado", e.target.value)} placeholder="Ej: Adenocarcinoma acinar" />)}
+                  {campo("ISUP (si aplica)", (
+                    <select style={inp} value={reg.biopsia_isup} onChange={(e) => set("biopsia_isup", e.target.value)}>
+                      <option value="">—</option>{["1", "2", "3", "4", "5"].map((g) => <option key={g} value={g}>ISUP {g}</option>)}
+                    </select>
+                  ))}
+                  {campo("Control con imagen (stone free)", (
+                    <select style={inp} value={reg.control_stone_free} onChange={(e) => set("control_stone_free", e.target.value)}>
+                      <option value="">—</option>
+                      <option value="stone_free">✓ Stone free</option>
+                      <option value="fragmento_residual">Fragmento residual</option>
+                      <option value="pendiente">Pendiente de control</option>
+                    </select>
+                  ))}
+                  <div style={{ gridColumn: "1 / -1" }}>{campo("Detalle del control imagenológico", <input style={inp} value={reg.control_imagen_detalle} onChange={(e) => set("control_imagen_detalle", e.target.value)} placeholder="Ej: UroTAC a las 6 semanas, sin litiasis residual" />)}</div>
+                </div>
               )}
             </div>
-            {reg.complicacion && (
-              <div style={{ gridColumn: "1 / -1" }}>{campo("Detalle de la complicación", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.detalles_complicacion} onChange={(e) => set("detalles_complicacion", e.target.value)} />)}</div>
-            )}
+
+            {/* Complicación: NO aparece de entrada; se agrega con este botón */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              {!reg.complicacion ? (
+                <button type="button" onClick={() => set("complicacion", true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--texto-sec)" }}>
+                  ⚠️ Agregar complicación
+                </button>
+              ) : (
+                <div style={{ padding: "10px 12px", border: "0.5px solid var(--peligro)", borderRadius: 10, background: "var(--peligro-bg)", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--peligro)" }}>⚠️ Complicación</span>
+                    <select style={{ ...inp, width: "auto" }} value={reg.clavien} onChange={(e) => set("clavien", e.target.value)}>
+                      {CLAVIEN.map((c) => <option key={c} value={c}>{c ? `Clavien-Dindo ${c}` : "Clavien-Dindo…"}</option>)}
+                    </select>
+                    <button type="button" onClick={() => { set("complicacion", false); set("clavien", ""); set("detalles_complicacion", ""); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Quitar</button>
+                  </div>
+                  {campo("Detalle de la complicación", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.detalles_complicacion} onChange={(e) => set("detalles_complicacion", e.target.value)} />)}
+                </div>
+              )}
+            </div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Observaciones (JJ, sonda, drenajes, biopsias…)", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.observaciones} onChange={(e) => set("observaciones", e.target.value)} />)}</div>
           </div>
 
@@ -606,6 +759,8 @@ export default function LogbookPanel({ currentUser }) {
                   <div style={{ fontSize: 12, color: "var(--texto-sec)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span>📅 {r.fecha}</span>
                     {r.iniciales && <span>👤 {r.iniciales}{r.edad != null ? `, ${r.edad}a` : ""}</span>}
+                    {r.ficha_clinica && <span>FC {r.ficha_clinica}</span>}
+                    {r.rut && <span>{r.rut}</span>}
                     {r.duracion_min != null && <span>⏱ {r.duracion_min} min</span>}
                   </div>
                 </div>
@@ -629,6 +784,9 @@ export default function LogbookPanel({ currentUser }) {
                   {(r.cirujano || r.ayudantes) && <div><b>Equipo:</b> {r.cirujano}{r.ayudantes ? ` · Ayudantes: ${r.ayudantes}` : ""}</div>}
                   {r.anestesia && <div><b>Anestesia:</b> {r.anestesia}</div>}
                   {(r.hora_inicio || r.sangrado_ml != null) && <div>{r.hora_inicio && <><b>Horario:</b> {(r.hora_inicio || "").slice(0, 5)}–{(r.hora_termino || "").slice(0, 5)}  </>}{r.sangrado_ml != null && <><b>Sangrado:</b> {r.sangrado_ml} ml</>}</div>}
+                  {(r.tamano_litiasis_mm != null || r.tamano_prostata_cc != null) && <div>{r.tamano_litiasis_mm != null && <><b>Litiasis:</b> {r.tamano_litiasis_mm} mm  </>}{r.tamano_prostata_cc != null && <><b>Próstata:</b> {r.tamano_prostata_cc} cc</>}</div>}
+                  {(r.biopsia_resultado || r.biopsia_isup) && <div><b>Biopsia:</b> {r.biopsia_resultado}{r.biopsia_isup ? ` (ISUP ${r.biopsia_isup})` : ""}</div>}
+                  {r.control_stone_free && <div><b>Control:</b> {r.control_stone_free === "stone_free" ? "✓ Stone free" : r.control_stone_free === "fragmento_residual" ? "Fragmento residual" : "Pendiente"}{r.control_imagen_detalle ? ` — ${r.control_imagen_detalle}` : ""}</div>}
                   {r.hallazgos && <div><b>Hallazgos:</b> {r.hallazgos}</div>}
                   {r.tecnica && <div><b>Técnica:</b> {r.tecnica}</div>}
                   {r.detalles_complicacion && <div style={{ color: "var(--peligro)" }}><b>Complicación:</b> {r.detalles_complicacion}</div>}
@@ -658,14 +816,12 @@ export default function LogbookPanel({ currentUser }) {
               <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Como cirujano principal{met.total > 0 ? ` (${Math.round((met.comoCirujano / met.total) * 100)}%)` : ""}</div>
             </div>
             <div style={kpi}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: met.conComplicacion > 0 ? "var(--alerta)" : "var(--exito)" }}>
-                {met.total > 0 ? `${((met.conComplicacion / met.total) * 100).toFixed(1)}%` : "—"}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Complicaciones ({met.conComplicacion}){met.clavienAlto > 0 ? ` · ${met.clavienAlto} CD≥IIIb` : ""}</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.comoAyudante}</div>
+              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
             </div>
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.durProm != null ? `${met.durProm}′` : "—"}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Duración promedio</div>
+              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Duración promedio global</div>
             </div>
           </div>
 
@@ -677,10 +833,42 @@ export default function LogbookPanel({ currentUser }) {
             <BarrasMensuales datos={met.meses} />
           </div>
 
+          {/* Métricas detalladas por cirugía (duración, sangrado, litiasis, próstata, stone free) */}
+          <div style={card}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Métricas por cirugía</div>
+            {met.detalleProc.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--texto-ter)" }}>Sin datos aún.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {met.detalleProc.map((d) => (
+                  <div key={d.label} style={{ border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px", background: "var(--fondo-suave)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{d.label}</span>
+                      <span style={{ fontSize: 12, color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{d.n} cx</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <Chip label="Cirujano" val={d.cx} />
+                      {d.ayud > 0 && <Chip label="Ayudante" val={d.ayud} />}
+                      {d.durProm != null && <Chip label="Duración" val={`${d.durProm} min`} />}
+                      {d.sangradoProm != null && <Chip label="Sangrado" val={`${d.sangradoProm} ml`} />}
+                      {d.litiasisProm != null && <Chip label="Litiasis" val={`${d.litiasisProm} mm`} />}
+                      {d.prostataProm != null && <Chip label="Próstata" val={`${d.prostataProm} cc`} />}
+                      {d.stoneFree && <Chip label="Stone free" val={`${d.stoneFree.free}/${d.stoneFree.total}`} ok />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
             <div style={card}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes</div>
               <BarrasHorizontales items={met.topProc} />
+            </div>
+            <div style={card}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento</div>
+              <BarrasHorizontales items={met.ayudantiasPorProc} color="var(--alerta)" />
             </div>
             <div style={card}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
@@ -688,8 +876,15 @@ export default function LogbookPanel({ currentUser }) {
             </div>
           </div>
 
+          <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>
+            Las complicaciones (Clavien-Dindo) no se muestran aquí; quedan registradas en cada cirugía y aparecen al exportar las métricas.
+          </div>
+
           {registros.length > 0 && (
-            <button onClick={exportarCSV} style={{ ...btnSec, alignSelf: "flex-start" }}>⬇ Exportar todo a CSV (para tu casuística)</button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={exportarCSV} style={{ ...btnSec, alignSelf: "flex-start" }}>⬇ Exportar todo a CSV (para tu casuística)</button>
+              <button onClick={() => { setCompartirQue("metricas"); setCompartirOpen(true); }} style={{ ...btnSec, alignSelf: "flex-start" }}>🔗 Compartir métricas</button>
+            </div>
           )}
         </div>
       )}
@@ -698,6 +893,67 @@ export default function LogbookPanel({ currentUser }) {
       {fotoUrl && (
         <div onClick={() => setFotoUrl(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
           <img src={fotoUrl} alt="Protocolo operatorio" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+        </div>
+      )}
+
+      {/* ─── Modal: compartir registros / métricas ─── */}
+      {compartirOpen && (
+        <div onClick={() => setCompartirOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 20, width: "100%", maxWidth: 460, maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)" }}>🔗 Compartir</div>
+              <button onClick={() => setCompartirOpen(false)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+
+            {/* Qué compartir */}
+            <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
+              {[["registros", "📋 Registros"], ["metricas", "📊 Métricas"]].map(([id, label]) => (
+                <button key={id} onClick={() => setCompartirQue(id)} style={{ flex: 1, padding: "8px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: compartirQue === id ? "none" : "0.5px solid var(--borde)", background: compartirQue === id ? "var(--primario)" : "var(--superficie)", color: compartirQue === id ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
+              ))}
+            </div>
+
+            {/* Elegir equipo */}
+            <label style={lbl}>Equipo</label>
+            <select style={{ ...inp, marginBottom: 12 }} value={equipoDestino} onChange={(e) => { setEquipoDestino(e.target.value); setDestinatarios([]); }}>
+              <option value="">— Selecciona un equipo —</option>
+              {equipos.map((eq) => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+            </select>
+
+            {/* Personas del equipo */}
+            {equipoDestino && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <label style={{ ...lbl, marginBottom: 0 }}>Personas</label>
+                  {miembrosCompartir.length > 0 && (
+                    <button onClick={() => setDestinatarios(destinatarios.length === miembrosCompartir.length ? [] : miembrosCompartir.map(m => m.id))} style={{ background: "none", border: "none", color: "var(--primario)", fontSize: 11.5, cursor: "pointer", fontWeight: 600 }}>
+                      {destinatarios.length === miembrosCompartir.length ? "Ninguno" : "Todo el equipo"}
+                    </button>
+                  )}
+                </div>
+                {miembrosCompartir.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 12 }}>Este equipo no tiene otros miembros.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
+                    {miembrosCompartir.map((m) => {
+                      const on = destinatarios.includes(m.id);
+                      return (
+                        <div key={m.id} onClick={() => setDestinatarios(on ? destinatarios.filter(x => x !== m.id) : [...destinatarios, m.id])} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
+                          <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
+                          <span style={{ fontSize: 13, color: "var(--texto)" }}>{m.nombre}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {compartirMsg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: compartirMsg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: compartirMsg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (compartirMsg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{compartirMsg}</div>}
+
+            <button onClick={enviarCompartir} disabled={compartiendo || destinatarios.length === 0} style={{ ...btnPrim, width: "100%", opacity: (compartiendo || destinatarios.length === 0) ? 0.6 : 1 }}>
+              {compartiendo ? "Compartiendo…" : `Compartir ${compartirQue === "metricas" ? "métricas" : "registros"}`}
+            </button>
+          </div>
         </div>
       )}
       </div>
