@@ -69,7 +69,9 @@ Si un dato no aparece en el documento, usa null. NO inventes datos.
 Esquema exacto:
 {
   "fecha": "YYYY-MM-DD o null",
-  "iniciales": "iniciales del paciente (2-4 letras mayúsculas, desde el nombre si aparece) o null",
+  "iniciales": "NOMBRE COMPLETO del paciente tal como aparece en el protocolo (ej: 'Juan Pérez Mora'). Si solo hay iniciales, deja las iniciales. null si no aparece",
+  "ficha_clinica": "número de ficha clínica / FC / N° de ficha o null",
+  "rut": "RUT del paciente (formato 12.345.678-9) o null",
   "edad": numero o null,
   "sexo": "M" | "F" | null,
   "diagnostico_pre": "diagnóstico preoperatorio o null",
@@ -90,7 +92,7 @@ Esquema exacto:
   "detalles_complicacion": "descripción de complicación intraoperatoria o null",
   "observaciones": "otras observaciones relevantes (drenajes, catéter JJ, sonda, biopsias enviadas) o null"
 }
-IMPORTANTE: nunca incluyas el nombre completo ni RUT del paciente, solo iniciales.`;
+IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes ni completes datos que no estén.`;
 
   const content = imagenesBase64.map((b64) => ({
     type: "image",
@@ -208,7 +210,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [fotos, setFotos] = useState([]); // [{dataUrl, blob, base64}]
   const [guardando, setGuardando] = useState(false);
   const [complementoOpen, setComplementoOpen] = useState(false); // sección biopsia/control colapsable
-  const inputFotoRef = useRef(null);
+  const inputFotoRef = useRef(null);   // galería / archivos
+  const inputCamaraRef = useRef(null); // cámara directa
 
   // Lista
   const [busqueda, setBusqueda] = useState("");
@@ -262,7 +265,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       setReg((prev) => ({
         ...prev,
         fecha: datos.fecha || prev.fecha,
-        iniciales: (datos.iniciales || "").toUpperCase(),
+        iniciales: datos.iniciales || "",
+        ficha_clinica: datos.ficha_clinica || "",
+        rut: datos.rut || "",
         edad: datos.edad != null ? String(datos.edad) : "",
         sexo: datos.sexo || "",
         diagnostico_pre: datos.diagnostico_pre || "",
@@ -290,6 +295,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     }
     setExtrayendo(false);
     if (inputFotoRef.current) inputFotoRef.current.value = "";
+    if (inputCamaraRef.current) inputCamaraRef.current.value = "";
   };
 
   // ─── Duración automática si hay horas y no hay duración ───
@@ -319,7 +325,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     const datos = {
       fecha: reg.fecha,
-      iniciales: reg.iniciales.trim().toUpperCase() || null,
+      iniciales: reg.iniciales.trim() || null,
       ficha_clinica: reg.ficha_clinica.trim() || null,
       rut: reg.rut.trim() || null,
       edad: reg.edad ? parseInt(reg.edad) : null,
@@ -575,7 +581,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           {/* Captura */}
           {!editId && (
             <div style={{ ...card, textAlign: "center", borderStyle: "dashed", borderWidth: 1.5, padding: "18px 14px" }}>
-              <input ref={inputFotoRef} type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={onFotos} />
+              <input ref={inputFotoRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onFotos} />
+              <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFotos} />
               {extrayendo ? (
                 <div style={{ fontSize: 14, color: "var(--texto-sec)" }}>
                   <div style={{ fontSize: 26, marginBottom: 6 }}>🔍</div>
@@ -584,9 +591,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               ) : (
                 <>
                   <div style={{ fontSize: 30, marginBottom: 6 }}>📷</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Fotografía el protocolo operatorio</div>
-                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente. Puedes tomar hasta 3 fotos si el protocolo tiene varias páginas.</div>
-                  <button onClick={() => inputFotoRef.current?.click()} style={btnPrim}>Tomar / subir foto</button>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Fotografía o sube el protocolo operatorio</div>
+                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente. Puedes subir hasta 3 imágenes si el protocolo tiene varias páginas.</div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                    <button onClick={() => inputCamaraRef.current?.click()} style={btnPrim}>📸 Tomar foto</button>
+                    <button onClick={() => inputFotoRef.current?.click()} style={btnSec}>🖼 Galería / archivos</button>
+                  </div>
                   {fotos.length > 0 && (
                     <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 12 }}>
                       {fotos.map((f, i) => <img key={i} src={f.dataUrl} alt={`página ${i + 1}`} style={{ height: 70, borderRadius: 6, border: "0.5px solid var(--borde)" }} />)}
@@ -606,7 +616,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           {/* Formulario */}
           <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
             {campo("Fecha *", <input type="date" style={inp} value={reg.fecha} onChange={(e) => set("fecha", e.target.value)} />)}
-            {campo("Iniciales paciente", <input style={inp} value={reg.iniciales} onChange={(e) => set("iniciales", e.target.value.toUpperCase())} placeholder="JPG" maxLength={5} />)}
+            <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre completo o iniciales", <input style={inp} value={reg.iniciales} onChange={(e) => set("iniciales", e.target.value.slice(0, 120))} placeholder="Juan Pérez Mora  ·  o JPM" maxLength={120} />)}</div>
             {campo("Ficha clínica (FC)", <input style={inp} value={reg.ficha_clinica} onChange={(e) => set("ficha_clinica", e.target.value.slice(0, 30))} placeholder="123456" />)}
             {campo("RUT", <input style={inp} value={reg.rut} onChange={(e) => set("rut", e.target.value.slice(0, 15))} placeholder="12.345.678-9" />)}
             {campo("Edad", <input type="number" style={inp} value={reg.edad} onChange={(e) => set("edad", e.target.value)} />)}

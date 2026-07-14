@@ -386,6 +386,32 @@ function guardarOrdenServicios(lista) {
   try { localStorage.setItem("uro_orden_servicios", JSON.stringify(lista.map(s => s.id))); } catch {}
 }
 
+// ─── Orden COMPARTIDO de servicios (por equipo) para la vista de pacientes ───
+// Se guarda en Supabase para que todo el equipo vea los servicios en el mismo orden.
+// clave = "equipo:<id>" o "personal:<userId>".
+async function leerOrdenServiciosCompartido(clave) {
+  try {
+    const { data } = await supabase.from("orden_servicios_equipo").select("orden").eq("clave", clave).maybeSingle();
+    return Array.isArray(data?.orden) ? data.orden : null;
+  } catch { return null; }
+}
+async function guardarOrdenServiciosCompartido(clave, ordenNombres) {
+  try {
+    await supabase.from("orden_servicios_equipo").upsert({ clave, orden: ordenNombres, actualizado: new Date().toISOString() }, { onConflict: "clave" });
+    return true;
+  } catch { return false; }
+}
+// Ordena nombres de servicio segun el orden compartido (los no listados van al final)
+function aplicarOrdenNombres(nombres, orden) {
+  if (!Array.isArray(orden) || orden.length === 0) return [...nombres].sort((a, b) => a.localeCompare(b));
+  const pos = new Map(orden.map((x, i) => [x, i]));
+  return [...nombres].sort((a, b) => {
+    const pa = pos.has(a) ? pos.get(a) : 9999;
+    const pb = pos.has(b) ? pos.get(b) : 9999;
+    return pa !== pb ? pa - pb : a.localeCompare(b);
+  });
+}
+
 // Catálogo de funciones/subfunciones que se pueden desactivar
 const FUNCIONES_CONFIGURABLES = [
   { grupo: "Pestañas principales", items: [
@@ -4963,6 +4989,75 @@ const cargarMiembrosEquipo = async () => {
     porServicio[p.servicio].push(p);
   });
 
+  // ─── Orden COMPARTIDO de los servicios del kanban (se guarda por equipo) ───
+  const claveOrden = contexto && contexto !== "personal" ? `equipo:${contexto}` : `personal:${currentUser.id}`;
+  const [ordenServiciosKanban, setOrdenServiciosKanban] = useState([]);
+  const [dragCol, setDragCol] = useState(null); // { nombre, dx } → la columna flota siguiendo el dedo
+  const dragColInfo = useRef(null);
+  const kanbanRef = useRef(null);
+  const pressTimer = useRef(null);
+  const pressPos = useRef(null);
+
+  useEffect(() => {
+    let vivo = true;
+    leerOrdenServiciosCompartido(claveOrden).then(orden => { if (vivo && orden) setOrdenServiciosKanban(orden); });
+    return () => { vivo = false; };
+  }, [claveOrden]);
+
+  const nombresServicioOrdenados = aplicarOrdenNombres(Object.keys(porServicio), ordenServiciosKanban);
+
+  const iniciarDragColumna = (e, nombre, idx) => {
+    if (soloLectura) return;
+    e.preventDefault?.();
+    try { e.currentTarget?.setPointerCapture?.(e.pointerId); } catch {}
+    const cols = kanbanRef.current ? Array.from(kanbanRef.current.children) : [];
+    const ancho = cols[0] ? cols[0].getBoundingClientRect().width + 12 : 292;
+    dragColInfo.current = { nombre, desdeIdx: idx, aIdx: idx, x0: e.clientX, ancho };
+    setDragCol({ nombre, dx: 0 });
+    const onMove = (ev) => {
+      const d = dragColInfo.current; if (!d) return;
+      ev.preventDefault?.();
+      const dx = ev.clientX - d.x0;
+      let destino = d.desdeIdx + Math.round(dx / d.ancho);
+      destino = Math.max(0, Math.min(nombresServicioOrdenados.length - 1, destino));
+      d.aIdx = destino;
+      setDragCol({ nombre: d.nombre, dx });
+    };
+    const onUp = async () => {
+      const d = dragColInfo.current; dragColInfo.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setDragCol(null);
+      if (!d || d.aIdx === d.desdeIdx) return;
+      const nueva = [...nombresServicioOrdenados];
+      const [item] = nueva.splice(d.desdeIdx, 1);
+      nueva.splice(d.aIdx, 0, item);
+      setOrdenServiciosKanban(nueva);
+      await guardarOrdenServiciosCompartido(claveOrden, nueva); // se comparte con el equipo
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
+  // Dejar presionado sobre el titulo del servicio y arrastrar para reordenar
+  const iniciarLongPress = (e, nombre, idx) => {
+    if (soloLectura) return;
+    const { clientX, clientY, pointerId, currentTarget } = e;
+    pressPos.current = { x: clientX, y: clientY };
+    clearTimeout(pressTimer.current);
+    pressTimer.current = setTimeout(() => {
+      try { navigator.vibrate?.(25); } catch {}
+      iniciarDragColumna({ clientX, clientY, pointerId, currentTarget }, nombre, idx);
+    }, 280);
+  };
+  const moverLongPress = (e) => {
+    const p = pressPos.current; if (!p) return;
+    if (Math.abs(e.clientX - p.x) > 10 || Math.abs(e.clientY - p.y) > 10) clearTimeout(pressTimer.current);
+  };
+  const cancelarLongPress = () => { clearTimeout(pressTimer.current); pressPos.current = null; };
+
   // ============================================================
   // CRUD PACIENTES
   // ============================================================
@@ -6374,41 +6469,63 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
       )}
 
-      {/* Vista kanban por servicio */}
+      {/* Vista kanban por servicio: se reordena dejando presionado el título y arrastrando */}
       {!loadingPacientes && pacientesFiltrados.length > 0 && (
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12}}>
-          {Object.keys(porServicio).sort((a, b) => {
-  const orden = ["MQ 1", "GINECOLOGÍA", "TRAUMATOLOGÍA", "NEUROCIRUGÍA", "UTI 1", "CIRUGÍA", "MQ 2", "UCI", "UTI 2", "MEDICINA", "TABLA - HOSPITALIZADOS" ];
-  const ia = orden.indexOf(a);
-  const ib = orden.indexOf(b);
-  if (ia === -1 && ib === -1) return a.localeCompare(b);
-  if (ia === -1) return 1;
-  if (ib === -1) return -1;
-  return ia - ib;
-}).map(servicio => (
-            <div key={servicio} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
-              <div style={{fontSize:15,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)"}}>
-                {servicio} <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:13}}>({porServicio[servicio].length})</span>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {porServicio[servicio].map(p => (
-                  <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                      <div style={{fontSize:15,fontWeight:600,color:"var(--texto)"}}>
-                        {p.iniciales} <span style={{fontSize:19,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
-                      </div>
-                      <div style={{fontSize:13,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
-                    <div style={{fontSize:11,color:"var(--texto)",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
-                    {p.estado === "alta" && <div style={{fontSize:9,color:"var(--neutro)",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
-                    {esEquipo && <EncargadosPaciente paciente={p} miembros={miembrosEquipo} currentUser={currentUser} onActualizar={asignarEncargados} />}
+        <>
+          {!soloLectura && nombresServicioOrdenados.length > 1 && (
+            <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Deja presionado el nombre de un servicio y arrástralo para reordenarlo. El orden se comparte con tu equipo.</div>
+          )}
+          <div ref={kanbanRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12,position:"relative"}}>
+            {nombresServicioOrdenados.map((servicio, idx) => {
+              const arrastrando = dragCol?.nombre === servicio;
+              return (
+                <div key={servicio} style={{
+                  background:"var(--superficie)",
+                  border: arrastrando ? "1px solid var(--primario)" : "0.5px solid var(--borde)",
+                  borderRadius:10, padding:"12px",
+                  boxShadow: arrastrando ? "0 14px 30px rgba(15,23,42,0.35)" : "none",
+                  transform: arrastrando ? `translateX(${dragCol.dx}px) scale(1.03)` : "none",
+                  zIndex: arrastrando ? 5 : 1, position:"relative",
+                  transition: arrastrando ? "none" : "transform .15s",
+                }}>
+                  <div
+                    onPointerDown={(e)=>iniciarLongPress(e, servicio, idx)}
+                    onPointerMove={moverLongPress}
+                    onPointerUp={cancelarLongPress}
+                    onPointerCancel={cancelarLongPress}
+                    onPointerLeave={cancelarLongPress}
+                    title={soloLectura ? undefined : "Deja presionado y arrastra para reordenar"}
+                    style={{fontSize:15,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?"default":"grab",touchAction:"pan-y",userSelect:"none"}}>
+                    {!soloLectura && <span style={{fontSize:13,color:"var(--texto-ter)",flexShrink:0}}>☰</span>}
+                    <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{servicio}</span>
+                    <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:13,flexShrink:0}}>({porServicio[servicio].length})</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {porServicio[servicio].map(p => (
+                      <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                          <div style={{fontSize:15,fontWeight:600,color:"var(--texto)"}}>
+                            {p.iniciales} <span style={{fontSize:19,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
+                          </div>
+                          <div style={{fontSize:13,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
+                        {(p.ficha_clinica || p.rut) && (
+                          <div style={{fontSize:10.5,color:"var(--texto-ter)",marginBottom:3}}>
+                            {p.ficha_clinica ? `FC ${p.ficha_clinica}` : ""}{p.ficha_clinica && p.rut ? " · " : ""}{p.rut || ""}
+                          </div>
+                        )}
+                        <div style={{fontSize:11,color:"var(--texto)",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
+                        {p.estado === "alta" && <div style={{fontSize:9,color:"var(--neutro)",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
+                        {esEquipo && <EncargadosPaciente paciente={p} miembros={miembrosEquipo} currentUser={currentUser} onActualizar={asignarEncargados} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
@@ -6672,6 +6789,17 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", tema);
     try { localStorage.setItem("uro_tema", tema); } catch {}
+    // Pinta <html>, <body> y la barra del sistema con el fondo de la app,
+    // para que no asome una franja blanca bajo el contenido en el celular.
+    try {
+      const fondo = getComputedStyle(document.documentElement).getPropertyValue("--fondo").trim() || "#ffffff";
+      document.documentElement.style.background = fondo;
+      document.body.style.background = fondo;
+      document.body.style.margin = "0";
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) { meta = document.createElement("meta"); meta.name = "theme-color"; document.head.appendChild(meta); }
+      meta.setAttribute("content", fondo);
+    } catch {}
   }, [tema]);
   const config = useConfig();               // configuración del usuario (funciones + modo del chat)
   const [configOpen, setConfigOpen] = useState(false); // modal "Configuración"
@@ -7453,6 +7581,34 @@ if (!currentUser) {
 
   const tabs = tabsPorRol(currentUser.rol, pendientesCount).filter(([id]) => !fnOculta(config, "tab:" + id));
 
+  // ─── Deslizar lateralmente entre pestañas principales (móvil) ───
+  const swipeRef = useRef(null);
+  const onTouchStart = (e) => {
+    if (e.touches.length !== 1) { swipeRef.current = null; return; }
+    const t = e.touches[0];
+    swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now(), target: e.target };
+  };
+  const onTouchEnd = (e) => {
+    const s0 = swipeRef.current; swipeRef.current = null;
+    if (!s0) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return; // gesto no horizontal
+    if (Date.now() - s0.t > 600) return;
+    // Ignora si nació dentro de algo que scrollea en horizontal (tabla, carruseles)
+    let el = s0.target;
+    while (el && el !== document.body) {
+      const ox = getComputedStyle(el).overflowX;
+      if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 4) return;
+      el = el.parentElement;
+    }
+    const i0 = tabs.findIndex(([id]) => id === tab);
+    const destino = i0 + (dx < 0 ? 1 : -1);
+    if (i0 < 0 || destino < 0 || destino >= tabs.length) return;
+    setTab(tabs[destino][0]);
+    setSubmenuOpen(false);
+  };
+
   // ─── Contenido del submenú que se despliega al volver a tocar la pestaña activa ───
   const esUrologo = currentUser.rol === "urologo" || currentUser.rol === "residente";
   const accion = (nombre) => { try { window.dispatchEvent(new CustomEvent("uro-submenu-accion", { detail: { tab, accion: nombre } })); } catch {} };
@@ -7502,7 +7658,7 @@ if (!currentUser) {
   }
 
   return (
-    <div style={{fontFamily:"var(--font-sans)",height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)"}}>
+    <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)"}}>
       <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -7606,6 +7762,7 @@ if (!currentUser) {
         </>
       )}
 
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
       {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={subTabHospital} setSubTab={setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
@@ -7706,6 +7863,8 @@ if (!currentUser) {
           </div>
         </div>
       )}
+
+      </div>
 
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
 
