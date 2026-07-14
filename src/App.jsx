@@ -7,6 +7,7 @@ import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, l
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
+import LogbookPanel from "./LogbookPanel";
 
 // ============================================================
 // NOTIFICACIONES (nivel 1: dentro de la app)
@@ -159,9 +160,10 @@ function tabsPorRol(rol, pendientesCount = 0) {
   const chat = ["chat","💬 Chat"];
   const hospital = ["hospital","🏥 Hospital"];
   const biblio = ["conocimiento","📖 Biblioteca"];
-  if (rol === "admin") return [["admin",`👤 Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`], chat, hospital, biblio];
-  if (rol === "enfermeria") return [chat, hospital];   // sin Biblioteca
-  return [chat, hospital, biblio];                      // urologo, residente, interno
+  const logbook = ["logbook","📓 Logbook"];
+  if (rol === "admin") return [["admin",`👤 Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`], chat, hospital, logbook, biblio];
+  if (rol === "enfermeria") return [chat, hospital];              // sin Biblioteca ni Logbook
+  return [chat, hospital, logbook, biblio];                       // urologo, residente, interno
 }
 
 const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
@@ -6142,6 +6144,7 @@ if (!currentUser) {
       </div>
 
       {tab==="admin" && isAdmin && <AdminPanel/>}
+      {tab==="logbook" && <LogbookPanel currentUser={currentUser}/>}
       {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users}/>}
       {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
