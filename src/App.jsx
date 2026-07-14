@@ -153,7 +153,9 @@ Si un dato no aparece, usa null. NO inventes datos.
 
 Esquema exacto:
 {
-  "iniciales": "iniciales del paciente (2-4 letras mayúsculas, derivadas del nombre) o null",
+  "iniciales": "NOMBRE COMPLETO del paciente tal como aparece en la hoja (ej: 'Juan Pérez Mora'). Si solo hay iniciales, deja las iniciales. null si no aparece",
+  "ficha_clinica": "número de ficha clínica / FC / N° de ficha o null",
+  "rut": "RUT del paciente (formato 12.345.678-9) o null",
   "edad": numero o null,
   "sexo": "M" | "F" | null,
   "diagnostico": "diagnóstico principal de ingreso o null",
@@ -162,7 +164,7 @@ Esquema exacto:
   "historia": "resumen de la anamnesis / historia actual del ingreso (máx 6 frases) o null",
   "plan_manejo": "plan o indicaciones de ingreso si aparecen o null"
 }
-IMPORTANTE: NUNCA incluyas el nombre completo ni el RUT del paciente, solo iniciales. No transcribas datos identificatorios.`;
+IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes ni completes datos que no estén.`;
 
   const content = imagenesBase64.map((b64) => ({
     type: "image",
@@ -179,7 +181,7 @@ IMPORTANTE: NUNCA incluyas el nombre completo ni el RUT del paciente, solo inici
     body: JSON.stringify({
       model: "claude-sonnet-5",
       max_tokens: 1800,
-      system: "Eres un extractor de datos clínicos de hojas de ingreso de urología. Respondes exclusivamente con JSON válido. Nunca incluyes nombre completo ni RUT del paciente.",
+      system: "Eres un extractor de datos clínicos de hojas de ingreso de urología. Respondes exclusivamente con JSON válido.",
       messages: [{ role: "user", content }],
     }),
   });
@@ -211,7 +213,9 @@ Esquema exacto:
     {
       "fecha": "YYYY-MM-DD (si la tabla indica día/fecha) o null",
       "hora": "HH:MM o null",
-      "nombre": "nombre del paciente tal como aparece o null",
+      "nombre": "nombre completo del paciente tal como aparece o null",
+      "ficha_clinica": "número de ficha clínica / FC o null",
+      "rut": "RUT del paciente (formato 12.345.678-9) o null",
       "edad": numero o null,
       "diagnostico": "diagnóstico o null",
       "procedimiento": "cirugía programada o null",
@@ -1127,7 +1131,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.0.0";
+const VERSION = "v1.5.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -4102,6 +4106,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           fecha: (c.fecha && /^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) ? c.fecha : new Date().toISOString().slice(0, 10),
           hora: (c.hora && /^\d{1,2}:\d{2}/.test(c.hora)) ? c.hora.slice(0, 5) : "08:00",
           iniciales: (c.nombre || "").slice(0, 100),
+          ficha_clinica: c.ficha_clinica ? String(c.ficha_clinica).slice(0, 30) : null,
+          rut: c.rut ? String(c.rut).slice(0, 15) : null,
           edad: c.edad ? parseInt(c.edad) : null,
           procedimiento: (c.procedimiento || c.diagnostico || "Cirugía").slice(0, 200),
           lateralidad: ["Derecha", "Izquierda", "Bilateral"].includes(c.lateralidad) ? c.lateralidad : null,
@@ -5074,7 +5080,9 @@ const cargarMiembrosEquipo = async () => {
       const x = await extraerIngresoPaciente(b64s);
       setNuevo(prev => ({
         ...prev,
-        iniciales: x.iniciales ? String(x.iniciales).toUpperCase().slice(0, 5) : prev.iniciales,
+        iniciales: x.iniciales ? String(x.iniciales).slice(0, 100) : prev.iniciales,
+        ficha_clinica: x.ficha_clinica ? String(x.ficha_clinica).slice(0, 30) : prev.ficha_clinica,
+        rut: x.rut ? String(x.rut).slice(0, 15) : prev.rut,
         edad: (x.edad ?? "") !== "" ? String(x.edad) : prev.edad,
         sexo: x.sexo === "F" ? "F" : (x.sexo === "M" ? "M" : prev.sexo),
         diagnostico: x.diagnostico || prev.diagnostico,
@@ -5103,6 +5111,9 @@ const cargarMiembrosEquipo = async () => {
       const historiaFinal = [seleccionado.historia, textoNuevo].filter(Boolean).join("\n\n");
       const patch = { historia: historiaFinal };
       if (x.diagnostico && !seleccionado.diagnostico) patch.diagnostico = x.diagnostico;
+      // Completa ficha clínica y RUT si el paciente aún no los tiene
+      if (x.ficha_clinica && !seleccionado.ficha_clinica) patch.ficha_clinica = String(x.ficha_clinica).slice(0, 30);
+      if (x.rut && !seleccionado.rut) patch.rut = String(x.rut).slice(0, 15);
       const result = await actualizarPaciente(seleccionado.id, patch);
       if (!result.ok) { setExtraccionMsg("⚠️ Error al guardar: " + result.error); return; }
       setSeleccionado(result.paciente);
