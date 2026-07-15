@@ -382,6 +382,19 @@ function useConfig() {
 }
 const fnOculta = (cfg, id) => Array.isArray(cfg?.ocultas) && cfg.ocultas.includes(id);
 
+// Si se apaga una pestaña principal pero se deja activa alguna de sus secciones,
+// esa sección se muestra como pestaña propia (así no queda inalcanzable).
+const SUBFUNCIONES_PROMOVIBLES = {
+  "hosp:tabla":          { padre: "hospital",     sub: "tabla",          label: "📋 Tabla" },
+  "hosp:notas":          { padre: "hospital",     sub: "notas",          label: "🗒️ Notas" },
+  "hosp:prescripciones": { padre: "hospital",     sub: "prescripciones", label: "💊 Recetas" },
+  "hosp:interconsultas": { padre: "hospital",     sub: "interconsultas", label: "📄 Interconsultas" },
+  "biblio:videos":       { padre: "conocimiento", sub: "videos",         label: "📚 Videos" },
+  "biblio:preguntas":    { padre: "conocimiento", sub: "preguntas",      label: "❓ Preguntas" },
+  "biblio:medicamentos": { padre: "conocimiento", sub: "medicamentos",   label: "💊 Medicamentos" },
+  "biblio:scores":       { padre: "conocimiento", sub: "scores",         label: "🧮 Scores" },
+};
+
 // ─── Orden personalizado de servicios (se arrastra y se guarda localmente) ───
 function ordenarServicios(lista) {
   let orden = [];
@@ -460,14 +473,20 @@ function ConfigModal({ onClose, currentUser }) {
 
   const alternarPush = async () => {
     setPushCargando(true); setPushMsg("");
-    if (push) {
-      await desactivarPush(currentUser.id);
-      setPush(false);
-      setPushMsg("Notificaciones desactivadas en este dispositivo.");
-    } else {
-      const r = await activarPush(currentUser.id);
-      if (r.ok) { setPush(true); setPushMsg("✓ Listo. Te avisaremos aunque tengas la app cerrada."); }
-      else setPushMsg("⚠️ " + r.error);
+    // Tope de tiempo: si algo se cuelga, el interruptor nunca queda bloqueado sin explicación
+    const conTope = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r({ ok: false, error: "La operación tardó demasiado. Revisa la conexión e inténtalo de nuevo." }), 15000))]);
+    try {
+      if (push) {
+        await conTope(desactivarPush(currentUser.id));
+        setPush(false);
+        setPushMsg("Notificaciones desactivadas en este dispositivo.");
+      } else {
+        const r = await conTope(activarPush(currentUser.id));
+        if (r.ok) { setPush(true); setPushMsg("✓ Listo. Te avisaremos aunque tengas la app cerrada."); }
+        else setPushMsg("⚠️ " + r.error);
+      }
+    } catch (e) {
+      setPushMsg("⚠️ " + (e.message || String(e)));
     }
     setPushCargando(false);
   };
@@ -500,7 +519,7 @@ function ConfigModal({ onClose, currentUser }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>Avisarme en el celular</div>
                   <div style={{ fontSize: 11, color: "var(--texto-sec)", lineHeight: 1.4, marginTop: 2 }}>
-                    Las notificaciones de la campana llegan también con la app cerrada.
+                    {pushCargando ? "Activando…" : "Las notificaciones de la campana llegan también con la app cerrada."}
                   </div>
                 </div>
                 <span style={{ width: 40, height: 22, borderRadius: 11, background: push ? "var(--exito)" : "var(--borde-suave)", position: "relative", transition: "background .2s", flexShrink: 0 }}>
@@ -542,7 +561,7 @@ function ConfigModal({ onClose, currentUser }) {
 
         {/* Funciones */}
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
-        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginBottom: 10 }}>Desmarca lo que no uses para simplificar la interfaz. Puedes reactivarlo cuando quieras.</div>
+        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginBottom: 10, lineHeight: 1.45 }}>Desmarca lo que no uses para simplificar la interfaz. Puedes reactivarlo cuando quieras.<br/>Si apagas una pestaña principal pero dejas activa alguna de sus secciones, esa sección aparecerá como pestaña propia.</div>
         {FUNCIONES_CONFIGURABLES.map(g => (
           <div key={g.grupo} style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--texto-sec)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>{g.grupo}</div>
@@ -1200,7 +1219,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.7.0";
+const VERSION = "v1.7.2";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -7024,6 +7043,13 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
       document.documentElement.style.background = fondo;
       document.body.style.background = fondo;
       document.body.style.margin = "0";
+      // Sin rebote elástico: evita la franja blanca al final del scroll y que
+      // el navegador recargue la página al deslizar hacia abajo (pull-to-refresh),
+      // que es el gesto que usamos para abrir el submenú.
+      document.documentElement.style.overscrollBehaviorY = "none";
+      document.body.style.overscrollBehaviorY = "none";
+      document.documentElement.style.height = "100%";
+      document.body.style.height = "100%";
       let meta = document.querySelector('meta[name="theme-color"]');
       if (!meta) { meta = document.createElement("meta"); meta.name = "theme-color"; document.head.appendChild(meta); }
       meta.setAttribute("content", fondo);
@@ -7087,6 +7113,11 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
 
   // Si la pestaña activa quedó oculta por configuración, volver al chat
   useEffect(() => {
+    if (SUBFUNCIONES_PROMOVIBLES[tab]) {
+      // Pestaña promovida: solo se cierra si se apaga la sección en sí
+      if (fnOculta(config, tab)) setTab("chat");
+      return;
+    }
     if (fnOculta(config, "tab:" + tab)) setTab("chat");
   }, [config, tab]);
   const [messages, setMessages] = useState([]);
@@ -7821,7 +7852,16 @@ if (!currentUser) {
   );
 }
 
-  const tabs = tabsPorRol(currentUser.rol, pendientesCount).filter(([id]) => !fnOculta(config, "tab:" + id));
+  const tabsRol = tabsPorRol(currentUser.rol, pendientesCount);
+  const idsRol = tabsRol.map(([id]) => id);
+  const tabsBase = tabsRol.filter(([id]) => !fnOculta(config, "tab:" + id));
+  // Secciones huérfanas (su pestaña está apagada pero ellas siguen activas) → pestaña propia
+  const tabsPromovidas = Object.entries(SUBFUNCIONES_PROMOVIBLES)
+    .filter(([id, d]) => idsRol.includes(d.padre) && fnOculta(config, "tab:" + d.padre) && !fnOculta(config, id))
+    .filter(([id]) => !(id === "hosp:prescripciones" && !(currentUser.rol === "urologo" || currentUser.rol === "residente")))
+    .map(([id, d]) => [id, d.label]);
+  const tabs = [...tabsBase, ...tabsPromovidas];
+  const promovida = SUBFUNCIONES_PROMOVIBLES[tab] && tabsPromovidas.some(([id]) => id === tab) ? SUBFUNCIONES_PROMOVIBLES[tab] : null;
 
   // ─── Deslizar lateralmente entre pestañas principales (móvil) ───
   // (swipeRef se declara arriba, junto al resto de los hooks: no puede ir
@@ -7839,7 +7879,7 @@ if (!currentUser) {
     if (Date.now() - s0.t > 700) return;
 
     // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
-    if (dy > 70 && Math.abs(dy) > Math.abs(dx) * 2) {
+    if (dy > 40 && Math.abs(dy) > Math.abs(dx) * 1.4) {
       let el = s0.target, arriba = true;
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
@@ -7847,6 +7887,11 @@ if (!currentUser) {
         el = el.parentElement;
       }
       if (arriba && submenu) { setSubmenuOpen(true); try { navigator.vibrate?.(15); } catch {} }
+      return;
+    }
+    // Deslizar hacia arriba estando el menú abierto: lo cierra
+    if (dy < -40 && Math.abs(dy) > Math.abs(dx) * 1.4 && submenuOpen) {
+      setSubmenuOpen(false);
       return;
     }
 
@@ -7917,8 +7962,11 @@ if (!currentUser) {
   }
 
   return (
-    <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+    <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
       <style>{`
+        html, body, #root { background: var(--fondo); overscroll-behavior: none; }
+        /* Todo contenedor con scroll propio: sin rebote ni franja blanca al final */
+        div[style*="overflow-y"], div[style*="overflowY"] { overscroll-behavior: contain; }
         @keyframes uro-slide-izq { from { transform: translateX(14%); opacity: .35; } to { transform: translateX(0); opacity: 1; } }
         @keyframes uro-slide-der { from { transform: translateX(-14%); opacity: .35; } to { transform: translateX(0); opacity: 1; } }
         @media (prefers-reduced-motion: reduce) {
@@ -8033,8 +8081,8 @@ if (!currentUser) {
       <div key={tab} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,animation:`uro-slide-${dirTab < 0 ? "izq" : "der"} .24s cubic-bezier(.22,.8,.3,1)`}}>
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
-      {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={subTabHospital} setSubTab={setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
-      {tab==="conocimiento" && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa} subTab={subTabBiblio} setSubTab={setSubTabBiblio}/>}
+      {(tab==="hospital" || promovida?.padre==="hospital") && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={promovida?.padre==="hospital" ? promovida.sub : subTabHospital} setSubTab={promovida?.padre==="hospital" ? (()=>{}) : setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
+      {(tab==="conocimiento" || promovida?.padre==="conocimiento") && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa} subTab={promovida?.padre==="conocimiento" ? promovida.sub : subTabBiblio} setSubTab={promovida?.padre==="conocimiento" ? (()=>{}) : setSubTabBiblio}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
