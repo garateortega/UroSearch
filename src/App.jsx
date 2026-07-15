@@ -8,6 +8,7 @@ import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eli
 import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
+import InterconsultasPanel from "./InterconsultasPanel";
 
 // ============================================================
 // NOTIFICACIONES (nivel 1: dentro de la app)
@@ -281,6 +282,8 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
   }, [currentUser.id]);
 
   const guardar = async () => {
+    const correo = form.correo.trim();
+    if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { setMsg("⚠️ El correo de contacto no es válido."); return; }
     setGuardando(true); setMsg("");
     try {
       const { error } = await supabase.from("perfiles").update({
@@ -288,6 +291,7 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
         sexo: form.sexo || null,
         rut: form.rut.trim() || null,
         rcm: form.rcm.trim() || null,
+        correo: form.correo.trim() || null,   // correo de contacto: puede diferir del de registro
         centro: form.centro.trim() || null,
         direccion: form.direccion.trim() || null,
         ciudad: form.ciudad.trim() || null,
@@ -334,7 +338,10 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
             {campo("RUT", "rut", "12.345.678-9")}
             {campo("RCM (RUT Colegio Médico)", "rcm", "")}
           </div>
-          {campo("Correo", "correo", "")}
+          {campo("Correo de contacto", "correo", "contacto@ejemplo.cl")}
+          <div style={{ fontSize: 10.5, color: "var(--texto-ter)", marginTop: -6, marginBottom: 10, lineHeight: 1.4 }}>
+            Es el que aparece en tus recetas. Puede ser distinto al correo con que inicias sesión{currentUser?.correo ? ` (${currentUser.correo})` : ""}, que no cambia.
+          </div>
           {campo("Centro / Hospital", "centro", "Hospital Base Valdivia")}
           {campo("Dirección", "direccion", "")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -427,6 +434,7 @@ const FUNCIONES_CONFIGURABLES = [
     ["hosp:tabla", "📋 Tabla quirúrgica"],
     ["hosp:notas", "🗒️ Notas"],
     ["hosp:prescripciones", "💊 Recetas"],
+    ["hosp:interconsultas", "📄 Interconsultas"],
   ]},
   { grupo: "Biblioteca", items: [
     ["biblio:videos", "📚 Videos"],
@@ -813,7 +821,9 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
 
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const q = norm(busqueda);
-  const filtrados = q ? lista.filter(m => norm(m.nombre).includes(q) || norm(m.categoria).includes(q) || norm(m.indicacion).includes(q)) : lista;
+  const filtrados = (q ? lista.filter(m => norm(m.nombre).includes(q) || norm(m.categoria).includes(q) || norm(m.indicacion).includes(q)) : lista)
+    .slice()
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es", { sensitivity: "base" })); // orden alfabético
 
   const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 8 };
 
@@ -937,7 +947,7 @@ function ScoresPanel() {
     <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
       <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 12 }}>Calculadoras de los principales scores urológicos</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {SCORES.map(s => (
+        {[...SCORES].sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })).map(s => (
           <div key={s.id} onClick={() => setAbierto(s.id)} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "13px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--texto)" }}>{s.nombre}</div>
@@ -1131,7 +1141,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.5.0";
+const VERSION = "v1.6.1";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -1371,7 +1381,10 @@ function pasosTutorial(rol) {
 
     // ─── HOSPITAL ───
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
-    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas, tu 🤝 Equipo de trabajo y el cambio entre tus pacientes y los del equipo." },
+    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas, tu 🤝 Equipo de trabajo y el cambio entre tus pacientes y los del equipo." },
+    { tab: "hospital", subtab: "pacientes", uros: "explicando", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." },
+    { tab: "hospital", subtab: "pacientes", uros: "pensando", titulo: "Ordena los servicios a tu manera", texto: "Deja presionado el nombre de un servicio hasta que vibre y arrástralo: los demás se corren solos para abrirle el hueco. Al soltarlo, el orden se guarda y todo tu equipo lo ve igual." },
+    { tab: "hospital", subtab: "interconsultas", uros: "hola", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
     { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "En el menú de Hospital, la opción 🛠️ Herramientas muestra esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
     { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
@@ -1385,7 +1398,7 @@ function pasosTutorial(rol) {
     { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "explicando", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
     { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
     { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
-    { tab: "conocimiento", subtab: "preguntas", uros: "bienhecho", titulo: "¡Pruébalo ahora!", texto: "Ya estás en Preguntas: responde una y verás la correcta en verde, la incorrecta en rojo y la explicación abajo." },
+    { tab: "conocimiento", subtab: "preguntas", uros: "bienhecho", titulo: "¡Pruébalo ahora!", texto: "Ya estás en Preguntas: responde una y verás la correcta en verde, la incorrecta en rojo y la explicación abajo. En «📊 Mi progreso» se va acumulando tu rendimiento y te muestro en qué temas estás más débil." },
 
     { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
   ];
@@ -2333,6 +2346,21 @@ function AdminPanel() {
   );
 }
 
+// ─── Historial de respuestas del quiz (por usuario, guardado en este dispositivo) ───
+function leerHistorialQuiz(userId) {
+  try { return JSON.parse(localStorage.getItem(`uro_quiz_${userId}`)) || []; } catch { return []; }
+}
+function registrarRespuestaQuiz(userId, { preguntaId, categoria, acierto }) {
+  try {
+    const prev = leerHistorialQuiz(userId);
+    prev.push({ id: preguntaId, cat: categoria || "General", ok: !!acierto, t: Date.now() });
+    localStorage.setItem(`uro_quiz_${userId}`, JSON.stringify(prev.slice(-1000)));
+  } catch {}
+}
+function borrarHistorialQuiz(userId) {
+  try { localStorage.removeItem(`uro_quiz_${userId}`); } catch {}
+}
+
 function PreguntasPanel({ currentUser, isAdmin }) {
   const [preguntas, setPreguntas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2343,6 +2371,23 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   const [filtroCat, setFiltroCat] = useState("Todas");
   const [form, setForm] = useState({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
   const [errorForm, setErrorForm] = useState("");
+  const [historial, setHistorial] = useState(() => leerHistorialQuiz(currentUser.id)); // respuestas previas
+  const metricasQuiz = useMemo(() => {
+    const total = historial.length;
+    const aciertos = historial.filter(h => h.ok).length;
+    const porCat = {};
+    historial.forEach(h => {
+      const c = h.cat || "General";
+      if (!porCat[c]) porCat[c] = { n: 0, ok: 0 };
+      porCat[c].n++; if (h.ok) porCat[c].ok++;
+    });
+    const cats = Object.entries(porCat)
+      .map(([cat, v]) => ({ cat, n: v.n, ok: v.ok, pct: Math.round((v.ok / v.n) * 100) }))
+      .sort((a, b) => a.pct - b.pct); // las más débiles primero
+    const ult = historial.slice(-20);
+    const pctUlt = ult.length ? Math.round((ult.filter(h => h.ok).length / ult.length) * 100) : null;
+    return { total, aciertos, pct: total ? Math.round((aciertos / total) * 100) : null, cats, pctUlt, debiles: cats.filter(c => c.n >= 3 && c.pct < 70) };
+  }, [historial]);
 
   const cargar = async () => {
     setLoading(true);
@@ -2372,6 +2417,11 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     if (mostrarResp) return;
     setSeleccion(i);
     setMostrarResp(true);
+    const p = filtradas[idx];
+    if (p) {
+      registrarRespuestaQuiz(currentUser.id, { preguntaId: p.id, categoria: p.categoria, acierto: i === p.correcta });
+      setHistorial(leerHistorialQuiz(currentUser.id));
+    }
   };
   const siguiente = () => {
     setSeleccion(null); setMostrarResp(false);
@@ -2459,18 +2509,91 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     );
   }
 
+  // VISTA: métricas de estudio (todos)
+  if (vista === "metricas") {
+    const m = metricasQuiz;
+    const colorPct = (p) => p >= 80 ? "var(--exito)" : p >= 60 ? "var(--alerta)" : "var(--peligro)";
+    return (
+      <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
+        <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver al quiz</button>
+        <div style={{fontSize:16,fontWeight:700,color:"var(--texto)",marginBottom:2}}>📊 Mi progreso</div>
+        <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:14}}>Se calcula con tus respuestas en este dispositivo.</div>
+
+        {m.total === 0 ? (
+          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+            Todavía no has respondido preguntas.<br/>Responde algunas y aquí verás en qué temas estás más débil.
+          </div>
+        ) : (
+          <>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+              <div style={{flex:"1 1 110px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
+                <div style={{fontSize:24,fontWeight:700,color:colorPct(m.pct)}}>{m.pct}%</div>
+                <div style={{fontSize:11,color:"var(--texto-sec)"}}>Correctas ({m.aciertos}/{m.total})</div>
+              </div>
+              <div style={{flex:"1 1 110px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
+                <div style={{fontSize:24,fontWeight:700,color:m.pctUlt!=null?colorPct(m.pctUlt):"var(--texto-ter)"}}>{m.pctUlt!=null?`${m.pctUlt}%`:"—"}</div>
+                <div style={{fontSize:11,color:"var(--texto-sec)"}}>Últimas 20</div>
+              </div>
+              <div style={{flex:"1 1 110px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
+                <div style={{fontSize:24,fontWeight:700,color:"var(--primario)"}}>{m.cats.length}</div>
+                <div style={{fontSize:11,color:"var(--texto-sec)"}}>Temas practicados</div>
+              </div>
+            </div>
+
+            {m.debiles.length > 0 && (
+              <div style={{background:"var(--peligro-bg)",border:"0.5px solid var(--peligro)",borderRadius:10,padding:"11px 13px",marginBottom:14}}>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--peligro)",marginBottom:4}}>🎯 Dónde estás más débil</div>
+                <div style={{fontSize:12,color:"var(--texto)",lineHeight:1.5}}>
+                  {m.debiles.map(c => `${c.cat} (${c.pct}%)`).join(" · ")}
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                  {m.debiles.slice(0,3).map(c => (
+                    <button key={c.cat} onClick={()=>{ setFiltroCat(c.cat); setVista("quiz"); }} style={{padding:"6px 10px",fontSize:11.5,fontWeight:600,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:14,cursor:"pointer"}}>
+                      Practicar {c.cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:8}}>Rendimiento por tema</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+              {m.cats.map(c => (
+                <div key={c.cat} onClick={()=>{ setFiltroCat(c.cat); setVista("quiz"); }} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 12px",cursor:"pointer"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5,gap:8}}>
+                    <span style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>{c.cat}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:colorPct(c.pct),flexShrink:0}}>{c.pct}% <span style={{fontWeight:400,color:"var(--texto-ter)"}}>({c.ok}/{c.n})</span></span>
+                  </div>
+                  <div style={{height:6,background:"var(--fondo-suave)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:`${c.pct}%`,height:"100%",background:colorPct(c.pct),borderRadius:3,transition:"width .3s"}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={()=>{ if(confirm("¿Borrar tu historial de respuestas? Las métricas volverán a cero.")){ borrarHistorialQuiz(currentUser.id); setHistorial([]); } }} style={{padding:"8px 12px",fontSize:12,background:"none",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>
+              Reiniciar mi progreso
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
   // VISTA: quiz (todos)
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
-        <div>          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
+        <div><div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
+          {metricasQuiz.total > 0 && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>Llevas {metricasQuiz.total} respondidas · {metricasQuiz.pct}% correctas</div>}
         </div>
-        {isAdmin && (
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button onClick={()=>setVista("metricas")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>📊 Mi progreso</button>
+          {isAdmin && (<>
             <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
             <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       {categorias.length > 1 && (
@@ -3399,6 +3522,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
       {subTab === "prescripciones" && esUrologo && <PrescripcionesPanel currentUser={currentUser}/>}
+      {subTab === "interconsultas" && <InterconsultasPanel currentUser={currentUser} contexto={contexto}/>}
     </div>
   );
 }
@@ -5014,26 +5138,40 @@ const cargarMiembrosEquipo = async () => {
 
   const iniciarDragColumna = (e, nombre, idx) => {
     if (soloLectura) return;
-    e.preventDefault?.();
-    try { e.currentTarget?.setPointerCapture?.(e.pointerId); } catch {}
-    const cols = kanbanRef.current ? Array.from(kanbanRef.current.children) : [];
-    const ancho = cols[0] ? cols[0].getBoundingClientRect().width + 12 : 292;
-    dragColInfo.current = { nombre, desdeIdx: idx, aIdx: idx, x0: e.clientX, ancho };
-    setDragCol({ nombre, dx: 0 });
+    const cont = kanbanRef.current;
+    const cols = cont ? Array.from(cont.children) : [];
+    const r0 = cols[idx]?.getBoundingClientRect();
+    // ¿Las columnas están una al lado de la otra o apiladas? (en el celular hay una sola
+    // columna, así que el arrastre debe ser vertical, no horizontal).
+    let vertical = true;
+    if (cols.length > 1 && r0) {
+      const r1 = cols[idx === 0 ? 1 : 0].getBoundingClientRect();
+      vertical = Math.abs(r1.top - r0.top) > Math.abs(r1.left - r0.left);
+    }
+    const paso = vertical
+      ? (r0 ? r0.height + 12 : 120)
+      : (r0 ? r0.width + 12 : 292);
+
+    dragColInfo.current = { nombre, desdeIdx: idx, aIdx: idx, x0: e.clientX, y0: e.clientY, paso, vertical };
+    setDragCol({ nombre, d: 0, desdeIdx: idx, aIdx: idx, vertical });
+    // Bloquea el scroll de la página mientras se arrastra
+    const bloquear = (ev) => ev.preventDefault();
+    document.addEventListener("touchmove", bloquear, { passive: false });
+
     const onMove = (ev) => {
       const d = dragColInfo.current; if (!d) return;
-      ev.preventDefault?.();
-      const dx = ev.clientX - d.x0;
-      let destino = d.desdeIdx + Math.round(dx / d.ancho);
+      const delta = d.vertical ? ev.clientY - d.y0 : ev.clientX - d.x0;
+      let destino = d.desdeIdx + Math.round(delta / d.paso);
       destino = Math.max(0, Math.min(nombresServicioOrdenados.length - 1, destino));
       d.aIdx = destino;
-      setDragCol({ nombre: d.nombre, dx });
+      setDragCol({ nombre: d.nombre, d: delta, desdeIdx: d.desdeIdx, aIdx: destino, vertical: d.vertical });
     };
     const onUp = async () => {
       const d = dragColInfo.current; dragColInfo.current = null;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      document.removeEventListener("touchmove", bloquear);
       setDragCol(null);
       if (!d || d.aIdx === d.desdeIdx) return;
       const nueva = [...nombresServicioOrdenados];
@@ -5047,7 +5185,16 @@ const cargarMiembrosEquipo = async () => {
     window.addEventListener("pointercancel", onUp);
   };
 
-  // Dejar presionado sobre el titulo del servicio y arrastrar para reordenar
+  // Desplazamiento que debe aplicarse a cada columna para abrir el hueco de destino
+  const desplazamientoColumna = (k) => {
+    const d = dragCol;
+    if (!d || k === d.desdeIdx) return 0;
+    if (d.desdeIdx < d.aIdx && k > d.desdeIdx && k <= d.aIdx) return -1; // se corren hacia atrás
+    if (d.desdeIdx > d.aIdx && k >= d.aIdx && k < d.desdeIdx) return 1;  // se corren hacia adelante
+    return 0;
+  };
+
+  // ─── Dejar presionado el servicio y arrastrarlo ───
   const iniciarLongPress = (e, nombre, idx) => {
     if (soloLectura) return;
     const { clientX, clientY, pointerId, currentTarget } = e;
@@ -5056,7 +5203,7 @@ const cargarMiembrosEquipo = async () => {
     pressTimer.current = setTimeout(() => {
       try { navigator.vibrate?.(25); } catch {}
       iniciarDragColumna({ clientX, clientY, pointerId, currentTarget }, nombre, idx);
-    }, 280);
+    }, 260);
   };
   const moverLongPress = (e) => {
     const p = pressPos.current; if (!p) return;
@@ -6483,21 +6630,32 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* Vista kanban por servicio: se reordena dejando presionado el título y arrastrando */}
       {!loadingPacientes && pacientesFiltrados.length > 0 && (
         <>
-          {!soloLectura && nombresServicioOrdenados.length > 1 && (
-            <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Deja presionado el nombre de un servicio y arrástralo para reordenarlo. El orden se comparte con tu equipo.</div>
-          )}
-          <div ref={kanbanRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12,position:"relative"}}>
+          <div ref={kanbanRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12,position:"relative",touchAction:dragCol?"none":"auto"}}>
             {nombresServicioOrdenados.map((servicio, idx) => {
               const arrastrando = dragCol?.nombre === servicio;
+              // Las columnas vecinas se corren para abrir el hueco donde caerá la que se arrastra
+              const corr = desplazamientoColumna(idx);
+              let transform = "none";
+              if (arrastrando) {
+                transform = dragCol.vertical
+                  ? `translateY(${dragCol.d}px) scale(1.03)`
+                  : `translateX(${dragCol.d}px) scale(1.03)`;
+              } else if (corr !== 0 && dragCol) {
+                const el = kanbanRef.current?.children?.[idx];
+                const r = el?.getBoundingClientRect();
+                const paso = dragCol.vertical ? (r ? r.height + 12 : 120) : (r ? r.width + 12 : 292);
+                transform = dragCol.vertical ? `translateY(${corr * paso}px)` : `translateX(${corr * paso}px)`;
+              }
               return (
                 <div key={servicio} style={{
                   background:"var(--superficie)",
                   border: arrastrando ? "1px solid var(--primario)" : "0.5px solid var(--borde)",
                   borderRadius:10, padding:"12px",
                   boxShadow: arrastrando ? "0 14px 30px rgba(15,23,42,0.35)" : "none",
-                  transform: arrastrando ? `translateX(${dragCol.dx}px) scale(1.03)` : "none",
+                  opacity: arrastrando ? 0.95 : 1,
+                  transform,
                   zIndex: arrastrando ? 5 : 1, position:"relative",
-                  transition: arrastrando ? "none" : "transform .15s",
+                  transition: arrastrando ? "none" : "transform .18s cubic-bezier(.2,.8,.3,1)",
                 }}>
                   <div
                     onPointerDown={(e)=>iniciarLongPress(e, servicio, idx)}
@@ -6506,7 +6664,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     onPointerCancel={cancelarLongPress}
                     onPointerLeave={cancelarLongPress}
                     title={soloLectura ? undefined : "Deja presionado y arrastra para reordenar"}
-                    style={{fontSize:15,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?"default":"grab",touchAction:"pan-y",userSelect:"none"}}>
+                    style={{fontSize:15,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
                     {!soloLectura && <span style={{fontSize:13,color:"var(--texto-ter)",flexShrink:0}}>☰</span>}
                     <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{servicio}</span>
                     <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:13,flexShrink:0}}>({porServicio[servicio].length})</span>
@@ -6827,11 +6985,23 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   });
   const [submenuOpen, setSubmenuOpen] = useState(false); // desplegable bajo la pestaña activa
   const tabBarRef = useRef(null);
-  const swipeRef = useRef(null);  // gesto de deslizamiento lateral entre pestañas
+  const swipeRef = useRef(null);   // gesto de deslizamiento lateral entre pestañas
+  const [dirTab, setDirTab] = useState(0); // -1 = venimos de la derecha, 1 = de la izquierda
+  const tabPrevio = useRef(tab);
 
   useEffect(() => { try { localStorage.setItem("uro_subtab_hospital", subTabHospital); } catch {} }, [subTabHospital]);
   useEffect(() => { try { localStorage.setItem("uro_contexto", contexto); } catch {} }, [contexto]);
   useEffect(() => { setSubmenuOpen(false); }, [tab]); // al cambiar de pestaña, cerrar el submenú
+
+  // Dirección de la transición lateral: compara la posición de la pestaña nueva
+  // con la anterior para decidir si entra desde la derecha o desde la izquierda.
+  useEffect(() => {
+    const orden = tabsPorRol(currentUser?.rol, 0).map(([id]) => id);
+    const iAnt = orden.indexOf(tabPrevio.current);
+    const iNue = orden.indexOf(tab);
+    if (iAnt !== -1 && iNue !== -1 && iAnt !== iNue) setDirTab(iNue > iAnt ? -1 : 1);
+    tabPrevio.current = tab;
+  }, [tab, currentUser]);
 
   // El tutorial puede pedir cambiar de sub-sección
   useEffect(() => {
@@ -6848,7 +7018,8 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   useEffect(() => {
     if ((subTabHospital === "tabla" && fnOculta(config, "hosp:tabla")) ||
         (subTabHospital === "notas" && fnOculta(config, "hosp:notas")) ||
-        (subTabHospital === "prescripciones" && fnOculta(config, "hosp:prescripciones"))) setSubTabHospital("pacientes");
+        (subTabHospital === "prescripciones" && fnOculta(config, "hosp:prescripciones")) ||
+        (subTabHospital === "interconsultas" && fnOculta(config, "hosp:interconsultas"))) setSubTabHospital("pacientes");
     if ((subTabBiblio === "videos" && fnOculta(config, "biblio:videos")) ||
         (subTabBiblio === "preguntas" && fnOculta(config, "biblio:preguntas")) ||
         (subTabBiblio === "medicamentos" && fnOculta(config, "biblio:medicamentos")) ||
@@ -7606,8 +7777,22 @@ if (!currentUser) {
     if (!s0) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return; // gesto no horizontal
-    if (Date.now() - s0.t > 600) return;
+    if (Date.now() - s0.t > 700) return;
+
+    // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
+    if (dy > 70 && Math.abs(dy) > Math.abs(dx) * 2) {
+      let el = s0.target, arriba = true;
+      while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 2; break; }
+        el = el.parentElement;
+      }
+      if (arriba && submenu) { setSubmenuOpen(true); try { navigator.vibrate?.(15); } catch {} }
+      return;
+    }
+
+    // ── Deslizar lateral: cambia de pestaña ──
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return;
     // Ignora si nació dentro de algo que scrollea en horizontal (tabla, carruseles)
     let el = s0.target;
     while (el && el !== document.body) {
@@ -7636,11 +7821,13 @@ if (!currentUser) {
         ...(!fnOculta(config, "hosp:tabla") ? [["tabla", "📋 Tabla"]] : []),
         ...(!fnOculta(config, "hosp:notas") ? [["notas", "🗒️ Notas"]] : []),
         ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
+        ...(!fnOculta(config, "hosp:interconsultas") ? [["interconsultas", "📄 Interconsultas"]] : []),
       ],
       activo: subTabHospital,
       elegir: setSubTabHospital,
       extras: [
         ...((subTabHospital === "pacientes" || subTabHospital === "tabla") ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
+        ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ["🤝 Equipo de trabajo", () => accion("equipos")],
       ],
       contexto: { actual: contexto, elegir: setContexto, opciones: [["personal", "👤 Mis pacientes"], ...equipos.map(e => [e.id, `👥 ${e.nombre}`])] },
@@ -7672,6 +7859,14 @@ if (!currentUser) {
 
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)"}}>
+      <style>{`
+        @keyframes uro-slide-izq { from { transform: translateX(14%); opacity: .35; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes uro-slide-der { from { transform: translateX(-14%); opacity: .35; } to { transform: translateX(0); opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes uro-slide-izq { from { opacity: .5; } to { opacity: 1; } }
+          @keyframes uro-slide-der { from { opacity: .5; } to { opacity: 1; } }
+        }
+      `}</style>
       <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -7775,7 +7970,8 @@ if (!currentUser) {
         </>
       )}
 
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
+      <div key={tab} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,animation:`uro-slide-${dirTab < 0 ? "izq" : "der"} .24s cubic-bezier(.22,.8,.3,1)`}}>
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
       {tab==="hospital" && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={subTabHospital} setSubTab={setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
@@ -7877,6 +8073,7 @@ if (!currentUser) {
         </div>
       )}
 
+      </div>
       </div>
 
       {playingVideo && <VideoPlayer video={playingVideo} onClose={()=>setPlayingVideo(null)}/>}
