@@ -6827,6 +6827,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   });
   const [submenuOpen, setSubmenuOpen] = useState(false); // desplegable bajo la pestaña activa
   const tabBarRef = useRef(null);
+  const swipeRef = useRef(null);  // gesto de deslizamiento lateral entre pestañas
 
   useEffect(() => { try { localStorage.setItem("uro_subtab_hospital", subTabHospital); } catch {} }, [subTabHospital]);
   useEffect(() => { try { localStorage.setItem("uro_contexto", contexto); } catch {} }, [contexto]);
@@ -7593,7 +7594,8 @@ if (!currentUser) {
   const tabs = tabsPorRol(currentUser.rol, pendientesCount).filter(([id]) => !fnOculta(config, "tab:" + id));
 
   // ─── Deslizar lateralmente entre pestañas principales (móvil) ───
-  const swipeRef = useRef(null);
+  // (swipeRef se declara arriba, junto al resto de los hooks: no puede ir
+  //  después de los early return de loadingSession / !currentUser)
   const onTouchStart = (e) => {
     if (e.touches.length !== 1) { swipeRef.current = null; return; }
     const t = e.touches[0];
