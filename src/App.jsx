@@ -9,6 +9,7 @@ import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVide
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
+import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
 
 // ============================================================
 // NOTIFICACIONES (nivel 1: dentro de la app)
@@ -444,9 +445,32 @@ const FUNCIONES_CONFIGURABLES = [
   ]},
 ];
 
-function ConfigModal({ onClose }) {
+function ConfigModal({ onClose, currentUser }) {
   const [cfg, setCfg] = useState(cargarConfig);
   useBackClose(true, onClose);
+
+  // ─── Notificaciones push en el celular ───
+  const [push, setPush] = useState(false);
+  const [pushMsg, setPushMsg] = useState("");
+  const [pushCargando, setPushCargando] = useState(false);
+  const soportado = pushSoportado();
+  const iosSinInstalar = esIOS() && !estaInstalada();
+
+  useEffect(() => { pushActivo().then(setPush); }, []);
+
+  const alternarPush = async () => {
+    setPushCargando(true); setPushMsg("");
+    if (push) {
+      await desactivarPush(currentUser.id);
+      setPush(false);
+      setPushMsg("Notificaciones desactivadas en este dispositivo.");
+    } else {
+      const r = await activarPush(currentUser.id);
+      if (r.ok) { setPush(true); setPushMsg("✓ Listo. Te avisaremos aunque tengas la app cerrada."); }
+      else setPushMsg("⚠️ " + r.error);
+    }
+    setPushCargando(false);
+  };
 
   const aplicar = (nueva) => { setCfg(nueva); guardarConfig(nueva); };
   const toggleFn = (id) => {
@@ -462,6 +486,41 @@ function ConfigModal({ onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 16 }}>Personaliza qué funciones ves y cómo responde el chat.</div>
+
+        {/* Notificaciones en el celular */}
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🔔 Notificaciones en este dispositivo</div>
+        <div style={{ marginBottom: 16 }}>
+          {!soportado ? (
+            <div style={{ fontSize: 11.5, color: "var(--texto-ter)", padding: "10px 12px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, lineHeight: 1.45 }}>
+              Este navegador no permite notificaciones. Prueba desde Chrome en Android, o instalando UroSearch en la pantalla de inicio del iPhone.
+            </div>
+          ) : (
+            <>
+              <div onClick={pushCargando ? undefined : alternarPush} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: pushCargando ? "default" : "pointer", background: "var(--superficie)", border: "0.5px solid " + (push ? "var(--exito)" : "var(--borde)"), opacity: pushCargando ? 0.6 : 1 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>Avisarme en el celular</div>
+                  <div style={{ fontSize: 11, color: "var(--texto-sec)", lineHeight: 1.4, marginTop: 2 }}>
+                    Las notificaciones de la campana llegan también con la app cerrada.
+                  </div>
+                </div>
+                <span style={{ width: 40, height: 22, borderRadius: 11, background: push ? "var(--exito)" : "var(--borde-suave)", position: "relative", transition: "background .2s", flexShrink: 0 }}>
+                  <span style={{ position: "absolute", top: 2.5, left: push ? 20 : 3, width: 17, height: 17, borderRadius: "50%", background: "var(--superficie)", transition: "left .2s", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }} />
+                </span>
+              </div>
+              {iosSinInstalar && (
+                <div style={{ fontSize: 11, color: "var(--texto-sec)", marginTop: 6, lineHeight: 1.45, padding: "8px 10px", background: "var(--fondo-suave)", borderRadius: 8 }}>
+                  📱 En iPhone, primero agrega UroSearch a la pantalla de inicio (Compartir → Agregar a inicio) y ábrela desde ahí; Safari no permite notificaciones desde una pestaña.
+                </div>
+              )}
+              {push && (
+                <button onClick={async () => { const r = await probarPush(); if (!r.ok) setPushMsg("⚠️ " + r.error); }} style={{ marginTop: 6, padding: "7px 12px", fontSize: 11.5, background: "none", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>
+                  Enviar una de prueba
+                </button>
+              )}
+              {pushMsg && <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.45, color: pushMsg.startsWith("✓") ? "var(--exito)" : pushMsg.startsWith("⚠️") ? "var(--peligro)" : "var(--texto-ter)" }}>{pushMsg}</div>}
+            </>
+          )}
+        </div>
 
         {/* Modo del chat */}
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🤖 Fuente de respuestas del chat</div>
@@ -1141,7 +1200,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.6.1";
+const VERSION = "v1.7.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -8080,7 +8139,7 @@ if (!currentUser) {
 
       {tutorialOpen && <TutorialTour rol={currentUser?.rol} onGoToTab={setTab} onClose={cerrarTutorial}/>}
       {perfilOpen && <PerfilModal currentUser={currentUser} setCurrentUser={setCurrentUser} onClose={()=>setPerfilOpen(false)}/>}
-      {configOpen && <ConfigModal onClose={()=>setConfigOpen(false)}/>}
+      {configOpen && <ConfigModal onClose={()=>setConfigOpen(false)} currentUser={currentUser}/>}
     </div>
   );
 }
