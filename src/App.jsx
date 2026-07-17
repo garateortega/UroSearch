@@ -1219,7 +1219,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.7.2";
+const VERSION = "v1.7.3";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -7071,6 +7071,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [submenuOpen, setSubmenuOpen] = useState(false); // desplegable bajo la pestaña activa
   const tabBarRef = useRef(null);
   const swipeRef = useRef(null);   // gesto de deslizamiento lateral entre pestañas
+  const cierreRef = useRef(null);  // gesto para cerrar el submenú deslizando hacia arriba
   const [dirTab, setDirTab] = useState(0); // -1 = venimos de la derecha, 1 = de la izquierda
   const tabPrevio = useRef(tab);
 
@@ -7911,6 +7912,18 @@ if (!currentUser) {
     setSubmenuOpen(false);
   };
 
+  // Deslizar hacia arriba sobre el submenú (o sobre su fondo) para cerrarlo.
+  // Va aparte porque, con el menú abierto, el fondo invisible cubre la pantalla
+  // y los gestos no llegan al detector del contenido.
+  const cerrarInicio = (e) => { const t = e.touches[0]; cierreRef.current = { y: t.clientY, x: t.clientX }; };
+  const cerrarFin = (e) => {
+    const p = cierreRef.current; cierreRef.current = null;
+    if (!p) return;
+    const t = e.changedTouches[0];
+    const dy = t.clientY - p.y, dx = t.clientX - p.x;
+    if (dy < -30 && Math.abs(dy) > Math.abs(dx)) setSubmenuOpen(false);
+  };
+
   // ─── Contenido del submenú que se despliega al volver a tocar la pestaña activa ───
   const esUrologo = currentUser.rol === "urologo" || currentUser.rol === "residente";
   const accion = (nombre) => { try { window.dispatchEvent(new CustomEvent("uro-submenu-accion", { detail: { tab, accion: nombre } })); } catch {} };
@@ -8034,8 +8047,8 @@ if (!currentUser) {
       {/* Submenú desplegable de la pestaña activa (fijo, para que no lo recorte el contenedor) */}
       {submenuOpen && submenu && (
         <>
-          <div onClick={()=>setSubmenuOpen(false)} style={{position:"fixed",inset:0,zIndex:60}}/>
-          <div style={{
+          <div onClick={()=>setSubmenuOpen(false)} onTouchStart={cerrarInicio} onTouchEnd={cerrarFin} style={{position:"fixed",inset:0,zIndex:60}}/>
+          <div onTouchStart={cerrarInicio} onTouchEnd={cerrarFin} style={{
             position:"fixed", zIndex:61,
             top: (tabBarRef.current?.getBoundingClientRect().bottom || 100) + 4,
             left: 8, right: 8, margin:"0 auto", maxWidth: 340,
