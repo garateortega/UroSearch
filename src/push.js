@@ -46,6 +46,23 @@ async function registrarSW() {
   return navigator.serviceWorker.register("/push/sw.js", { scope: "/push/" });
 }
 
+// Espera a que el service worker quede ACTIVO.
+// Ojo: no se puede usar navigator.serviceWorker.ready, porque esa promesa espera
+// a un worker que controle la página (scope "/"), y el nuestro vive en "/push/":
+// nunca controla la página y la espera no terminaría jamás.
+function esperarActivo(reg, ms = 10000) {
+  return new Promise((resolve, reject) => {
+    if (reg.active) return resolve(reg);
+    const sw = reg.installing || reg.waiting;
+    if (!sw) return resolve(reg);
+    const tope = setTimeout(() => reject(new Error("El service worker tardó demasiado en activarse.")), ms);
+    sw.addEventListener("statechange", () => {
+      if (sw.state === "activated") { clearTimeout(tope); resolve(reg); }
+      if (sw.state === "redundant") { clearTimeout(tope); reject(new Error("El service worker falló al instalarse.")); }
+    });
+  });
+}
+
 // Activa las notificaciones para este usuario en este dispositivo
 export async function activarPush(userId) {
   if (!pushSoportado()) return { ok: false, error: "Este navegador no soporta notificaciones push." };
@@ -62,8 +79,7 @@ export async function activarPush(userId) {
         : "No se concedió el permiso." };
     }
 
-    const reg = await registrarSW();
-    await navigator.serviceWorker.ready.catch(() => {});
+    const reg = await esperarActivo(await registrarSW());
 
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
