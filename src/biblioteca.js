@@ -5,12 +5,34 @@ import { supabase } from './supabase';
 // ============================================================
 
 export async function listarConocimiento() {
+  // Solo metadatos: NUNCA el campo 'contenido' (puede pesar MB por documento).
+  // Se pide length(contenido) como 'caracteres' para poder mostrar el tamaño
+  // sin descargar el texto. El contenido completo se obtiene con obtenerConocimiento().
+  const { data, error } = await supabase
+    .from('conocimiento')
+    .select('id, titulo, categoria, tags, fuente, fecha_creacion, autor_id, caracteres:contenido')
+    .order('fecha_creacion', { ascending: false });
+  if (error) {
+    // Si el proyecto no soporta el alias de length, cae a un select de columnas livianas
+    const alt = await supabase
+      .from('conocimiento')
+      .select('id, titulo, categoria, tags, fuente, fecha_creacion, autor_id')
+      .order('fecha_creacion', { ascending: false });
+    if (alt.error) return { ok: false, error: alt.error.message };
+    return { ok: true, conocimiento: alt.data || [] };
+  }
+  return { ok: true, conocimiento: data || [] };
+}
+
+// Trae el contenido completo de UN documento (solo al abrirlo)
+export async function obtenerConocimiento(id) {
   const { data, error } = await supabase
     .from('conocimiento')
     .select('*')
-    .order('fecha_creacion', { ascending: false });
+    .eq('id', id)
+    .single();
   if (error) return { ok: false, error: error.message };
-  return { ok: true, conocimiento: data || [] };
+  return { ok: true, item: data };
 }
 
 export async function crearConocimiento(autorId, datos) {
@@ -134,16 +156,17 @@ export async function crearChunks(chunks) {
   const { data, error } = await supabase
     .from('conocimiento_chunks')
     .insert(chunks)
-    .select('*');
+    .select('id');  // no devolver el embedding recién insertado (no se usa en el front)
   if (error) return { ok: false, error: error.message };
   return { ok: true, chunks: data || [] };
 }
 
 // Listar todos los chunks (el chat los usa para buscar)
 export async function listarChunks() {
+  // Sin '*': jamás traer el vector de embedding (pesadísimo). Solo texto y metadatos.
   const { data, error } = await supabase
     .from('conocimiento_chunks')
-    .select('*')
+    .select('id, documento_id, titulo, fuente, contenido, orden, fecha_creacion')
     .order('fecha_creacion', { ascending: false });
   if (error) return { ok: false, error: error.message };
   return { ok: true, chunks: data || [] };
@@ -167,7 +190,17 @@ export async function buscarChunks(consulta, limite = 8) {
     limite: limite,
   });
   if (error) return { ok: false, error: error.message };
-  return { ok: true, chunks: data || [] };
+  // Nos quedamos SOLO con lo que el chat usa. Si la RPC devuelve columnas
+  // pesadas (vector de embedding, etc.), aquí no viajan más allá de esta capa.
+  const chunks = (data || []).map(c => ({
+    id: c.id,
+    documento_id: c.documento_id,
+    titulo: c.titulo,
+    fuente: c.fuente,
+    contenido: c.contenido,
+    orden: c.orden,
+  }));
+  return { ok: true, chunks };
 }
 // ════════════════════════════════════════════════════════════════
 // NOTA sobre borrar documentos:

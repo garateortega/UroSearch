@@ -5,7 +5,7 @@ import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
+import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
@@ -1219,7 +1219,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.7.3";
+const VERSION = "v1.8.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -2743,7 +2743,31 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const [filtroCat, setFiltroCat] = useState("Todas");
   const [nuevoForm, setNuevoForm] = useState({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"", fuente:"" });
   const [errorForm, setErrorForm] = useState("");
+  const [cargandoLista, setCargandoLista] = useState(false);
+  const [cargandoDoc, setCargandoDoc] = useState(false);
   const fileRef = useRef(null);
+
+  // La lista de documentos se carga aquí (bajo demanda), no en cada login.
+  useEffect(() => {
+    if (conocimiento.length > 0) return; // ya cargada
+    setCargandoLista(true);
+    listarConocimiento().then(r => { if (r.ok) setConocimiento(r.conocimiento); setCargandoLista(false); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Abrir un documento: trae su contenido completo solo en ese momento
+  const abrirDoc = async (d) => {
+    setSeleccionado(d); setVista("ver");
+    if (d.contenido == null) {
+      setCargandoDoc(true);
+      const r = await obtenerConocimiento(d.id);
+      setCargandoDoc(false);
+      if (r.ok) {
+        setSeleccionado(r.item);
+        setConocimiento(prev => prev.map(x => x.id === d.id ? { ...x, contenido: r.item.contenido } : x));
+      }
+    }
+  };
 
   const eliminar = async (id) => {
     if (!confirm("¿Eliminar este documento de la base de conocimiento?")) return;
@@ -2757,7 +2781,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const filtrados = conocimiento.filter(d => {
     const matchCat = filtroCat === "Todas" || d.categoria === filtroCat;
     const q = busqueda.toLowerCase().trim();
-    const matchQ = !q || (d.titulo||"").toLowerCase().includes(q) || (d.contenido||"").toLowerCase().includes(q);
+    const matchQ = !q || (d.titulo||"").toLowerCase().includes(q) || (d.tags||"").toLowerCase().includes(q) || (d.fuente||"").toLowerCase().includes(q);
     return matchCat && matchQ;
   });
 
@@ -2899,7 +2923,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
           <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {(seleccionado.caracteres ?? seleccionado.contenido?.length ?? 0).toLocaleString()} caracteres</div>
           {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
         </div>
-        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",fontSize:13,color:"var(--texto)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{(seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{(seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",fontSize:13,color:"var(--texto)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{cargandoDoc ? "Cargando contenido…" : (seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{!cargandoDoc && (seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
       </div>
     );
   }
@@ -2909,7 +2933,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
         <div>
           <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:2}}>📚 Base de conocimiento</div>
-          <div style={{fontSize:11,color:"var(--texto-sec)"}}>{conocimiento.length} documentos</div>
+          <div style={{fontSize:11,color:"var(--texto-sec)"}}>{cargandoLista ? "Cargando…" : `${conocimiento.length} documentos`}</div>
         </div>
         {isAdmin && <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Agregar</button>}
       </div>
@@ -2924,11 +2948,11 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {filtrados.map(d => (
-            <div key={d.id} onClick={()=>{setSeleccionado(d); setVista("ver");}} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
+            <div key={d.id} onClick={()=>abrirDoc(d)} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:3}}>{d.categoria}{d.fuente ? <span style={{marginLeft:6,fontSize:10,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📖 {d.fuente}</span> : null}</div>
               <div style={{fontSize:14,fontWeight:500,color:"var(--texto)",marginBottom:4}}>{d.titulo}</div>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")} · {d.contenido?.length?.toLocaleString() || 0} caracteres</div>
-              <div style={{fontSize:12,color:"var(--texto-sec)",lineHeight:1.4}}>{(d.contenido||"").slice(0,150)}{(d.contenido||"").length>150?"...":""}</div>
+              <div style={{fontSize:11,color:"var(--texto-ter)"}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")}{(d.caracteres ?? d.contenido?.length) ? ` · ${Number(d.caracteres ?? d.contenido.length).toLocaleString()} caracteres` : ""}</div>
+              {d.tags ? <div style={{fontSize:11,color:"var(--texto-sec)",marginTop:5}}>{d.tags}</div> : null}
             </div>
           ))}
         </div>
@@ -7429,11 +7453,10 @@ const serviciosResult = await listarMisServicios(perfil.id);
 if (serviciosResult.ok) {
   setMisServiciosLista(ordenarServicios(serviciosResult.servicios));
 }
-// Cargar conocimiento (la IA lo usa para todos)
-const conocimientoResult = await listarConocimiento();
-if (conocimientoResult.ok) {
-  setConocimiento(conocimientoResult.conocimiento);
-}
+// NOTA: la lista de documentos de la base de conocimiento NO se carga aquí.
+// El chat NO la necesita (usa buscarChunks, búsqueda vectorial). Cargarla en cada
+// login descargaba todos los metadatos para todos los usuarios sin razón.
+// Ahora se carga bajo demanda, solo al entrar a Biblioteca → Documentos.
 
 // Cargar videos
 const videosResult = await listarVideos();
