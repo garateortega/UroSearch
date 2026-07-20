@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
-import { listarMapas, guardarMapa, eliminarMapa } from "./mapas";
+import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
@@ -1219,7 +1219,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.8.0";
+const VERSION = "v1.8.1";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -7850,9 +7850,20 @@ const handleEliminarMapa = async (mapaId) => {
 };
 
 // Cargar un mapa guardado en la vista
-const cargarMapaGuardado = (mapa) => {
-  setMapaActual(mapa.contenido);
-  setMapaTema(mapa.tema || mapa.titulo);
+const cargarMapaGuardado = async (mapa) => {
+  // La lista de mapas ya no trae el 'contenido' (ahorro de datos): se pide al abrir.
+  if (mapa.contenido) {
+    setMapaActual(mapa.contenido);
+    setMapaTema(mapa.tema || mapa.titulo);
+    return;
+  }
+  const r = await obtenerMapa(mapa.id);
+  if (r.ok) {
+    setMapaActual(r.mapa.contenido);
+    setMapaTema(r.mapa.tema || r.mapa.titulo);
+  } else {
+    alert("No se pudo cargar el mapa: " + r.error);
+  }
 };
   // Pantalla de carga mientras se verifica la sesión inicial
 if (loadingSession) {

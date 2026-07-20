@@ -9,7 +9,7 @@ export async function listarMapas() {
   try {
     const { data, error } = await supabase
       .from('mapas_conceptuales')
-      .select('*')
+      .select('id, titulo, tema, fecha_creacion')  // sin 'contenido': el JSON del mapa solo se trae al abrirlo
       .eq('es_precargado', false)
       .order('fecha_creacion', { ascending: false });
 
@@ -29,6 +29,20 @@ export async function listarMapas() {
  * @param contenido Objeto JSON con la estructura del mapa
  * @returns { ok: true, mapa } | { ok: false, error }
  */
+export async function obtenerMapa(mapaId) {
+  try {
+    const { data, error } = await supabase
+      .from('mapas_conceptuales')
+      .select('*')
+      .eq('id', mapaId)
+      .single();
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, mapa: data };
+  } catch (err) {
+    return { ok: false, error: 'Error al cargar el mapa' };
+  }
+}
+
 export async function guardarMapa(userId, titulo, tema, contenido) {
   try {
     const { data, error } = await supabase
