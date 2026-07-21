@@ -1219,7 +1219,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.8.1";
+const VERSION = "v1.8.2";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -1349,7 +1349,7 @@ function LogoUroSearch({ size = 40 }) {
 // Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
 // carga, estados vacíos), nunca sobre datos clínicos.
 // ============================================================
-const UROS_VERSION = "4"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
+const UROS_VERSION = "5"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
 const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
 // Detecta pantallas angostas (celular) para adaptar layouts inline.
@@ -1446,7 +1446,7 @@ const TUTORIAL_VERSION = "1"; // súbelo si quieres re-mostrarlo a todos en una 
 
 // Pasos del tour. target = data-tour del elemento a resaltar (si falta, se muestra centrado).
 // tab = pestaña que debe estar activa para que el elemento exista.
-function pasosTutorial(rol) {
+function pasosTutorial(rol, movil = false) {
   const base = [
     { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
 
@@ -1454,15 +1454,15 @@ function pasosTutorial(rol) {
     { uros: "pensando", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
 
     // ─── CHAT ───
-    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías. No reemplaza tu juicio clínico." },
+    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas." },
     { target: "modo-respuesta", tab: "chat", uros: "pensando", titulo: "Elige el tono", texto: "«Precisa» da respuestas breves y al grano; «Explicativa» las desarrolla con más detalle." },
 
     // ─── HOSPITAL ───
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
     { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas, tu 🤝 Equipo de trabajo y el cambio entre tus pacientes y los del equipo." },
-    { tab: "hospital", subtab: "pacientes", uros: "explicando", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." },
-    { tab: "hospital", subtab: "pacientes", uros: "pensando", titulo: "Ordena los servicios a tu manera", texto: "Deja presionado el nombre de un servicio hasta que vibre y arrástralo: los demás se corren solos para abrirle el hueco. Al soltarlo, el orden se guarda y todo tu equipo lo ve igual." },
-    { tab: "hospital", subtab: "interconsultas", uros: "hola", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
+    ...(movil ? [{ tab: "hospital", subtab: "pacientes", uros: "point", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." }] : []),
+    { tab: "hospital", subtab: "pacientes", uros: "pensativo", titulo: "Ordena los servicios a tu manera", texto: "Deja presionado el nombre de un servicio hasta que vibre y arrástralo a su lugar. Al soltarlo, el orden se guarda y todo tu equipo lo ve igual." },
+    { tab: "hospital", subtab: "interconsultas", uros: "tablet", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
     { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "En el menú de Hospital, la opción 🛠️ Herramientas muestra esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
     { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
@@ -1476,12 +1476,19 @@ function pasosTutorial(rol) {
     { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "explicando", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
     { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
     { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
-    { tab: "conocimiento", subtab: "preguntas", uros: "bienhecho", titulo: "¡Pruébalo ahora!", texto: "Ya estás en Preguntas: responde una y verás la correcta en verde, la incorrecta en rojo y la explicación abajo. En «📊 Mi progreso» se va acumulando tu rendimiento y te muestro en qué temas estás más débil." },
+    { tab: "conocimiento", subtab: "preguntas", uros: "point", titulo: "📊 Mi progreso", texto: "En «Mi progreso» (dentro de Preguntas) se va acumulando tu rendimiento y te muestro en qué temas estás más débil, para que sepas qué reforzar." },
+
+    // ─── LOGBOOK ───
+    { target: "tab-logbook", tab: "logbook", uros: "tablet", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
+    { target: "tab-logbook", tab: "logbook", uros: "point", titulo: "Secciones del Logbook", texto: "Toca de nuevo la pestaña Logbook y se despliega: 📋 Registros · 📷 Nueva · 📊 Métricas, más 🔗 Compartir con tu equipo." },
+    { tab: "logbook", uros: "sorprendido", titulo: "Registra con una foto", texto: "En «Nueva» fotografías el protocolo operatorio y Uros extrae los datos: procedimiento, rol, diagnóstico, hallazgos. Solo revisas y guardas." },
+    { tab: "logbook", uros: "pensativo", titulo: "Complementa después", texto: "Puedes volver a un registro para agregar la biopsia (con ISUP) o el control con imagen (si quedó stone free). Así tu casuística queda completa." },
+    { tab: "logbook", uros: "bienhecho", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
 
     { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
   ];
-  // Enfermería no ve Biblioteca; internos sí. Filtramos pasos cuyo tab no aplica.
-  const tabsFuera = rol === "enfermeria" ? ["conocimiento"] : [];
+  // Enfermería no ve Biblioteca ni Logbook; internos sí. Filtramos pasos cuyo tab no aplica.
+  const tabsFuera = rol === "enfermeria" ? ["conocimiento", "logbook"] : [];
   return base.filter(p => !p.tab || !tabsFuera.includes(p.tab));
 }
 
@@ -1658,10 +1665,10 @@ function DemoTutorial({ tipo }) {
 }
 
 function TutorialTour({ rol, onGoToTab, onClose }) {
-  const pasos = pasosTutorial(rol);
+  const movil = useIsMobile();
+  const pasos = pasosTutorial(rol, movil);
   const [i, setI] = useState(0);
   const [rect, setRect] = useState(null);
-  const movil = useIsMobile();
   const paso = pasos[i];
 
   // Asegura que la pestaña correcta esté activa antes de resaltar su botón,
