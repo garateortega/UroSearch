@@ -54,9 +54,44 @@ function estadoControl(prox, avisoDias = 14) {
   return { id: "aldia", label: `En ${d} d`, color: "var(--exito)", bg: "var(--exito-bg)", orden: 2, dias: d };
 }
 
+
+// ─── Lectura tolerante del JSON que devuelve la IA ───
+// Si la respuesta se corta (por límite de tokens), el JSON queda incompleto.
+// En vez de fallar, se intenta cerrar lo que quedó abierto y rescatar los campos.
+function parseJSONTolerante(texto) {
+  let t = (texto || "").replace(/```json|```/g, "").trim();
+  // Recorta lo que haya antes del primer { y después del último } si existe
+  const ini = t.indexOf("{");
+  if (ini > 0) t = t.slice(ini);
+  try { return JSON.parse(t); } catch {}
+
+  // Intento de reparación: cerrar comillas y llaves pendientes
+  let reparado = t;
+  const comillas = (reparado.match(/(?<!\\)"/g) || []).length;
+  if (comillas % 2 !== 0) reparado += '"';
+  const abiertas = (reparado.match(/\{/g) || []).length;
+  const cerradas = (reparado.match(/\}/g) || []).length;
+  reparado += "}".repeat(Math.max(0, abiertas - cerradas));
+  // Quita una coma colgante antes del cierre
+  reparado = reparado.replace(/,(\s*[}\]])/g, "$1");
+  try { return JSON.parse(reparado); } catch {}
+
+  // Último recurso: extraer los pares "clave": "valor" que sí estén completos
+  const obj = {};
+  const re = /"(\w+)"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|null|true|false)/g;
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    obj[m[1]] = m[2] !== undefined ? m[2].replace(/\\"/g, '"').replace(/\\n/g, "\n") : (m[3] !== undefined ? Number(m[3]) : null);
+  }
+  if (Object.keys(obj).length === 0) throw new Error("La respuesta no se pudo interpretar.");
+  return obj;
+}
+
 // ─── Extracción por foto ───
 async function extraerSeguimiento(imagenesBase64) {
   const instrucciones = `Analiza la(s) foto(s) de este documento clínico de urología y extrae los datos en JSON.
+El documento puede ser un CONSENTIMIENTO INFORMADO de ingreso a un protocolo de vigilancia,
+un control ambulatorio, una biopsia o un informe de imágenes.
 Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
 Si un dato no aparece, usa null. NO inventes datos.
 
@@ -67,13 +102,15 @@ Esquema exacto:
   "rut": "RUT del paciente (formato 12.345.678-9) o null",
   "edad": numero o null,
   "sexo": "M" | "F" | null,
-  "diagnostico": "diagnóstico principal o null",
-  "ultimo_control": "fecha del control más reciente en formato AAAA-MM-DD, o null",
-  "hallazgos": "resumen de exámenes, marcadores, imágenes o hallazgos relevantes, en 1-3 frases o null",
-  "texto_extraido": "transcripción del texto legible del documento"
+  "diagnostico": "diagnóstico principal. Si es cáncer testicular, indica el tipo histológico (seminoma / no seminoma) y la etapa si aparecen. null si no está",
+  "ultimo_control": "AAAA-MM-DD. Es la fecha ANCLA desde la que se contará el próximo control. En un consentimiento informado de ingreso usa la FECHA DE INGRESO AL PROTOCOLO o, si no está, la fecha de firma del documento. En un control o examen usa la fecha de ese control. null si no hay ninguna fecha",
+  "hallazgos": "resumen de exámenes, marcadores, imágenes, histología o factores de riesgo relevantes, en 1-3 frases. null si no hay",
+  "texto_extraido": "resumen del texto legible del documento, MÁXIMO 600 caracteres (no transcribas el documento completo)"
 }
 
-Transcribe los datos tal cual aparecen; no inventes ni completes lo que no esté.`;
+Reglas:
+- En un consentimiento informado, los datos del paciente suelen estar en el encabezado y la fecha al final, junto a las firmas.
+- Transcribe los datos tal cual aparecen; no inventes ni completes lo que no esté.`;
 
   const content = imagenesBase64.map((b64) => ({
     type: "image",
@@ -86,14 +123,14 @@ Transcribe los datos tal cual aparecen; no inventes ni completes lo que no esté
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
     body: JSON.stringify({
       model: "claude-sonnet-5",
-      max_tokens: 1500,
+      max_tokens: 3000,
       system: "Eres un extractor de datos clínicos de urología. Respondes exclusivamente con JSON válido.",
       messages: [{ role: "user", content }],
     }),
   });
   const data = await res.json();
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
-  return JSON.parse(txt.replace(/```json|```/g, "").trim());
+  return parseJSONTolerante(txt);
 }
 
 const comprimir = (file, maxLado = 1500, calidad = 0.75) =>
@@ -354,7 +391,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
         return actualizado;
       });
     } catch (err) {
-      setError("No se pudo leer el documento: " + (err.message || err) + ". Puedes llenarlo a mano.");
+      setError("No se pudo leer el documento. Prueba con una foto más nítida o de una sola página, o llénalo a mano. (" + (err.message || err) + ")");
       if (!pacForm) abrirNuevoPaciente(protoSel?.id);
     }
     setExtrayendo(false);
@@ -518,7 +555,8 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--texto)", marginBottom: 8 }}>Agregar paciente a este seguimiento</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--texto)", marginBottom: 3 }}>Agregar paciente a este seguimiento</div>
+                <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginBottom: 9 }}>Fotografía el consentimiento informado de ingreso, un control o un examen: Uros extrae los datos del paciente y la fecha.</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                   <button onClick={() => inputCamaraRef.current?.click()} style={btnPrim}>📸 Tomar foto</button>
                   <button onClick={() => inputGaleriaRef.current?.click()} style={btnSec}>🖼 Galería</button>
@@ -596,8 +634,11 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
               </select>
             ))}
             <div style={{ gridColumn: "1 / -1" }}>{campo("Diagnóstico", <input style={inp} value={pacForm.diagnostico} onChange={(e) => setPacForm({ ...pacForm, diagnostico: e.target.value })} />)}</div>
-            {campo("Último control", <input type="date" style={inp} value={pacForm.ultimo_control || ""} onChange={(e) => { const f = { ...pacForm, ultimo_control: e.target.value }; f.proximo_control = recalcularProximo(f); setPacForm(f); }} />)}
+            {campo("Último control / ingreso al protocolo", <input type="date" style={inp} value={pacForm.ultimo_control || ""} onChange={(e) => { const f = { ...pacForm, ultimo_control: e.target.value }; f.proximo_control = recalcularProximo(f); setPacForm(f); }} />)}
             {campo("Próximo control (se calcula solo)", <input type="date" style={inp} value={pacForm.proximo_control || ""} onChange={(e) => setPacForm({ ...pacForm, proximo_control: e.target.value })} />)}
+            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.45, marginTop: -4 }}>
+              Si estás ingresando al paciente con su consentimiento informado, en «último control» va la <b>fecha de ingreso al protocolo</b>: desde ahí se cuenta el primer control.
+            </div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Hallazgos / exámenes", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={pacForm.hallazgos} onChange={(e) => setPacForm({ ...pacForm, hallazgos: e.target.value })} placeholder="Marcadores, imágenes, PSA…" />)}</div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Notas", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={pacForm.notas} onChange={(e) => setPacForm({ ...pacForm, notas: e.target.value })} />)}</div>
             {campo("Estado", (

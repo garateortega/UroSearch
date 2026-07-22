@@ -24,6 +24,39 @@ const MOTIVOS_FRECUENTES = [
   "Masa renal", "Alteración del PSA", "Trauma urológico", "Otro",
 ];
 
+
+// ─── Lectura tolerante del JSON que devuelve la IA ───
+// Si la respuesta se corta (por límite de tokens), el JSON queda incompleto.
+// En vez de fallar, se intenta cerrar lo que quedó abierto y rescatar los campos.
+function parseJSONTolerante(texto) {
+  let t = (texto || "").replace(/```json|```/g, "").trim();
+  // Recorta lo que haya antes del primer { y después del último } si existe
+  const ini = t.indexOf("{");
+  if (ini > 0) t = t.slice(ini);
+  try { return JSON.parse(t); } catch {}
+
+  // Intento de reparación: cerrar comillas y llaves pendientes
+  let reparado = t;
+  const comillas = (reparado.match(/(?<!\\)"/g) || []).length;
+  if (comillas % 2 !== 0) reparado += '"';
+  const abiertas = (reparado.match(/\{/g) || []).length;
+  const cerradas = (reparado.match(/\}/g) || []).length;
+  reparado += "}".repeat(Math.max(0, abiertas - cerradas));
+  // Quita una coma colgante antes del cierre
+  reparado = reparado.replace(/,(\s*[}\]])/g, "$1");
+  try { return JSON.parse(reparado); } catch {}
+
+  // Último recurso: extraer los pares "clave": "valor" que sí estén completos
+  const obj = {};
+  const re = /"(\w+)"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|null|true|false)/g;
+  let m;
+  while ((m = re.exec(t)) !== null) {
+    obj[m[1]] = m[2] !== undefined ? m[2].replace(/\\"/g, '"').replace(/\\n/g, "\n") : (m[3] !== undefined ? Number(m[3]) : null);
+  }
+  if (Object.keys(obj).length === 0) throw new Error("La respuesta no se pudo interpretar.");
+  return obj;
+}
+
 // ─── Lectura del documento con IA (misma edge function del chat) ───
 async function extraerInterconsulta(imagenesBase64) {
   const instrucciones = `Analiza la(s) foto(s) de esta interconsulta médica dirigida a Urología y extrae los datos en JSON.
@@ -45,7 +78,7 @@ Esquema exacto:
   "resumen": "resumen clínico del cuadro en 1-3 frases, con lo relevante para urología o null",
   "prioridad": "urgente" | "normal" | "electiva" | null,
   "conducta": "conducta, respuesta o sugerencia de urología si aparece escrita o null",
-  "texto_extraido": "transcripción del texto legible del documento"
+  "texto_extraido": "resumen del texto legible del documento, MÁXIMO 600 caracteres (no transcribas el documento completo)"
 }
 
 Reglas:
@@ -66,14 +99,14 @@ Reglas:
     },
     body: JSON.stringify({
       model: "claude-sonnet-5",
-      max_tokens: 1800,
+      max_tokens: 3000,
       system: "Eres un extractor de datos de interconsultas médicas dirigidas a urología. Respondes exclusivamente con JSON válido.",
       messages: [{ role: "user", content }],
     }),
   });
   const data = await res.json();
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
-  return JSON.parse(txt.replace(/```json|```/g, "").trim());
+  return parseJSONTolerante(txt);
 }
 
 const comprimir = (file, maxLado = 1500, calidad = 0.75) =>
@@ -169,7 +202,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
       }));
       setVista("nueva");
     } catch (err) {
-      setError("No se pudo leer la interconsulta: " + (err.message || err) + ". Puedes llenarla a mano.");
+      setError("No se pudo leer la interconsulta. Prueba con una foto más nítida o de una sola página, o llénala a mano. (" + (err.message || err) + ")");
       setVista("nueva");
     }
     setExtrayendo(false);
