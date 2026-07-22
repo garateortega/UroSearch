@@ -507,6 +507,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   // ─── Métricas ───
   const prom = (arr) => (arr.length ? Math.round((arr.reduce((s, x) => s + x, 0) / arr.length) * 10) / 10 : null);
+  // Mediana: más representativa que el promedio cuando hay un caso extremo
+  // (una cirugía muy larga arrastra el promedio; la mediana no).
+  const mediana = (arr) => {
+    if (!arr.length) return null;
+    const a = [...arr].sort((x, y) => x - y);
+    const m = Math.floor(a.length / 2);
+    const v = a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+    return Math.round(v * 10) / 10;
+  };
+  // Devuelve {mediana, prom, n} o null si no hay datos
+  const stat = (arr) => (arr.length ? { med: mediana(arr), prom: prom(arr), n: arr.length } : null);
   const met = useMemo(() => {
     const total = registros.length;
     const comoCirujano = registros.filter((r) => r.rol === "cirujano").length;
@@ -528,7 +539,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (r.rol === "cirujano") v.cx++;
       if (ROLES_AYUDANTE.includes(r.rol)) v.ayud++;
       if (r.duracion_min > 0) v.dur.push(r.duracion_min);
-      if (r.sangrado_ml > 0) v.sangrado.push(r.sangrado_ml);
+      // OJO: un sangrado de 0 ml es un dato válido (no es "sin registrar").
+      // Excluirlo inflaba el promedio.
+      if (r.sangrado_ml != null && r.sangrado_ml !== "") v.sangrado.push(Number(r.sangrado_ml));
       if (r.tamano_litiasis_mm > 0) v.litiasis.push(r.tamano_litiasis_mm);
       if (r.tamano_prostata_cc > 0) v.prostata.push(r.tamano_prostata_cc);
       if (r.complicacion) v.compl++;
@@ -546,8 +559,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       .sort((a, b) => b[1].n - a[1].n)
       .map(([label, v]) => ({
         label, n: v.n, cx: v.cx, ayud: v.ayud,
-        durProm: prom(v.dur), sangradoProm: prom(v.sangrado),
-        litiasisProm: prom(v.litiasis), prostataProm: prom(v.prostata),
+        dur: stat(v.dur), sangrado: stat(v.sangrado),
+        litiasis: stat(v.litiasis), prostata: stat(v.prostata),
+        durProm: prom(v.dur),   // se mantiene para el orden y el KPI
         compl: v.compl,
         stoneFree: v.stoneTotal > 0 ? { free: v.stoneFree, total: v.stoneTotal } : null,
       }));
@@ -576,9 +590,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const campo = (etiqueta, hijo) => (<div><label style={lbl}>{etiqueta}</label>{hijo}</div>);
   const rolLabel = (r) => (ROLES.find(([id]) => id === r) || [r, r])[1];
   // Chip compacto para las métricas por cirugía
-  const Chip = ({ label, val, ok }) => (
+  const Chip = ({ label, val, ok, sub }) => (
     <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 20, background: ok ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (ok ? "var(--exito-borde)" : "var(--borde)"), color: ok ? "var(--exito)" : "var(--texto-sec)", whiteSpace: "nowrap" }}>
       <span style={{ color: "var(--texto-ter)" }}>{label}:</span> <b style={{ color: ok ? "var(--exito)" : "var(--texto)" }}>{val}</b>
+      {sub ? <span style={{ color: "var(--texto-ter)", marginLeft: 4, fontSize: 10 }}>({sub})</span> : null}
     </span>
   );
 
@@ -975,10 +990,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       <Chip label="Cirujano" val={d.cx} />
                       {d.ayud > 0 && <Chip label="Ayudante" val={d.ayud} />}
-                      {d.durProm != null && <Chip label="Duración" val={`${d.durProm} min`} />}
-                      {d.sangradoProm != null && <Chip label="Sangrado" val={`${d.sangradoProm} ml`} />}
-                      {d.litiasisProm != null && <Chip label="Litiasis" val={`${d.litiasisProm} mm`} />}
-                      {d.prostataProm != null && <Chip label="Próstata" val={`${d.prostataProm} cc`} />}
+                      {d.dur && <Chip label="Duración" val={`${d.dur.med} min`} sub={`n=${d.dur.n}`} />}
+                      {d.sangrado && <Chip label="Sangrado" val={`${d.sangrado.med} ml`} sub={`n=${d.sangrado.n}`} />}
+                      {d.litiasis && <Chip label="Litiasis" val={`${d.litiasis.med} mm`} sub={`n=${d.litiasis.n}`} />}
+                      {d.prostata && <Chip label="Próstata" val={`${d.prostata.med} cc`} sub={`n=${d.prostata.n}`} />}
                       {d.stoneFree && <Chip label="Stone free" val={`${d.stoneFree.free}/${d.stoneFree.total}`} ok />}
                     </div>
                   </div>
@@ -988,7 +1003,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           </div>
 
           <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>
-            Las complicaciones (Clavien-Dindo) no se muestran aquí; quedan registradas en cada cirugía y aparecen al exportar las métricas.
+            Los valores por cirugía son <b>medianas</b> (no promedios): una cirugía muy larga o muy sangrante no distorsiona el resto. El <b>n</b> entre paréntesis indica en cuántos registros hay ese dato, que puede ser menor que el total del procedimiento. El <i>stone free</i> se calcula solo sobre las cirugías con control imagenológico registrado.
+            <br />Las complicaciones (Clavien-Dindo) no se muestran aquí; quedan registradas en cada cirugía y aparecen al exportar.
           </div>
 
           {registros.length > 0 && (
