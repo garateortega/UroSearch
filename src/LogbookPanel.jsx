@@ -19,66 +19,96 @@ const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante"]; // cuentan como 
 // ─── Agrupación de procedimientos ───
 // Junta las variantes de una misma intervención (técnicas, lateralidad, siglas)
 // bajo una sola familia, para que las métricas no queden fragmentadas.
+// Se compara SIN tildes y en minúsculas, así "prostata" y "próstata" son lo mismo.
+const sinTildes = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const C = "\\s*(?:de\\s+|del\\s+|la\\s+|los\\s+)?"; // conectores opcionales: "RTU de prostata"
+
 const FAMILIAS = [
-  // El ORDEN importa: se aplica la primera que calce.
-  // Litiasis — RIRS y URS son procedimientos DISTINTOS:
-  //   RIRS = cirugía retrógrada intrarrenal → litiasis RENAL
-  //   URS  = ureteroscopía                  → litiasis URETERAL
-  [/nlpc|nefrolitotom[ií]a\s*percut|percut[aá]nea|pcnl|mini\s*perc/i,      "Nefrolitotomía percutánea (NLPC)"],
-  [/rirs|retr[oó]grada\s*intrarrenal|ureterorrenoscop[ií]a\s*flexible|urs\s*flex|nefrolitotom[ií]a\s*(endosc|flex)/i, "Nefrolitotomía endoscópica (RIRS)"],
-  [/ureterolitotom[ií]a\s*(endosc|l[aá]ser)?|urs\s*(sem|r[ií]gid)|ureteroscop[ií]a|\burs\b/i, "Ureterolitotomía endoscópica (URS)"],
-  [/ureterolitotom[ií]a/i,                                                 "Ureterolitotomía"],
-  [/litotricia|leco|eswl/i,                                                "Litotricia extracorpórea (LEC)"],
-  [/cistolitotom|cistolitotric|litotricia\s*vesical/i,                     "Cistolitotomía"],
-  // Endourología / vía urinaria
-  [/(instalaci[oó]n|colocaci[oó]n|cambio|retiro|recambio).*(doble\s*j|jj|cat[eé]ter\s*ureteral)|doble\s*j|\bjj\b|pigtail/i, "Catéter doble J (instalación/cambio/retiro)"],
-  [/nefrostom[ií]a/i,                                                      "Nefrostomía"],
-  [/cistoscop[ií]a/i,                                                      "Cistoscopía"],
-  // Resecciones transuretrales
-  [/rtu\s*-?\s*v\b|rtu\s*vesic|resecci[oó]n\s*transuretral\s*(de\s*)?(tumor\s*)?vesic/i, "RTU vesical (RTU-V)"],
-  [/rtu\s*-?\s*p\b|rtu\s*prost|resecci[oó]n\s*transuretral\s*(de\s*)?prost/i,            "RTU prostática (RTU-P)"],
-  // Escroto y testículo — la lateralidad NO separa
-  [/eversi[oó]n.*t[uú]nica|t[uú]nica\s*vaginal|winkelmann|jaboulay|lord/i, "Eversión de túnica vaginal"],
-  [/hidrocelectom[ií]a|hidrocele/i,                                        "Hidrocelectomía"],
-  [/varicocelectom[ií]a|varicocele/i,                                      "Varicocelectomía"],
-  [/orquiectom[ií]a/i,                                                     "Orquiectomía"],
-  [/orquidopexia|orquiopexia|criptorquid/i,                                "Orquidopexia"],
-  [/espermatocele|epididimectom/i,                                         "Cirugía de epidídimo"],
-  [/vasectom[ií]a/i,                                                       "Vasectomía"],
-  [/exploraci[oó]n\s*escrotal|torsi[oó]n\s*testicular/i,                   "Exploración escrotal"],
-  // Pene
-  [/circuncis|postect|fimosis/i,                                           "Circuncisión"],
-  [/frenulo/i,                                                             "Frenuloplastía"],
-  // Oncología mayor
-  // OJO: PTV = prostatectomía TRANSVESICAL = adenomectomía por HBP.
-  // NO es la prostatectomía radical (oncológica). Van en familias distintas.
-  [/\bptv\b|prostatectom[ií]a\s*(transvesic|suprap[uú]b|simple)|adenomectom[ií]a/i, "Adenomectomía prostática (PTV)"],
-  [/prostatectom[ií]a\s*radical|\bprr\b|prostatectom[ií]a\s*(abierta|laparosc|robot|retrop)/i, "Prostatectomía radical"],
-  [/nefroureterectom[ií]a/i,                                               "Nefroureterectomía"],
-  [/nefrectom[ií]a\s*parcial/i,                                            "Nefrectomía parcial"],
-  [/nefrectom[ií]a/i,                                                      "Nefrectomía"],
-  [/cistectom[ií]a/i,                                                      "Cistectomía"],
-  [/linfadenectom[ií]a/i,                                                  "Linfadenectomía"],
-  // Reconstructiva / otros
-  [/pieloplast/i,                                                          "Pieloplastía"],
-  [/uretroplast|uretrotom/i,                                               "Cirugía de uretra"],
-  [/biopsia\s*prost/i,                                                     "Biopsia prostática"],
-  [/biopsia\s*(renal|vesical|test)/i,                                      "Biopsia (otras)"],
-  [/reimplante\s*ureteral|ureteroneocist/i,                                "Reimplante ureteral"],
-  [/talla\s*vesical|cistostom[ií]a/i,                                      "Cistostomía / talla vesical"],
+  // ── LITIASIS ── RIRS (renal) y URS (ureteral) son procedimientos DISTINTOS
+  [/nlpc|pcnl|mini\s*perc|nefrolitotomia\s*percut|percutanea/,                       "Nefrolitotomía percutánea (NLPC)"],
+  [/rirs|retrograda\s*intrarrenal|ureterorrenoscopia\s*flex|urs\s*flex|nefrolitotomia\s*(endosc|flex|laser)/, "Nefrolitotomía endoscópica (RIRS)"],
+  [/ureterolitotomia|ureteroscopia|ureterorrenoscopia|\burs\b|\bursl\b/,             "Ureterolitotomía endoscópica (URS)"],
+  [/litotricia\s*extracorp|\bleco\b|\beswl\b/,                                      "Litotricia extracorpórea (LEC)"],
+  [/cistolitotomia|cistolitotricia|litotricia\s*vesical|litotripsia\s*vesical/,       "Cistolitotomía"],
+  [/pielolitotomia/,                                                                 "Pielolitotomía"],
+
+  // ── ENDOUROLOGÍA / VÍA URINARIA ──
+  [/doble\s*j|\bjj\b|pigtail|cateter\s*ureteral/,                                   "Catéter doble J (instalación/cambio/retiro)"],
+  [/nefrostomia/,                                                                    "Nefrostomía percutánea"],
+  [/(botox|toxina\s*botulinica|onabotulinum)/,                                       "Botox intravesical"],
+  [/cistoscopia|uretrocistoscopia/,                                                  "Cistoscopía"],
+  [/uretrotomia\s*interna|uretrotomia/,                                              "Uretrotomía interna"],
+  [/talla\s*vesical|cistostomia|puncion\s*vesical/,                                  "Cistostomía / talla vesical"],
+  [/dilatacion\s*uretral/,                                                           "Dilatación uretral"],
+
+  // ── RESECCIONES TRANSURETRALES ──
+  [new RegExp("rtu\\s*-?\\s*v\\b|rtu" + C + "vesic|rtu" + C + "(tumor|lesion)|reseccion\\s*transuretral" + C + "(tumor\\s*)?vesic"), "RTU vesical (RTU-V)"],
+  [new RegExp("rtu\\s*-?\\s*p\\b|rtu" + C + "prostat|reseccion\\s*transuretral" + C + "prostat|\\brtup\\b"),                        "RTU prostática (RTU-P)"],
+  [/reseccion\s*transuretral/,                                                       "Resección transuretral (otra)"],
+
+  // ── ESCROTO Y TESTÍCULO ── (la lateralidad nunca separa)
+  [/eversion.*tunica|tunica\s*vaginal|winkelmann|jaboulay|\blord\b/,                "Eversión de túnica vaginal"],
+  [/orqu[ii]?d?ectomia|orquiectomia|orquidectomia/,                                  "Orquiectomía"],
+  [/orquidopexia|orquiopexia|criptorquid|descenso\s*testicular/,                     "Orquidopexia"],
+  [/hidrocelectomia|hidrocele/,                                                      "Hidrocelectomía"],
+  [/varicocelectomia|varicocele/,                                                    "Varicocelectomía"],
+  [/espermatocele|epididimectomia|quiste\s*epididim/,                                "Cirugía de epidídimo"],
+  [/vasectomia|vasovasostomia/,                                                      "Vasectomía"],
+  [/aseo.*(escrotal|escroto|perine|genital)|debridamiento.*(escrotal|perine|genital|fournier)|fournier/, "Aseo quirúrgico escrotal/perineal"],
+  [/exploracion\s*escrotal|torsion\s*testicular|detorsion/,                          "Exploración escrotal"],
+  [/biopsia\s*testicular|\btese\b|\bmicrotese\b/,                                  "Biopsia testicular"],
+  [/protesis\s*testicular/,                                                          "Prótesis testicular"],
+
+  // ── PENE Y URETRA ──
+  [/circuncision|postectomia|fimosis|parafimosis/,                                   "Circuncisión"],
+  [/frenulo|frenuloplastia/,                                                         "Frenuloplastía"],
+  [/meatotomia|meatoplastia/,                                                        "Meatotomía"],
+  [/uretroplastia/,                                                                  "Uretroplastía"],
+  [/protesis\s*peneana|implante\s*peneano/,                                          "Prótesis peneana"],
+  [/priapismo/,                                                                      "Cirugía de priapismo"],
+
+  // ── PRÓSTATA ── PTV (transvesical, por HBP) ≠ radical (oncológica)
+  [/\bptv\b|prostatectomia\s*(transvesic|suprapub|simple)|adenomectomia/,           "Adenomectomía prostática (PTV)"],
+  [/prostatectomia\s*radical|\bprr\b|prostatectomia\s*(abierta|laparosc|robot|retropub)/, "Prostatectomía radical"],
+  [/biopsia\s*prostat|biopsia\s*(transrectal|transperineal)|biopsia\s*por\s*fusion/, "Biopsia prostática"],
+
+  // ── RIÑÓN Y VÍA ALTA ──
+  [/nefroureterectomia/,                                                             "Nefroureterectomía"],
+  [/nefrectomia\s*parcial|tumorectomia\s*renal/,                                     "Nefrectomía parcial"],
+  [/nefrectomia/,                                                                    "Nefrectomía"],
+  [/pieloplastia/,                                                                   "Pieloplastía"],
+  [/adrenalectomia|suprarrenalectomia/,                                              "Adrenalectomía"],
+  [/reimplante\s*ureteral|ureteroneocist/,                                           "Reimplante ureteral"],
+  [/anastomosis\s*ureter|ureteroureterostomia/,                                      "Anastomosis ureteral"],
+
+  // ── VEJIGA Y ONCOLOGÍA MAYOR ──
+  [/cistectomia/,                                                                    "Cistectomía"],
+  [/linfadenectomia|\brplnd\b/,                                                      "Linfadenectomía"],
+  [/diverticulectomia\s*vesical|diverticulo\s*vesical/,                              "Diverticulectomía vesical"],
+  [/cistoplastia|ampliacion\s*vesical/,                                              "Cistoplastía de ampliación"],
+
+  // ── PISO PÉLVICO / INCONTINENCIA ──
+  [/\bsling\b|\btvt\b|\btot\b|cinta\s*suburetral/,                               "Sling suburetral"],
+  [/esfinter\s*urinario\s*artificial|\baus\b/,                                      "Esfínter urinario artificial"],
+
+  // ── OTROS ──
+  [/hernioplastia|herniorrafia|hernia\s*inguinal/,                                   "Hernioplastía inguinal"],
+  [/trasplante\s*renal/,                                                             "Trasplante renal"],
+  [/fistula/,                                                                        "Cirugía de fístula"],
+  [/biopsia\s*renal/,                                                                "Biopsia renal"],
 ];
 
 function familiaProc(nombre) {
-  let t = (nombre || "").trim();
+  let t = sinTildes(nombre).trim();
   if (!t) return "Sin especificar";
   // La lateralidad y algunos calificativos no deben separar familias
   t = t
-    .replace(/\b(derech[ao]|izquierd[ao]|bilateral|unilateral|derecha|izq\.?|der\.?|\(d\)|\(i\))\b/gi, " ")
+    .replace(/\b(derech[ao]|izquierd[ao]|bilateral|unilateral|izq|der|\(d\)|\(i\))\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   for (const [re, fam] of FAMILIAS) if (re.test(t)) return fam;
-  // Si no calza, se limpia y se capitaliza para agrupar variantes de escritura
-  const limpio = t.replace(/[.,;]+$/, "").toLowerCase();
+  // Si no calza, se normaliza para que al menos las variantes de escritura se junten
+  const limpio = t.replace(/[.,;]+$/, "");
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
