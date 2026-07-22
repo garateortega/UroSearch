@@ -15,6 +15,38 @@ import { supabase } from "./supabase";
 const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Otro"];
 const ROLES = [["cirujano", "Cirujano principal"], ["primer_ayudante", "1er ayudante"], ["segundo_ayudante", "2do ayudante"], ["observador", "Observador"]];
 const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante"]; // cuentan como "ayudante" en las métricas
+
+// ─── Agrupación de procedimientos ───
+// Junta las variantes de una misma intervención (técnicas, lateralidad, siglas)
+// bajo una sola familia, para que las métricas no queden fragmentadas.
+const FAMILIAS = [
+  [/circuncis|postect/i,                                   "Circuncisión"],
+  [/rtu\s*-?\s*v|rtu\s*vesic|reseccion.*vesic/i,          "RTU vesical"],
+  [/rtu\s*-?\s*p|rtu\s*prost|reseccion.*prost/i,          "RTU prostática"],
+  [/nlpc|nefrolitotom[ií]a\s*percut|percut[aá]nea/i,        "Nefrolitotomía percutánea"],
+  [/rirs|urs\s*flex|ureterorrenoscop|nefrolitotom[ií]a\s*endosc|endosc[oó]pica/i, "Nefrolitotomía endoscópica (RIRS/URS)"],
+  [/ureterolitotom/i,                                      "Ureterolitotomía"],
+  [/urs(?!\s*flex)|ureteroscop/i,                          "Ureteroscopía"],
+  [/prostatectom[ií]a\s*radical|ptv|prostatectom[ií]a\s*(abierta|laparo|robot)/i, "Prostatectomía radical"],
+  [/nefrectom[ií]a\s*parcial/i,                             "Nefrectomía parcial"],
+  [/nefrectom[ií]a/i,                                       "Nefrectomía"],
+  [/orquiectom[ií]a|orquidopexia/i,                         "Cirugía testicular"],
+  [/varicocel/i,                                            "Varicocelectomía"],
+  [/hidrocel/i,                                             "Hidrocelectomía"],
+  [/cistectom[ií]a/i,                                       "Cistectomía"],
+  [/pieloplast/i,                                           "Pieloplastía"],
+  [/biopsia\s*prost/i,                                      "Biopsia prostática"],
+  [/cistolitotom|cistolitotric/i,                           "Cistolitotomía"],
+  [/instalaci[oó]n.*(jj|cateter)|cateter\s*jj|jj/i,         "Instalación catéter JJ"],
+  [/cistoscop/i,                                            "Cistoscopía"],
+  [/litotricia|leco/i,                                      "Litotricia extracorpórea"],
+];
+function familiaProc(nombre) {
+  const t = (nombre || "").trim();
+  if (!t) return "Sin especificar";
+  for (const [re, fam] of FAMILIAS) if (re.test(t)) return fam;
+  return t; // si no calza en ninguna familia, se muestra tal cual
+}
 const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
 
 const REGISTRO_VACIO = {
@@ -449,14 +481,15 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     const comoAyudante = registros.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
     const conComplicacion = registros.filter((r) => r.complicacion).length;
     const clavienAlto = registros.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
-    const duraciones = registros.filter((r) => r.duracion_min > 0);
-    const durProm = duraciones.length ? Math.round(duraciones.reduce((s, r) => s + r.duracion_min, 0) / duraciones.length) : null;
+    // Nota: no se calcula una "duración promedio global" — mezclar cirugías
+    // heterogéneas da un número que no significa nada. La duración va por procedimiento.
+    const conDuracion = registros.filter((r) => r.duracion_min > 0).length;
 
     const porCat = {};
     const porProc = {};
     registros.forEach((r) => {
       porCat[r.categoria || "Otro"] = (porCat[r.categoria || "Otro"] || 0) + 1;
-      const p = r.procedimiento || "—";
+      const p = familiaProc(r.procedimiento);
       if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0 };
       const v = porProc[p];
       v.n++;
@@ -496,7 +529,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([label, n]) => ({ label, n }));
 
-    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, durProm, meses, topProc, cats, detalleProc, ayudantiasPorProc };
+    // Procedimiento más frecuente (reemplaza a la duración promedio global)
+    const masFrecuente = detalleProc.length ? detalleProc[0] : null;
+    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, detalleProc, ayudantiasPorProc };
   }, [registros]);
 
   // ─── Estilos compartidos ───
@@ -521,6 +556,18 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [miembrosCompartir, setMiembrosCompartir] = useState([]);
   const [compartiendo, setCompartiendo] = useState(false);
   const [compartirMsg, setCompartirMsg] = useState("");
+  const [recibidos, setRecibidos] = useState([]);          // métricas que otros me compartieron
+  const [recibidoAbierto, setRecibidoAbierto] = useState(null);
+
+  const cargarRecibidos = async () => {
+    try {
+      const { data } = await supabase.from("logbook_compartido")
+        .select("*").eq("para_user_id", currentUser.id)
+        .order("created_at", { ascending: false }).limit(50);
+      setRecibidos(data || []);
+    } catch { setRecibidos([]); }
+  };
+  useEffect(() => { if (currentUser) cargarRecibidos(); /* eslint-disable-next-line */ }, [currentUser]);
 
   useEffect(() => {
     if (!compartirOpen || !equipoDestino) { setMiembrosCompartir([]); return; }
@@ -552,11 +599,23 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     setCompartiendo(true); setCompartirMsg("");
     const texto = resumenCompartir();
     try {
-      // Notifica a cada destinatario (nivel app). El contenido va como notificación.
+      // Se guarda el contenido en su propia tabla y la notificación queda corta:
+      // el detalle se lee dentro del Logbook, en "Compartido conmigo".
+      const filas = destinatarios.map((uid) => ({
+        de_user_id: currentUser.id,
+        de_nombre: currentUser.nombre,
+        para_user_id: uid,
+        equipo_id: equipoDestino || null,
+        tipo: compartirQue,
+        contenido: texto,
+      }));
+      const { error: errIns } = await supabase.from("logbook_compartido").insert(filas);
+      if (errIns) throw errIns;
+
       for (const uid of destinatarios) {
         await supabase.from("notificaciones").insert({
           user_id: uid,
-          texto: `${currentUser.nombre} compartió sus ${compartirQue === "metricas" ? "métricas" : "registros"} de logbook:\n${texto}`,
+          texto: `${currentUser.nombre} compartió sus ${compartirQue === "metricas" ? "métricas" : "registros"} de logbook. Ábrelo en Logbook › Compartido conmigo.`,
           tipo: "logbook",
         });
       }
@@ -714,6 +773,36 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         </div>
       )}
 
+      {/* ─── Métricas que otros me compartieron ─── */}
+      {vista === "lista" && recibidos.length > 0 && (
+        <div style={{ ...card, marginBottom: 12, borderLeft: "3px solid var(--primario)" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>🔗 Compartido conmigo ({recibidos.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {recibidos.map((r) => {
+              const abierto = recibidoAbierto === r.id;
+              return (
+                <div key={r.id} style={{ border: "0.5px solid var(--borde)", borderRadius: 8, padding: "9px 11px", background: "var(--fondo-suave)" }}>
+                  <div onClick={() => setRecibidoAbierto(abierto ? null : r.id)} style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{r.de_nombre || "Un colega"}</div>
+                      <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>
+                        {r.tipo === "metricas" ? "📊 Métricas" : "📋 Registros"} · {new Date(r.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, color: "var(--primario)", flexShrink: 0 }}>{abierto ? "▴ Ocultar" : "▾ Ver"}</span>
+                  </div>
+                  {abierto && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "0.5px solid var(--borde)", fontSize: 12, color: "var(--texto)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                      {r.contenido}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ============ VISTA: LISTA ============ */}
       {vista === "lista" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -809,9 +898,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.comoAyudante}</div>
               <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
             </div>
-            <div style={kpi}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.durProm != null ? `${met.durProm}′` : "—"}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Duración promedio global</div>
+            <div style={{ ...kpi, minWidth: 180 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--primario)", lineHeight: 1.25 }}>{met.masFrecuente ? met.masFrecuente.label : "—"}</div>
+              <div style={{ fontSize: 11, color: "var(--texto-sec)", marginTop: 3 }}>Procedimiento más frecuente{met.masFrecuente ? ` (${met.masFrecuente.n})` : ""}</div>
             </div>
           </div>
 
@@ -821,6 +910,21 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               <span style={{ fontSize: 11, fontWeight: 400, color: "var(--texto-ter)", marginLeft: 8 }}>■ como cirujano · <span style={{ opacity: 0.4 }}>■</span> total</span>
             </div>
             <BarrasMensuales datos={met.meses} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+            <div style={card}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes</div>
+              <BarrasHorizontales items={met.topProc} />
+            </div>
+            <div style={card}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento</div>
+              <BarrasHorizontales items={met.ayudantiasPorProc} color="var(--alerta)" />
+            </div>
+            <div style={card}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
+              <BarrasHorizontales items={met.cats} color="var(--exito)" />
+            </div>
           </div>
 
           {/* Métricas detalladas por cirugía (duración, sangrado, litiasis, próstata, stone free) */}
@@ -849,21 +953,6 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 ))}
               </div>
             )}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes</div>
-              <BarrasHorizontales items={met.topProc} />
-            </div>
-            <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento</div>
-              <BarrasHorizontales items={met.ayudantiasPorProc} color="var(--alerta)" />
-            </div>
-            <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
-              <BarrasHorizontales items={met.cats} color="var(--exito)" />
-            </div>
           </div>
 
           <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>

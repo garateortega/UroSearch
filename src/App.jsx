@@ -9,6 +9,7 @@ import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarCon
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
+import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
 import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
 
 // ============================================================
@@ -449,6 +450,7 @@ const FUNCIONES_CONFIGURABLES = [
     ["hosp:notas", "🗒️ Notas"],
     ["hosp:prescripciones", "💊 Recetas"],
     ["hosp:interconsultas", "📄 Interconsultas"],
+    ["hosp:seguimiento", "🔄 Seguimiento"],
   ]},
   { grupo: "Biblioteca", items: [
     ["biblio:videos", "📚 Videos"],
@@ -1219,7 +1221,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.8.2";
+const VERSION = "v1.9.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -1349,7 +1351,7 @@ function LogoUroSearch({ size = 40 }) {
 // Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
 // carga, estados vacíos), nunca sobre datos clínicos.
 // ============================================================
-const UROS_VERSION = "5"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
+const UROS_VERSION = "6"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
 const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
 // Detecta pantallas angostas (celular) para adaptar layouts inline.
@@ -1412,7 +1414,7 @@ function PortadaChat({ nombre }) {
       minHeight:"48vh"
     }}>
       <Uros
-        expresion="hero"
+        expresion="hola"
         size={movil ? 220 : 260}
         style={ movil
           ? { order:1, flex:"0 0 auto", width:"auto", maxWidth:"72%", maxHeight:"34vh" }
@@ -1459,10 +1461,16 @@ function pasosTutorial(rol, movil = false) {
 
     // ─── HOSPITAL ───
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
-    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas, tu 🤝 Equipo de trabajo y el cambio entre tus pacientes y los del equipo." },
+    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
     ...(movil ? [{ tab: "hospital", subtab: "pacientes", uros: "point", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." }] : []),
     { tab: "hospital", subtab: "pacientes", uros: "pensativo", titulo: "Ordena los servicios a tu manera", texto: "Deja presionado el nombre de un servicio hasta que vibre y arrástralo a su lugar. Al soltarlo, el orden se guarda y todo tu equipo lo ve igual." },
     { tab: "hospital", subtab: "interconsultas", uros: "tablet", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
+
+    // ─── SEGUIMIENTO ───
+    { tab: "hospital", subtab: "seguimiento", uros: "point", titulo: "🔄 Seguimiento de pacientes", texto: "Aquí creas tus propios criterios de control: «Vigilancia activa cáncer testicular», «Seguimiento post-RTU vesical», o el que necesites. Tú defines cada cuánto se controla." },
+    { tab: "hospital", subtab: "seguimiento", uros: "sorprendido", titulo: "Te avisa antes de que se pase", texto: "Cada paciente se pinta según su próximo control: 🟢 al día, 🟡 por vencer, 🔴 atrasado. Puedes ordenarlos por urgencia o por los más antiguos, para que nadie se te quede atrás." },
+    { tab: "hospital", subtab: "seguimiento", uros: "tablet", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
+    { tab: "hospital", subtab: "seguimiento", uros: "explicando", titulo: "Y puedes preguntarme", texto: "En el chat puedes pedirme «¿qué pacientes tengo con el control atrasado?» y te respondo con tus pacientes reales en seguimiento." },
     { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "En el menú de Hospital, la opción 🛠️ Herramientas muestra esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
     { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
@@ -1484,6 +1492,8 @@ function pasosTutorial(rol, movil = false) {
     { tab: "logbook", uros: "sorprendido", titulo: "Registra con una foto", texto: "En «Nueva» fotografías el protocolo operatorio y Uros extrae los datos: procedimiento, rol, diagnóstico, hallazgos. Solo revisas y guardas." },
     { tab: "logbook", uros: "pensativo", titulo: "Complementa después", texto: "Puedes volver a un registro para agregar la biopsia (con ISUP) o el control con imagen (si quedó stone free). Así tu casuística queda completa." },
     { tab: "logbook", uros: "bienhecho", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
+
+    { uros: "bienhecho", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
 
     { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
   ];
@@ -3632,6 +3642,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
       {subTab === "prescripciones" && esUrologo && <PrescripcionesPanel currentUser={currentUser}/>}
       {subTab === "interconsultas" && <InterconsultasPanel currentUser={currentUser} contexto={contexto}/>}
+      {subTab === "seguimiento" && <SeguimientoPanel currentUser={currentUser} contexto={contexto}/>}
     </div>
   );
 }
@@ -6688,42 +6699,40 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      {/* Submenú (aparece al tocar de nuevo la pestaña "Pacientes") */}
-      {toolsOpen && (
-        <div style={{marginBottom:12,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            {!soloLectura && (
-              <button onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>⚙️ Servicios {serviciosMenuOpen?"▴":"▾"}</button>
-            )}
-            {!soloLectura && <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nuevo</button>}
-          </div>
 
-          {serviciosMenuOpen && !soloLectura && (
-            <div style={{marginTop:10,paddingTop:10,borderTop:"0.5px solid var(--borde)",display:"flex",flexDirection:"column",gap:10}}>
-              <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🗂️ Mis servicios</button>
-              <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Servicio a visualizar</label>
-                <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-                  <option value="todos">Todos los servicios</option>
-                  {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Estado</label>
-                <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-                  <option value="activo">Solo activos</option>
-                  <option value="alta">Solo dados de alta</option>
-                  <option value="todos">Todos</option>
-                </select>
-              </div>
-            </div>
-          )}
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        <div style={{fontSize:11,color:"var(--texto-ter)"}}>
+          {pacientesFiltrados.length} pacientes{filtroServicio!=="todos"?` · ${filtroServicio}`:""}{filtroEstado!=="activo"?` · ${filtroEstado==="alta"?"dados de alta":"todos"}`:""}
+        </div>
+        {!soloLectura && (
+          <div style={{display:"flex",gap:6,marginLeft:"auto",flexWrap:"wrap"}}>
+            <button onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>⚙️ Servicios {serviciosMenuOpen?"▴":"▾"}</button>
+            <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
+          </div>
+        )}
+      </div>
+
+      {/* Panel de servicios y filtros (se abre con el botón ⚙️ Servicios) */}
+      {serviciosMenuOpen && !soloLectura && (
+        <div style={{marginBottom:12,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10,display:"flex",flexDirection:"column",gap:10}}>
+          <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🗂️ Mis servicios</button>
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Servicio a visualizar</label>
+            <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
+              <option value="todos">Todos los servicios</option>
+              {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Estado</label>
+            <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
+              <option value="activo">Solo activos</option>
+              <option value="alta">Solo dados de alta</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
         </div>
       )}
-
-      <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:10}}>
-        {pacientesFiltrados.length} pacientes{filtroServicio!=="todos"?` · ${filtroServicio}`:""}{filtroEstado!=="activo"?` · ${filtroEstado==="alta"?"dados de alta":"todos"}`:""}
-      </div>
 
       {loadingPacientes && (
         <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando pacientes...</div>
@@ -7088,6 +7097,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   }, [tema]);
   const config = useConfig();               // configuración del usuario (funciones + modo del chat)
   const [configOpen, setConfigOpen] = useState(false); // modal "Configuración"
+  const [equiposOpen, setEquiposOpen] = useState(false); // modal "Equipos" (menú de perfil)
 
   // ─── Sub-secciones de cada pestaña (viven aquí para que el submenú se
   // despliegue desde la pestaña principal, sin barras extra en los paneles) ───
@@ -7136,7 +7146,8 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     if ((subTabHospital === "tabla" && fnOculta(config, "hosp:tabla")) ||
         (subTabHospital === "notas" && fnOculta(config, "hosp:notas")) ||
         (subTabHospital === "prescripciones" && fnOculta(config, "hosp:prescripciones")) ||
-        (subTabHospital === "interconsultas" && fnOculta(config, "hosp:interconsultas"))) setSubTabHospital("pacientes");
+        (subTabHospital === "interconsultas" && fnOculta(config, "hosp:interconsultas")) ||
+        (subTabHospital === "seguimiento" && fnOculta(config, "hosp:seguimiento"))) setSubTabHospital("pacientes");
     if ((subTabBiblio === "videos" && fnOculta(config, "biblio:videos")) ||
         (subTabBiblio === "preguntas" && fnOculta(config, "biblio:preguntas")) ||
         (subTabBiblio === "medicamentos" && fnOculta(config, "biblio:medicamentos")) ||
@@ -7640,6 +7651,11 @@ if (videosResult.ok) {
   const tieneFuentes = docsRelevantes.length > 0;
   const consultaCirugias = buscarCirugiasRelevantes(txt);
   const consultaPacientes = buscarPacientesRelevantes(txt);
+  // Si la pregunta va sobre pacientes en seguimiento, se le entrega ese contexto real
+  let ctxSeguimiento = "";
+  if (/seguimiento|vigilancia|control(es)?\b|atrasad|pendiente.*control|proximo.*control|pr[oó]ximos?\s*control/i.test(txt)) {
+    try { ctxSeguimiento = await resumenSeguimientoParaIA(currentUser.id, contexto); } catch { ctxSeguimiento = ""; }
+  }
 
   // ── Flujo "responder con conocimiento propio" ──────────────────
   // Detecta si el mensaje anterior de Uros fue una OFERTA de responder con
@@ -7727,6 +7743,8 @@ if (videosResult.ok) {
         }).join("\n\n");
       }
     }
+    // Contexto de pacientes en seguimiento (si la pregunta lo amerita)
+    if (ctxSeguimiento) ctx += `\n\n${ctxSeguimiento}`;
     const sysPrompt = SYSTEM_PROMPT + modoIns + ctx;
     const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
     const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
@@ -7980,13 +7998,14 @@ if (!currentUser) {
         ...(!fnOculta(config, "hosp:notas") ? [["notas", "🗒️ Notas"]] : []),
         ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
         ...(!fnOculta(config, "hosp:interconsultas") ? [["interconsultas", "📄 Interconsultas"]] : []),
+        ...(!fnOculta(config, "hosp:seguimiento") ? [["seguimiento", "🔄 Seguimiento"]] : []),
       ],
       activo: subTabHospital,
       elegir: setSubTabHospital,
       extras: [
-        ...((subTabHospital === "pacientes" || subTabHospital === "tabla") ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
+        ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
-        ["🤝 Equipo de trabajo", () => accion("equipos")],
+        ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
       ],
       contexto: { actual: contexto, elegir: setContexto, opciones: [["personal", "👤 Mis pacientes"], ...equipos.map(e => [e.id, `👥 ${e.nombre}`])] },
     };
@@ -8065,6 +8084,9 @@ if (!currentUser) {
             </button>
             <button onClick={()=>{ setMenuOpen(false); setPerfilOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               👤 Mi perfil
+            </button>
+            <button onClick={()=>{ setMenuOpen(false); setEquiposOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+              🤝 Equipos{invitacionesPendientes.length > 0 ? ` (${invitacionesPendientes.length})` : ""}
             </button>
             <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🧭 Ver tutorial
@@ -8242,6 +8264,17 @@ if (!currentUser) {
       {tutorialOpen && <TutorialTour rol={currentUser?.rol} onGoToTab={setTab} onClose={cerrarTutorial}/>}
       {perfilOpen && <PerfilModal currentUser={currentUser} setCurrentUser={setCurrentUser} onClose={()=>setPerfilOpen(false)}/>}
       {configOpen && <ConfigModal onClose={()=>setConfigOpen(false)} currentUser={currentUser}/>}
+      {equiposOpen && (
+        <div onClick={()=>setEquiposOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:14,width:"100%",maxWidth:620,maxHeight:"88dvh",overflowY:"auto",WebkitOverflowScrolling:"touch",display:"flex",flexDirection:"column"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 18px 6px",flexShrink:0}}>
+              <div style={{fontSize:18,fontWeight:700,color:"var(--texto)"}}>🤝 Equipos</div>
+              <button onClick={()=>setEquiposOpen(false)} style={{background:"none",border:"none",fontSize:20,color:"var(--texto-ter)",cursor:"pointer",lineHeight:1}}>✕</button>
+            </div>
+            <EquiposPanel equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} currentUser={currentUser} onCerrar={()=>setEquiposOpen(false)}/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
