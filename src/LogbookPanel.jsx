@@ -50,8 +50,10 @@ const FAMILIAS = [
   [/circuncis|postect|fimosis/i,                                           "Circuncisión"],
   [/frenulo/i,                                                             "Frenuloplastía"],
   // Oncología mayor
-  [/prostatectom[ií]a\s*radical|\bptv\b|prostatectom[ií]a\s*(abierta|laparosc|robot|retrop)/i, "Prostatectomía radical"],
-  [/adenomectom[ií]a|prostatectom[ií]a\s*(simple|suprap)/i,                 "Adenomectomía prostática"],
+  // OJO: PTV = prostatectomía TRANSVESICAL = adenomectomía por HBP.
+  // NO es la prostatectomía radical (oncológica). Van en familias distintas.
+  [/\bptv\b|prostatectom[ií]a\s*(transvesic|suprap[uú]b|simple)|adenomectom[ií]a/i, "Adenomectomía prostática (PTV)"],
+  [/prostatectom[ií]a\s*radical|\bprr\b|prostatectom[ií]a\s*(abierta|laparosc|robot|retrop)/i, "Prostatectomía radical"],
   [/nefroureterectom[ií]a/i,                                               "Nefroureterectomía"],
   [/nefrectom[ií]a\s*parcial/i,                                            "Nefrectomía parcial"],
   [/nefrectom[ií]a/i,                                                      "Nefrectomía"],
@@ -539,9 +541,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (r.rol === "cirujano") v.cx++;
       if (ROLES_AYUDANTE.includes(r.rol)) v.ayud++;
       if (r.duracion_min > 0) v.dur.push(r.duracion_min);
-      // OJO: un sangrado de 0 ml es un dato válido (no es "sin registrar").
-      // Excluirlo inflaba el promedio.
-      if (r.sangrado_ml != null && r.sangrado_ml !== "") v.sangrado.push(Number(r.sangrado_ml));
+      // Sangrado: un 0 es un dato válido, y un campo vacío también cuenta como 0
+      // (no toda cirugía sangra; si hubiera sangrado se habría anotado).
+      // Por eso el n del sangrado es siempre el total de cirugías del procedimiento.
+      v.sangrado.push(r.sangrado_ml != null && r.sangrado_ml !== "" ? Number(r.sangrado_ml) : 0);
       if (r.tamano_litiasis_mm > 0) v.litiasis.push(r.tamano_litiasis_mm);
       if (r.tamano_prostata_cc > 0) v.prostata.push(r.tamano_prostata_cc);
       if (r.complicacion) v.compl++;
@@ -567,7 +570,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       }));
 
     const topProc = detalleProc.slice(0, 8).map((d) => ({
-      label: d.label, n: d.n, extra: d.durProm != null ? `${d.durProm} min prom` : null,
+      label: d.label, n: d.n, extra: d.dur ? `${d.dur.med} min` : null,
     }));
 
     // Resumen de ayudantías separado por procedimiento
@@ -631,10 +634,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const lineas = [
         `Métricas de logbook — ${currentUser.nombre}`,
         `Total: ${met.total} · Como cirujano: ${met.comoCirujano} · Como ayudante: ${met.comoAyudante}`,
-        met.durProm != null ? `Duración promedio: ${met.durProm} min` : "",
+        met.masFrecuente ? `Procedimiento más frecuente: ${met.masFrecuente.label} (${met.masFrecuente.n})` : "",
         "",
         "Por procedimiento:",
-        ...met.detalleProc.map(d => `• ${d.label}: ${d.n} (cirujano ${d.cx}, ayudante ${d.ayud})${d.durProm != null ? `, ${d.durProm} min prom` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}`),
+        ...met.detalleProc.map(d => `• ${d.label}: ${d.n} (cirujano ${d.cx}, ayudante ${d.ayud})${d.dur ? `, mediana ${d.dur.med} min (n=${d.dur.n})` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}`),
       ];
       return lineas.filter(Boolean).join("\n");
     }
@@ -754,7 +757,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             {campo("Hora inicio", <input type="time" style={inp} value={reg.hora_inicio} onChange={(e) => set("hora_inicio", e.target.value)} />)}
             {campo("Hora término", <input type="time" style={inp} value={reg.hora_termino} onChange={(e) => set("hora_termino", e.target.value)} />)}
             {campo("Duración (min)", <input type="number" style={inp} value={reg.duracion_min} onChange={(e) => set("duracion_min", e.target.value)} />)}
-            {campo("Sangrado (ml)", <input type="number" style={inp} value={reg.sangrado_ml} onChange={(e) => set("sangrado_ml", e.target.value)} />)}
+            {campo("Sangrado (ml)", <input type="number" min={0} style={inp} value={reg.sangrado_ml} onChange={(e) => set("sangrado_ml", e.target.value)} placeholder="0 si no sangró" />)}
             {campo("Tamaño litiasis (mm)", <input type="number" step="0.1" style={inp} value={reg.tamano_litiasis_mm} onChange={(e) => set("tamano_litiasis_mm", e.target.value)} placeholder="Ej: 12" />)}
             {campo("Tamaño próstata (cc)", <input type="number" step="0.1" style={inp} value={reg.tamano_prostata_cc} onChange={(e) => set("tamano_prostata_cc", e.target.value)} placeholder="Ej: 55" />)}
             <div style={{ gridColumn: "1 / -1" }}>{campo("Diagnóstico preoperatorio", <input style={inp} value={reg.diagnostico_pre} onChange={(e) => set("diagnostico_pre", e.target.value)} />)}</div>
@@ -1003,7 +1006,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           </div>
 
           <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>
-            Los valores por cirugía son <b>medianas</b> (no promedios): una cirugía muy larga o muy sangrante no distorsiona el resto. El <b>n</b> entre paréntesis indica en cuántos registros hay ese dato, que puede ser menor que el total del procedimiento. El <i>stone free</i> se calcula solo sobre las cirugías con control imagenológico registrado.
+            Los valores por cirugía son <b>medianas</b> (no promedios): una cirugía muy larga o muy sangrante no distorsiona el resto. El <b>n</b> indica sobre cuántos registros se calcula. En el <b>sangrado</b>, las cirugías sin cifra anotada se cuentan como <b>0 ml</b> (no toda cirugía sangra), por lo que su n es el total del procedimiento. El <i>stone free</i>, en cambio, se calcula solo sobre las cirugías con control imagenológico registrado.
             <br />Las complicaciones (Clavien-Dindo) no se muestran aquí; quedan registradas en cada cirugía y aparecen al exportar.
           </div>
 
