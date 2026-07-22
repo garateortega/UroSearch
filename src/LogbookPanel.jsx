@@ -20,32 +20,64 @@ const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante"]; // cuentan como 
 // Junta las variantes de una misma intervención (técnicas, lateralidad, siglas)
 // bajo una sola familia, para que las métricas no queden fragmentadas.
 const FAMILIAS = [
-  [/circuncis|postect/i,                                   "Circuncisión"],
-  [/rtu\s*-?\s*v|rtu\s*vesic|reseccion.*vesic/i,          "RTU vesical"],
-  [/rtu\s*-?\s*p|rtu\s*prost|reseccion.*prost/i,          "RTU prostática"],
-  [/nlpc|nefrolitotom[ií]a\s*percut|percut[aá]nea/i,        "Nefrolitotomía percutánea"],
-  [/rirs|urs\s*flex|ureterorrenoscop|nefrolitotom[ií]a\s*endosc|endosc[oó]pica/i, "Nefrolitotomía endoscópica (RIRS/URS)"],
-  [/ureterolitotom/i,                                      "Ureterolitotomía"],
-  [/urs(?!\s*flex)|ureteroscop/i,                          "Ureteroscopía"],
-  [/prostatectom[ií]a\s*radical|ptv|prostatectom[ií]a\s*(abierta|laparo|robot)/i, "Prostatectomía radical"],
-  [/nefrectom[ií]a\s*parcial/i,                             "Nefrectomía parcial"],
-  [/nefrectom[ií]a/i,                                       "Nefrectomía"],
-  [/orquiectom[ií]a|orquidopexia/i,                         "Cirugía testicular"],
-  [/varicocel/i,                                            "Varicocelectomía"],
-  [/hidrocel/i,                                             "Hidrocelectomía"],
-  [/cistectom[ií]a/i,                                       "Cistectomía"],
-  [/pieloplast/i,                                           "Pieloplastía"],
-  [/biopsia\s*prost/i,                                      "Biopsia prostática"],
-  [/cistolitotom|cistolitotric/i,                           "Cistolitotomía"],
-  [/instalaci[oó]n.*(jj|cateter)|cateter\s*jj|jj/i,         "Instalación catéter JJ"],
-  [/cistoscop/i,                                            "Cistoscopía"],
-  [/litotricia|leco/i,                                      "Litotricia extracorpórea"],
+  // El ORDEN importa: se aplica la primera que calce.
+  // Litiasis — RIRS y URS son procedimientos DISTINTOS:
+  //   RIRS = cirugía retrógrada intrarrenal → litiasis RENAL
+  //   URS  = ureteroscopía                  → litiasis URETERAL
+  [/nlpc|nefrolitotom[ií]a\s*percut|percut[aá]nea|pcnl|mini\s*perc/i,      "Nefrolitotomía percutánea (NLPC)"],
+  [/rirs|retr[oó]grada\s*intrarrenal|ureterorrenoscop[ií]a\s*flexible|urs\s*flex|nefrolitotom[ií]a\s*(endosc|flex)/i, "Nefrolitotomía endoscópica (RIRS)"],
+  [/ureterolitotom[ií]a\s*(endosc|l[aá]ser)?|urs\s*(sem|r[ií]gid)|ureteroscop[ií]a|\burs\b/i, "Ureterolitotomía endoscópica (URS)"],
+  [/ureterolitotom[ií]a/i,                                                 "Ureterolitotomía"],
+  [/litotricia|leco|eswl/i,                                                "Litotricia extracorpórea (LEC)"],
+  [/cistolitotom|cistolitotric|litotricia\s*vesical/i,                     "Cistolitotomía"],
+  // Endourología / vía urinaria
+  [/(instalaci[oó]n|colocaci[oó]n|cambio|retiro|recambio).*(doble\s*j|jj|cat[eé]ter\s*ureteral)|doble\s*j|\bjj\b|pigtail/i, "Catéter doble J (instalación/cambio/retiro)"],
+  [/nefrostom[ií]a/i,                                                      "Nefrostomía"],
+  [/cistoscop[ií]a/i,                                                      "Cistoscopía"],
+  // Resecciones transuretrales
+  [/rtu\s*-?\s*v\b|rtu\s*vesic|resecci[oó]n\s*transuretral\s*(de\s*)?(tumor\s*)?vesic/i, "RTU vesical (RTU-V)"],
+  [/rtu\s*-?\s*p\b|rtu\s*prost|resecci[oó]n\s*transuretral\s*(de\s*)?prost/i,            "RTU prostática (RTU-P)"],
+  // Escroto y testículo — la lateralidad NO separa
+  [/eversi[oó]n.*t[uú]nica|t[uú]nica\s*vaginal|winkelmann|jaboulay|lord/i, "Eversión de túnica vaginal"],
+  [/hidrocelectom[ií]a|hidrocele/i,                                        "Hidrocelectomía"],
+  [/varicocelectom[ií]a|varicocele/i,                                      "Varicocelectomía"],
+  [/orquiectom[ií]a/i,                                                     "Orquiectomía"],
+  [/orquidopexia|orquiopexia|criptorquid/i,                                "Orquidopexia"],
+  [/espermatocele|epididimectom/i,                                         "Cirugía de epidídimo"],
+  [/vasectom[ií]a/i,                                                       "Vasectomía"],
+  [/exploraci[oó]n\s*escrotal|torsi[oó]n\s*testicular/i,                   "Exploración escrotal"],
+  // Pene
+  [/circuncis|postect|fimosis/i,                                           "Circuncisión"],
+  [/frenulo/i,                                                             "Frenuloplastía"],
+  // Oncología mayor
+  [/prostatectom[ií]a\s*radical|\bptv\b|prostatectom[ií]a\s*(abierta|laparosc|robot|retrop)/i, "Prostatectomía radical"],
+  [/adenomectom[ií]a|prostatectom[ií]a\s*(simple|suprap)/i,                 "Adenomectomía prostática"],
+  [/nefroureterectom[ií]a/i,                                               "Nefroureterectomía"],
+  [/nefrectom[ií]a\s*parcial/i,                                            "Nefrectomía parcial"],
+  [/nefrectom[ií]a/i,                                                      "Nefrectomía"],
+  [/cistectom[ií]a/i,                                                      "Cistectomía"],
+  [/linfadenectom[ií]a/i,                                                  "Linfadenectomía"],
+  // Reconstructiva / otros
+  [/pieloplast/i,                                                          "Pieloplastía"],
+  [/uretroplast|uretrotom/i,                                               "Cirugía de uretra"],
+  [/biopsia\s*prost/i,                                                     "Biopsia prostática"],
+  [/biopsia\s*(renal|vesical|test)/i,                                      "Biopsia (otras)"],
+  [/reimplante\s*ureteral|ureteroneocist/i,                                "Reimplante ureteral"],
+  [/talla\s*vesical|cistostom[ií]a/i,                                      "Cistostomía / talla vesical"],
 ];
+
 function familiaProc(nombre) {
-  const t = (nombre || "").trim();
+  let t = (nombre || "").trim();
   if (!t) return "Sin especificar";
+  // La lateralidad y algunos calificativos no deben separar familias
+  t = t
+    .replace(/\b(derech[ao]|izquierd[ao]|bilateral|unilateral|derecha|izq\.?|der\.?|\(d\)|\(i\))\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   for (const [re, fam] of FAMILIAS) if (re.test(t)) return fam;
-  return t; // si no calza en ninguna familia, se muestra tal cual
+  // Si no calza, se limpia y se capitaliza para agrupar variantes de escritura
+  const limpio = t.replace(/[.,;]+$/, "").toLowerCase();
+  return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
 

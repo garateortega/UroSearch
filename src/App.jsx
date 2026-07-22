@@ -1351,7 +1351,7 @@ function LogoUroSearch({ size = 40 }) {
 // Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
 // carga, estados vacíos), nunca sobre datos clínicos.
 // ============================================================
-const UROS_VERSION = "6"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
+const UROS_VERSION = "8"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
 const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
 // Detecta pantallas angostas (celular) para adaptar layouts inline.
@@ -1453,7 +1453,7 @@ function pasosTutorial(rol, movil = false) {
     { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
 
     // ─── RECORDATORIO ───
-    { uros: "pensando", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
+    { uros: "pabellon_serio", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
 
     // ─── CHAT ───
     { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas." },
@@ -1464,12 +1464,12 @@ function pasosTutorial(rol, movil = false) {
     { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
     ...(movil ? [{ tab: "hospital", subtab: "pacientes", uros: "point", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." }] : []),
     { tab: "hospital", subtab: "pacientes", uros: "pensativo", titulo: "Ordena los servicios a tu manera", texto: "Deja presionado el nombre de un servicio hasta que vibre y arrástralo a su lugar. Al soltarlo, el orden se guarda y todo tu equipo lo ve igual." },
-    { tab: "hospital", subtab: "interconsultas", uros: "tablet", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
+    { tab: "hospital", subtab: "interconsultas", uros: "camara", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
 
     // ─── SEGUIMIENTO ───
     { tab: "hospital", subtab: "seguimiento", uros: "point", titulo: "🔄 Seguimiento de pacientes", texto: "Aquí creas tus propios criterios de control: «Vigilancia activa cáncer testicular», «Seguimiento post-RTU vesical», o el que necesites. Tú defines cada cuánto se controla." },
     { tab: "hospital", subtab: "seguimiento", uros: "sorprendido", titulo: "Te avisa antes de que se pase", texto: "Cada paciente se pinta según su próximo control: 🟢 al día, 🟡 por vencer, 🔴 atrasado. Puedes ordenarlos por urgencia o por los más antiguos, para que nadie se te quede atrás." },
-    { tab: "hospital", subtab: "seguimiento", uros: "tablet", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
+    { tab: "hospital", subtab: "seguimiento", uros: "camara", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
     { tab: "hospital", subtab: "seguimiento", uros: "explicando", titulo: "Y puedes preguntarme", texto: "En el chat puedes pedirme «¿qué pacientes tengo con el control atrasado?» y te respondo con tus pacientes reales en seguimiento." },
     { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "En el menú de Hospital, la opción 🛠️ Herramientas muestra esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
@@ -1479,21 +1479,21 @@ function pasosTutorial(rol, movil = false) {
     { target: "selector-contexto", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Personal ↔ Equipo", texto: "Este botón cambia entre 👤 «Mis Pacientes» y 👥 un equipo. Pacientes, tabla y notas se muestran según el contexto elegido aquí." },
 
     // ─── BIBLIOTECA ───
-    { target: "tab-conocimiento", tab: "conocimiento", uros: "hola", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
+    { target: "tab-conocimiento", tab: "conocimiento", uros: "investigando", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
     { target: "tab-conocimiento", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "Toca de nuevo la pestaña Biblioteca y se despliega: 🔪 Cirugías · 📚 Videos · ❓ Preguntas · 💊 Medicamentos · 🧮 Scores." },
-    { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "explicando", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
+    { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "pizarra", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
     { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
     { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
     { tab: "conocimiento", subtab: "preguntas", uros: "point", titulo: "📊 Mi progreso", texto: "En «Mi progreso» (dentro de Preguntas) se va acumulando tu rendimiento y te muestro en qué temas estás más débil, para que sepas qué reforzar." },
 
     // ─── LOGBOOK ───
-    { target: "tab-logbook", tab: "logbook", uros: "tablet", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
+    { target: "tab-logbook", tab: "logbook", uros: "pabellon", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
     { target: "tab-logbook", tab: "logbook", uros: "point", titulo: "Secciones del Logbook", texto: "Toca de nuevo la pestaña Logbook y se despliega: 📋 Registros · 📷 Nueva · 📊 Métricas, más 🔗 Compartir con tu equipo." },
-    { tab: "logbook", uros: "sorprendido", titulo: "Registra con una foto", texto: "En «Nueva» fotografías el protocolo operatorio y Uros extrae los datos: procedimiento, rol, diagnóstico, hallazgos. Solo revisas y guardas." },
-    { tab: "logbook", uros: "pensativo", titulo: "Complementa después", texto: "Puedes volver a un registro para agregar la biopsia (con ISUP) o el control con imagen (si quedó stone free). Así tu casuística queda completa." },
-    { tab: "logbook", uros: "bienhecho", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
+    { tab: "logbook", uros: "camara", titulo: "Registra con una foto", texto: "En «Nueva» fotografías el protocolo operatorio y Uros extrae los datos: procedimiento, rol, diagnóstico, hallazgos. Solo revisas y guardas." },
+    { tab: "logbook", uros: "escribiendo", titulo: "Complementa después", texto: "Puedes volver a un registro para agregar la biopsia (con ISUP) o el control con imagen (si quedó stone free). Así tu casuística queda completa." },
+    { tab: "logbook", uros: "pulgar", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
 
-    { uros: "bienhecho", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
+    { uros: "pulgar", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
 
     { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
   ];
@@ -1679,7 +1679,18 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
   const pasos = pasosTutorial(rol, movil);
   const [i, setI] = useState(0);
   const [rect, setRect] = useState(null);
+  const [cardH, setCardH] = useState(0);   // altura real de la tarjeta, para no cortarla
+  const cardRef = useRef(null);
   const paso = pasos[i];
+
+  // Mide la tarjeta cada vez que cambia el paso
+  useEffect(() => {
+    const medir = () => { if (cardRef.current) setCardH(cardRef.current.offsetHeight); };
+    medir();
+    const t = setTimeout(medir, 120);       // tras cargar la imagen de Uros
+    window.addEventListener("resize", medir);
+    return () => { clearTimeout(t); window.removeEventListener("resize", medir); };
+  }, [i]);
 
   // Asegura que la pestaña correcta esté activa antes de resaltar su botón,
   // y navega a la sub-pestaña si el paso lo requiere (con reintento por si el
@@ -1721,14 +1732,21 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
   const vw = typeof window !== "undefined" ? window.innerWidth : 400;
   const tieneDemo = !!paso.demo;
   const cardW = movil ? Math.min(vw - 24, tieneDemo ? 360 : 340) : (tieneDemo ? 380 : 340);
+  // Altura REAL de la tarjeta (las que llevan a Uros son bastante más altas que
+  // la estimación fija que se usaba antes, y por eso se cortaban).
+  const alturaCard = cardH || (paso.uros ? 330 : 190);
   let cardStyle;
   if (rect && !movil && !tieneDemo) {
     const abajo = rect.y + rect.h + 14;
-    const cabeAbajo = abajo + 180 < vh;
     const left = Math.min(Math.max(12, rect.x + rect.w / 2 - cardW / 2), vw - cardW - 12);
-    cardStyle = cabeAbajo
-      ? { top: abajo, left }
-      : { top: Math.max(12, rect.y - 190), left };
+    if (abajo + alturaCard + 12 <= vh) {
+      cardStyle = { top: abajo, left };                       // cabe debajo
+    } else if (rect.y - alturaCard - 14 >= 12) {
+      cardStyle = { top: rect.y - alturaCard - 14, left };    // cabe arriba
+    } else {
+      // No cabe ni arriba ni abajo: se centra verticalmente y se deja scrollear
+      cardStyle = { top: Math.max(12, (vh - alturaCard) / 2), left };
+    }
   } else if (tieneDemo) {
     // Pasos con demostración: siempre centrado (las maquetas pueden ser altas).
     cardStyle = { top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
@@ -1736,9 +1754,13 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
     // En móvil: si el elemento resaltado está en la mitad inferior, la tarjeta va
     // ARRIBA (si no, taparía el elemento y quedaría bajo la barra del navegador).
     const enMitadInferior = rect.y + rect.h / 2 > vh / 2;
-    cardStyle = enMitadInferior
+    // Si la tarjeta es más alta que el espacio disponible, se centra y scrollea
+    const cabe = alturaCard + 24 <= vh;
+    cardStyle = !cabe
       ? { top: 12, left: "50%", transform: "translateX(-50%)" }
-      : { bottom: 12, left: "50%", transform: "translateX(-50%)" };
+      : enMitadInferior
+        ? { top: 12, left: "50%", transform: "translateX(-50%)" }
+        : { bottom: 12, left: "50%", transform: "translateX(-50%)" };
   } else {
     cardStyle = movil
       ? { bottom: 12, left: "50%", transform: "translateX(-50%)" }
@@ -1763,7 +1785,7 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
 
       {/* Tarjeta del paso. Estilo "hero": banner oscuro con Uros grande arriba
           (como una tarjeta de presentación), y debajo el texto y el botón. */}
-      <div style={{
+      <div ref={cardRef} style={{
         position: "absolute", width: cardW, maxWidth: "calc(100vw - 24px)", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", WebkitOverflowScrolling: "touch",
         background: "var(--superficie)", border: "1px solid var(--borde)",
         borderRadius: 18, boxShadow: "0 12px 32px rgba(15,23,42,0.28)",
