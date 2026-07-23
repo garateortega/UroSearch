@@ -208,6 +208,18 @@ export async function eliminarServicioEquipo(servicioId) {
   return { ok: true };
 }
 
+// Guarda el orden de TODOS los servicios del equipo (compartido para todos los miembros).
+// Recibe la lista ya reordenada [{id,...}] y persiste el índice en la columna "orden".
+export async function reordenarServiciosEquipo(servicios) {
+  const updates = servicios.map((s, i) =>
+    supabase.from('servicios_equipo').update({ orden: i }).eq('id', s.id)
+  );
+  const results = await Promise.all(updates);
+  const err = results.find(r => r.error);
+  if (err) return { ok: false, error: err.error.message };
+  return { ok: true };
+}
+
 export async function crearServiciosEquipoBulk(equipoId, userId, nombres) {
   const filas = nombres.map((nombre, i) => ({
     equipo_id: equipoId, creado_por: userId, nombre: nombre.trim(), orden: i,

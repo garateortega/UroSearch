@@ -3,7 +3,7 @@ import { register as registerUser, login as loginUser, logout as logoutUser, get
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
-import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo } from "./pacientes";
+import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
@@ -1240,7 +1240,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.2";
+const VERSION = "v1.9.3";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -5162,6 +5162,10 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   // Servicios
   const [nuevoServicio, setNuevoServicio] = useState("");
   const [serviciosEquipo, setServiciosEquipo] = useState([]);
+  // Crear servicio directamente desde el formulario de paciente
+  const [creandoServicioInline, setCreandoServicioInline] = useState(false);
+  const [nuevoServicioInline, setNuevoServicioInline] = useState("");
+  const [guardandoServicioInline, setGuardandoServicioInline] = useState(false);
   // ─── Reordenar servicios arrastrándolos (mouse y táctil) ───
   const serviciosListRef = useRef(null);
   const [dragServicio, setDragServicio] = useState(null); // { id, dy } → el ítem "flota" siguiendo el dedo
@@ -5175,17 +5179,18 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     dragInfo.current = { id: servicio.id, desdeIdx: idx, aIdx: idx, y0: e.clientY, alto };
     setDragServicio({ id: servicio.id, dy: 0 });
 
+    const largoLista = (esEquipo ? serviciosEquipo : misServiciosLista).length;
     const onMove = (ev) => {
       const d = dragInfo.current;
       if (!d) return;
       const dy = ev.clientY - d.y0;
       // ¿Sobre qué índice está flotando ahora?
       let destino = d.desdeIdx + Math.round(dy / d.alto);
-      destino = Math.max(0, Math.min(misServiciosLista.length - 1, destino));
+      destino = Math.max(0, Math.min(largoLista - 1, destino));
       d.aIdx = destino;
       setDragServicio({ id: d.id, dy });
     };
-    const onUp = () => {
+    const onUp = async () => {
       const d = dragInfo.current;
       dragInfo.current = null;
       window.removeEventListener("pointermove", onMove);
@@ -5193,13 +5198,29 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
       window.removeEventListener("pointercancel", onUp);
       setDragServicio(null);
       if (!d || d.aIdx === d.desdeIdx) return;
-      setMisServiciosLista(prev => {
-        const nueva = [...prev];
-        const [item] = nueva.splice(d.desdeIdx, 1);
-        nueva.splice(d.aIdx, 0, item);
-        guardarOrdenServicios(nueva);
-        return nueva;
-      });
+      if (esEquipo) {
+        // Orden COMPARTIDO: se reordena y se persiste en el servidor para todos.
+        let nuevaLista;
+        setServiciosEquipo(prev => {
+          const nueva = [...prev];
+          const [item] = nueva.splice(d.desdeIdx, 1);
+          nueva.splice(d.aIdx, 0, item);
+          nuevaLista = nueva;
+          return nueva;
+        });
+        if (nuevaLista) {
+          const r = await reordenarServiciosEquipo(nuevaLista);
+          if (!r.ok) alert("No se pudo guardar el orden: " + r.error);
+        }
+      } else {
+        setMisServiciosLista(prev => {
+          const nueva = [...prev];
+          const [item] = nueva.splice(d.desdeIdx, 1);
+          nueva.splice(d.aIdx, 0, item);
+          guardarOrdenServicios(nueva);
+          return nueva;
+        });
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -5831,6 +5852,30 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     }
   };
 
+  // Crear un servicio desde el formulario de paciente y dejarlo seleccionado.
+  // En equipo queda disponible para todos; en personal, para mí.
+  const crearServicioInline = async () => {
+    const nombre = nuevoServicioInline.trim();
+    if (!nombre) return;
+    setGuardandoServicioInline(true);
+    try {
+      if (esEquipo) {
+        const r = await crearServicioEquipo(contexto, currentUser.id, nombre, serviciosEquipo.length);
+        if (!r.ok) { alert(r.error); return; }
+        setServiciosEquipo(prev => [...prev, r.servicio]);
+      } else {
+        const r = await crearServicio(currentUser.id, nombre);
+        if (!r.ok) { alert(r.error); return; }
+        setMisServiciosLista(prev => [...prev, r.servicio]);
+      }
+      setNuevo(n => ({ ...n, servicio: nombre }));   // queda elegido
+      setNuevoServicioInline("");
+      setCreandoServicioInline(false);
+    } finally {
+      setGuardandoServicioInline(false);
+    }
+  };
+
   // Migrar mis servicios personales a este equipo (botón en el panel)
   const migrarServicios = async () => {
     if (!esEquipo) return;
@@ -5908,22 +5953,49 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         <label style={labelStyle}>Servicio / Piso</label>
         {serviciosDisponibles.length > 0 ? (
-          <select value={nuevo.servicio} onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} style={inputStyle}>
+          <select
+            value={creandoServicioInline ? "__nuevo__" : nuevo.servicio}
+            onChange={e => {
+              if (e.target.value === "__nuevo__") { setCreandoServicioInline(true); setNuevo({...nuevo, servicio: ""}); }
+              else { setCreandoServicioInline(false); setNuevo({...nuevo, servicio: e.target.value}); }
+            }}
+            style={inputStyle}
+          >
             <option value="">Selecciona...</option>
             {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
-            <option value="__nuevo__">➕ Otro servicio…</option>
+            <option value="__nuevo__">➕ Crear nuevo servicio…</option>
           </select>
         ) : (
-          // Sin servicios en la lista: en vez de bloquear, se permite escribirlo.
-          // (En equipo, la lista puede venir vacía si ningún miembro configuró servicios.)
-          <input value={nuevo.servicio} onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} placeholder="Escribe el servicio (ej: MQ 1, Urología)" style={inputStyle}/>
+          // Sin servicios aún: entra directo al modo "crear nuevo"
+          <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6,lineHeight:1.4}}>
+            {esEquipo ? "Este equipo aún no tiene servicios. Crea el primero:" : "Aún no tienes servicios. Crea el primero:"}
+          </div>
         )}
-        {nuevo.servicio === "__nuevo__" && (
-          <input autoFocus onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} placeholder="Nombre del nuevo servicio" style={{...inputStyle, marginTop:6}}/>
+
+        {(creandoServicioInline || serviciosDisponibles.length === 0) && (
+          <div style={{display:"flex",gap:6,marginTop:6}}>
+            <input
+              autoFocus
+              value={nuevoServicioInline}
+              onChange={e => setNuevoServicioInline(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); crearServicioInline(); } }}
+              placeholder="Ej: MQ 1, Urología 3er piso"
+              style={{flex:1, ...inputStyle}}
+            />
+            <button
+              type="button"
+              onClick={crearServicioInline}
+              disabled={!nuevoServicioInline.trim() || guardandoServicioInline}
+              style={{padding:"9px 14px",fontSize:13,fontWeight:600,background:nuevoServicioInline.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}
+            >{guardandoServicioInline ? "…" : "Crear"}</button>
+            {serviciosDisponibles.length > 0 && (
+              <button type="button" onClick={()=>{setCreandoServicioInline(false); setNuevoServicioInline("");}} style={{padding:"9px 10px",fontSize:13,background:"none",border:"none",color:"var(--texto-ter)",cursor:"pointer"}}>✕</button>
+            )}
+          </div>
         )}
-        {esEquipo && serviciosDisponibles.length === 0 && (
-          <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:4,marginBottom:8,lineHeight:1.4}}>
-            Este equipo aún no tiene servicios en común. Puedes escribir el servicio ahora, o crearlos desde «⚙️ Servicios» para que aparezcan en la lista de todos.
+        {esEquipo && (creandoServicioInline || serviciosDisponibles.length === 0) && (
+          <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4}}>
+            Al crearlo, lo verán todos los miembros del equipo.
           </div>
         )}
 
@@ -5951,7 +6023,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   // ============================================================
 
   if (vista === "servicios") {
-    const permiteDrag = !esEquipo; // el reordenamiento por arrastre es solo para servicios personales
+    const permiteDrag = true; // el orden se comparte: en equipo se guarda en el servidor
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
         <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
@@ -5960,7 +6032,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
         <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>
           {esEquipo
-            ? "Estos servicios los ven y editan todos los miembros del equipo."
+            ? "Estos servicios los ven, crean y eliminan todos los miembros del equipo. Mantén presionado ☰ y arrastra para reordenar: el orden se comparte con todos."
             : "Configura los servicios/pisos del hospital donde atiendes. Mantén presionado ☰ y arrastra para reordenarlos."}
         </div>
 
