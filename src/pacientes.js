@@ -176,25 +176,63 @@ export async function crearServiciosBulk(userId, nombres) {
   return { ok: true, servicios: data || [] };
 }
 
-// Servicios que ven todos los miembros del equipo (unión de servicios de cada miembro)
+// ── Servicios propios del EQUIPO (tabla servicios_equipo) ──
+// Todos los miembros ven y editan la misma lista, sin depender de sus
+// servicios personales. Devuelve objetos {id, nombre, orden} como los personales.
 export async function listarServiciosEquipo(equipoId) {
-  // Primero obtener los user_ids de los miembros
-  const { data: miembros, error: errMiembros } = await supabase
-    .from('miembros_equipo')
-    .select('user_id')
-    .eq('equipo_id', equipoId);
-  if (errMiembros) return { ok: false, error: errMiembros.message };
-  
-  const userIds = (miembros || []).map(m => m.user_id);
-  if (userIds.length === 0) return { ok: true, servicios: [] };
-
   const { data, error } = await supabase
-    .from('servicios_usuario')
-    .select('nombre')
-    .in('user_id', userIds);
+    .from('servicios_equipo')
+    .select('*')
+    .eq('equipo_id', equipoId)
+    .order('orden', { ascending: true });
   if (error) return { ok: false, error: error.message };
-  
-  // Deduplicar nombres
-  const unicos = Array.from(new Set((data || []).map(s => s.nombre)));
-  return { ok: true, servicios: unicos };
+  return { ok: true, servicios: data || [] };
+}
+
+export async function crearServicioEquipo(equipoId, userId, nombre, orden = 0) {
+  const { data, error } = await supabase
+    .from('servicios_equipo')
+    .insert({ equipo_id: equipoId, creado_por: userId, nombre: nombre.trim(), orden })
+    .select()
+    .single();
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: 'Ese servicio ya existe en el equipo' };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, servicio: data };
+}
+
+export async function eliminarServicioEquipo(servicioId) {
+  const { error } = await supabase.from('servicios_equipo').delete().eq('id', servicioId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function crearServiciosEquipoBulk(equipoId, userId, nombres) {
+  const filas = nombres.map((nombre, i) => ({
+    equipo_id: equipoId, creado_por: userId, nombre: nombre.trim(), orden: i,
+  }));
+  const { data, error } = await supabase
+    .from('servicios_equipo')
+    .insert(filas)
+    .select();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, servicios: data || [] };
+}
+
+// Migración puntual: copia al equipo los servicios personales que le pasen,
+// evitando duplicar los que ya existan en el equipo.
+export async function migrarServiciosAlEquipo(equipoId, userId, nombres) {
+  const { data: existentes } = await supabase
+    .from('servicios_equipo').select('nombre').eq('equipo_id', equipoId);
+  const yaHay = new Set((existentes || []).map(s => s.nombre.toLowerCase()));
+  const nuevos = nombres.filter(n => n && !yaHay.has(n.trim().toLowerCase()));
+  if (nuevos.length === 0) return { ok: true, servicios: [], migrados: 0 };
+  const base = existentes?.length || 0;
+  const filas = nuevos.map((nombre, i) => ({
+    equipo_id: equipoId, creado_por: userId, nombre: nombre.trim(), orden: base + i,
+  }));
+  const { data, error } = await supabase.from('servicios_equipo').insert(filas).select();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, servicios: data || [], migrados: (data || []).length };
 }

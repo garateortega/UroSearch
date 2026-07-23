@@ -3,7 +3,7 @@ import { register as registerUser, login as loginUser, logout as logoutUser, get
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
-import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo } from "./pacientes";
+import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
@@ -700,13 +700,32 @@ function PrescripcionesPanel({ currentUser }) {
     return [...base, ...libres];
   };
 
+  // Tras un despliegue nuevo, el navegador puede tener cacheada la versión
+  // anterior de la app, que pide archivos con nombres que ya no existen.
+  // Si eso pasa al cargar jsPDF, se recarga la página UNA vez y se reintenta.
+  const cargarJsPDF = async () => {
+    try {
+      return (await import("jspdf")).jsPDF;
+    } catch (e) {
+      const esImportRoto = /dynamically imported module|Failed to fetch|Importing a module script failed|error loading dynamically/i.test(e?.message || "");
+      const yaRecargo = sessionStorage.getItem("uro_recarga_import") === "1";
+      if (esImportRoto && !yaRecargo) {
+        sessionStorage.setItem("uro_recarga_import", "1");
+        window.location.reload();
+        // La página se recarga; se lanza para cortar la ejecución actual.
+        throw new Error("Actualizando la aplicación…");
+      }
+      throw new Error("No se pudo cargar el generador de PDF. Cierra la aplicación por completo y vuelve a abrirla.");
+    }
+  };
+
   const generarPDF = async () => {
     const lineas = lineasActuales();
     if (lineas.length === 0) { setMsg("⚠️ Selecciona al menos un ítem o agrega una línea."); return; }
     if (!perfil?.nombre_completo && !perfil?.nombre) { setMsg("⚠️ Completa tu perfil (Mi perfil) antes de generar recetas."); return; }
     setGenerando(true); setMsg("");
     try {
-      const { jsPDF } = await import("jspdf");
+      const jsPDF = await cargarJsPDF();
       const doc = new jsPDF({ unit: "mm", format: "a5" });
       const W = doc.internal.pageSize.getWidth();
       const H = doc.internal.pageSize.getHeight();
@@ -1221,7 +1240,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.0";
+const VERSION = "v1.9.2";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -5242,10 +5261,10 @@ const cargarMiembrosEquipo = async () => {
     cargarMiembrosEquipo();
   }, [contexto, equipos]);
 
-  // Servicios disponibles según contexto
-  const serviciosDisponibles = esEquipo 
-    ? serviciosEquipo 
-    : misServiciosLista.map(s => s.nombre);
+  // Lista de servicios del contexto actual (objetos {id, nombre, orden})
+  const serviciosActivos = esEquipo ? serviciosEquipo : misServiciosLista;
+  // Nombres para el desplegable del formulario
+  const serviciosDisponibles = serviciosActivos.map(s => s.nombre);
 
   // Filtrar pacientes
   const pacientesFiltrados = pacientes.filter(p => {
@@ -5420,7 +5439,7 @@ const cargarMiembrosEquipo = async () => {
     if (!nuevo.iniciales.trim()) return setError("Ingresa las iniciales");
     if (nuevo.iniciales.length > 100) return setError("Máximo 100 caracteres");
     if (!nuevo.cama.trim()) return setError("Ingresa la cama");
-    if (!nuevo.servicio.trim()) return setError("Ingresa el servicio");
+    if (!nuevo.servicio.trim() || nuevo.servicio === "__nuevo__") return setError("Ingresa el servicio");
     if (!nuevo.diagnostico.trim()) return setError("Ingresa el diagnóstico");
 
     const datos = {
@@ -5788,16 +5807,40 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
   const agregarServicio = async () => {
     if (!nuevoServicio.trim()) return;
-    const result = await crearServicio(currentUser.id, nuevoServicio.trim());
-    if (!result.ok) return alert(result.error);
-    setMisServiciosLista(prev => [...prev, result.servicio]);
+    if (esEquipo) {
+      const result = await crearServicioEquipo(contexto, currentUser.id, nuevoServicio.trim(), serviciosEquipo.length);
+      if (!result.ok) return alert(result.error);
+      setServiciosEquipo(prev => [...prev, result.servicio]);
+    } else {
+      const result = await crearServicio(currentUser.id, nuevoServicio.trim());
+      if (!result.ok) return alert(result.error);
+      setMisServiciosLista(prev => [...prev, result.servicio]);
+    }
     setNuevoServicio("");
   };
 
   const quitarServicio = async (servicioId) => {
-    const result = await eliminarServicio(servicioId);
+    if (esEquipo) {
+      const result = await eliminarServicioEquipo(servicioId);
+      if (!result.ok) return alert("Error: " + result.error);
+      setServiciosEquipo(prev => prev.filter(s => s.id !== servicioId));
+    } else {
+      const result = await eliminarServicio(servicioId);
+      if (!result.ok) return alert("Error: " + result.error);
+      setMisServiciosLista(prev => prev.filter(s => s.id !== servicioId));
+    }
+  };
+
+  // Migrar mis servicios personales a este equipo (botón en el panel)
+  const migrarServicios = async () => {
+    if (!esEquipo) return;
+    const nombres = misServiciosLista.map(s => s.nombre);
+    if (nombres.length === 0) return alert("No tienes servicios personales para copiar.");
+    const result = await migrarServiciosAlEquipo(contexto, currentUser.id, nombres);
     if (!result.ok) return alert("Error: " + result.error);
-    setMisServiciosLista(prev => prev.filter(s => s.id !== servicioId));
+    if (result.migrados === 0) return alert("El equipo ya tenía todos tus servicios.");
+    setServiciosEquipo(prev => [...prev, ...result.servicios]);
+    alert(`Se copiaron ${result.migrados} servicio(s) al equipo.`);
   };
 
   // ============================================================
@@ -5868,10 +5911,19 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <select value={nuevo.servicio} onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} style={inputStyle}>
             <option value="">Selecciona...</option>
             {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="__nuevo__">➕ Otro servicio…</option>
           </select>
         ) : (
-          <div style={{fontSize:11,color:"var(--alerta)",background:"var(--alerta-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>
-            No tienes servicios configurados. Ve a "⚙️ Servicios" antes de crear pacientes.
+          // Sin servicios en la lista: en vez de bloquear, se permite escribirlo.
+          // (En equipo, la lista puede venir vacía si ningún miembro configuró servicios.)
+          <input value={nuevo.servicio} onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} placeholder="Escribe el servicio (ej: MQ 1, Urología)" style={inputStyle}/>
+        )}
+        {nuevo.servicio === "__nuevo__" && (
+          <input autoFocus onChange={e=>setNuevo({...nuevo,servicio:e.target.value})} placeholder="Nombre del nuevo servicio" style={{...inputStyle, marginTop:6}}/>
+        )}
+        {esEquipo && serviciosDisponibles.length === 0 && (
+          <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:4,marginBottom:8,lineHeight:1.4}}>
+            Este equipo aún no tiene servicios en común. Puedes escribir el servicio ahora, o crearlos desde «⚙️ Servicios» para que aparezcan en la lista de todos.
           </div>
         )}
 
@@ -5899,23 +5951,38 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   // ============================================================
 
   if (vista === "servicios") {
+    const permiteDrag = !esEquipo; // el reordenamiento por arrastre es solo para servicios personales
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
         <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>⚙️ Mis servicios</div>
-        <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>Configura los servicios/pisos del hospital donde atiendes. Mantén presionado ☰ y arrastra para reordenarlos.</div>
+        <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>
+          ⚙️ {esEquipo ? `Servicios de ${equipoActual?.nombre || "equipo"}` : "Mis servicios"}
+        </div>
+        <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>
+          {esEquipo
+            ? "Estos servicios los ven y editan todos los miembros del equipo."
+            : "Configura los servicios/pisos del hospital donde atiendes. Mantén presionado ☰ y arrastra para reordenarlos."}
+        </div>
+
+        {esEquipo && misServiciosLista.length > 0 && (
+          <button onClick={migrarServicios} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:12.5,fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
+            ⬆️ Copiar mis {misServiciosLista.length} servicio(s) personales a este equipo
+          </button>
+        )}
 
         <div style={{display:"flex",gap:6,marginBottom:14}}>
           <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
           <button onClick={agregarServicio} disabled={!nuevoServicio.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:nuevoServicio.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Agregar</button>
         </div>
 
-        {misServiciosLista.length === 0 ? (
-          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13}}>No tienes servicios configurados.</div>
+        {serviciosActivos.length === 0 ? (
+          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13}}>
+            {esEquipo ? "Este equipo aún no tiene servicios. Agrégalos aquí o copia los tuyos." : "No tienes servicios configurados."}
+          </div>
         ) : (
           <div ref={serviciosListRef} style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
-            {misServiciosLista.map((s, idx) => {
-              const arrastrando = dragServicio?.id === s.id;
+            {serviciosActivos.map((s, idx) => {
+              const arrastrando = permiteDrag && dragServicio?.id === s.id;
               return (
                 <div key={s.id}
                   style={{
@@ -5930,11 +5997,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     opacity: 1,
                   }}>
                   <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                    <span
-                      onPointerDown={(e)=>iniciarDragServicio(e, s, idx)}
-                      style={{cursor:"grab",touchAction:"none",fontSize:16,color:"var(--texto-ter)",padding:"4px 6px",userSelect:"none",flexShrink:0}}
-                      title="Arrastra para reordenar"
-                    >☰</span>
+                    {permiteDrag && (
+                      <span
+                        onPointerDown={(e)=>iniciarDragServicio(e, s, idx)}
+                        style={{cursor:"grab",touchAction:"none",fontSize:16,color:"var(--texto-ter)",padding:"4px 6px",userSelect:"none",flexShrink:0}}
+                        title="Arrastra para reordenar"
+                      >☰</span>
+                    )}
                     <div style={{fontSize:13,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.nombre}</div>
                   </div>
                   <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14,flexShrink:0}}>🗑</button>
@@ -6737,7 +6806,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* Panel de servicios y filtros (se abre con el botón ⚙️ Servicios) */}
       {serviciosMenuOpen && !soloLectura && (
         <div style={{marginBottom:12,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10,display:"flex",flexDirection:"column",gap:10}}>
-          <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🗂️ Mis servicios</button>
+          <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🗂️ {esEquipo ? "Servicios del equipo" : "Mis servicios"}</button>
           <div style={{display:"flex",flexDirection:"column",gap:3}}>
             <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Servicio a visualizar</label>
             <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
@@ -7095,6 +7164,9 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     try { return localStorage.getItem("uro_tema") || "light"; }
     catch { return "light"; }
   });
+  // Si la app cargó bien, se limpia la marca de "ya recargué por caché vieja"
+  useEffect(() => { try { sessionStorage.removeItem("uro_recarga_import"); } catch {} }, []);
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", tema);
     try { localStorage.setItem("uro_tema", tema); } catch {}
