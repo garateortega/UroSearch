@@ -1288,7 +1288,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.9";
+const VERSION = "v1.10.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -5244,6 +5244,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [tumores, setTumores] = useState([]); // lista de tumores agregados
   const [formTumor, setFormTumor] = useState({ organo: "", sublocalizacion: "", tamano: "" });
   const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
+  const servBtnRef = useRef(null); // posición real del botón, para que el menú (position:fixed) no se recorte
   const [verCargaMedicos, setVerCargaMedicos] = useState(false); // resumen de pacientes por médico
   // Nombre de un miembro del equipo a partir de su user_id
   const nombreMiembroPac = (id) => {
@@ -7033,7 +7034,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {!soloLectura && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap",position:"relative"}}>
-            <button onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <button ref={servBtnRef} onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
               {filtroServicio==="todos" ? "Todos los servicios" : filtroServicio}{filtroEstado!=="activo" ? ` · ${ETIQUETA_ESTADO[filtroEstado]||filtroEstado}` : ""} {serviciosMenuOpen?"▴":"▾"}
             </button>
             <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
@@ -7042,7 +7043,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             {serviciosMenuOpen && (
               <>
                 <div onClick={()=>setServiciosMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:40}}/>
-                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:41,minWidth:240,maxWidth:300,maxHeight:"70vh",overflowY:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 12px 32px rgba(15,23,42,0.22)",padding:"6px"}}>
+                <div style={{
+                  position:"fixed",
+                  top: (servBtnRef.current?.getBoundingClientRect().bottom || 100) + 6,
+                  left: servBtnRef.current?.getBoundingClientRect().left || 16,
+                  zIndex:41,minWidth:240,maxWidth:300,
+                  maxHeight: `calc(100dvh - ${(servBtnRef.current?.getBoundingClientRect().bottom || 100) + 16}px)`,
+                  overflowY:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 12px 32px rgba(15,23,42,0.22)",padding:"6px"}}>
                   <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"6px 10px 4px"}}>SERVICIOS</div>
                   <button onClick={()=>{ setFiltroServicio("todos"); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio==="todos")}>
                     Todos los servicios {filtroServicio==="todos" ? "✓" : ""}
