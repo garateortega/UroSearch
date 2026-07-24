@@ -1288,7 +1288,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.8";
+const VERSION = "v1.9.9";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -5377,8 +5377,24 @@ const cargarMiembrosEquipo = async () => {
 
   // Lista de servicios del contexto actual (objetos {id, nombre, orden})
   const serviciosActivos = esEquipo ? serviciosEquipo : misServiciosLista;
-  // Nombres para el desplegable del formulario
-  const serviciosDisponibles = serviciosActivos.map(s => s.nombre);
+  // Nombres para el desplegable del formulario.
+  // Se combina la tabla servicios_equipo con los servicios que YA existen escritos
+  // en pacientes reales (histórico, texto libre) — así el desplegable no aparece
+  // vacío solo porque nadie migró/creó los servicios formalmente todavía.
+  const serviciosDeUso = useMemo(() => {
+    const set = new Set();
+    pacientes.forEach(p => { if (p.servicio && p.servicio.trim()) set.add(p.servicio.trim()); });
+    return Array.from(set);
+  }, [pacientes]);
+  const serviciosDisponibles = useMemo(() => {
+    const set = new Set(serviciosActivos.map(s => s.nombre));
+    serviciosDeUso.forEach(s => set.add(s));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [serviciosActivos, serviciosDeUso]);
+  // Servicios que están en uso por pacientes pero aún no formalizados en la tabla del equipo
+  const serviciosSinFormalizar = esEquipo
+    ? serviciosDeUso.filter(s => !serviciosActivos.some(x => x.nombre === s))
+    : [];
 
   // Filtrar pacientes según el estado elegido
   const pacientesFiltrados = pacientes.filter(p => {
@@ -6094,13 +6110,19 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             style={inputStyle}
           >
             <option value="">Selecciona...</option>
-            {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+            {serviciosDisponibles.map(s => <option key={s} value={s}>{s}{serviciosSinFormalizar.includes(s) ? " (no formalizado)" : ""}</option>)}
             <option value="__nuevo__">➕ Crear nuevo servicio…</option>
           </select>
         ) : (
           // Sin servicios aún: entra directo al modo "crear nuevo"
           <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6,lineHeight:1.4}}>
             {esEquipo ? "Este equipo aún no tiene servicios. Crea el primero:" : "Aún no tienes servicios. Crea el primero:"}
+          </div>
+        )}
+        {esEquipo && nuevo.servicio && serviciosSinFormalizar.includes(nuevo.servicio) && (
+          <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4,lineHeight:1.4}}>
+            «{nuevo.servicio}» ya lo usan otros pacientes pero no está en la lista formal del equipo.{" "}
+            <button type="button" onClick={async()=>{const r=await crearServicioEquipo(contexto,currentUser.id,nuevo.servicio,serviciosEquipo.length); if(r.ok) setServiciosEquipo(p=>[...p,r.servicio]); else alert(r.error);}} style={{background:"none",border:"none",color:"var(--primario)",textDecoration:"underline",cursor:"pointer",fontSize:10.5,padding:0}}>Formalizarlo ahora</button>
           </div>
         )}
 
@@ -6173,6 +6195,15 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             ⬆️ Copiar mis {misServiciosLista.length} servicio(s) personales a este equipo
           </button>
         )}
+        {esEquipo && serviciosSinFormalizar.length > 0 && (
+          <button onClick={async()=>{
+            const r = await crearServiciosEquipoBulk(contexto, currentUser.id, serviciosSinFormalizar);
+            if (!r.ok) return alert(r.error);
+            setServiciosEquipo(prev => [...prev, ...r.servicios]);
+          }} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:12.5,fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
+            📋 Formalizar {serviciosSinFormalizar.length} servicio(s) ya usados en pacientes ({serviciosSinFormalizar.join(", ")})
+          </button>
+        )}
 
         <div style={{display:"flex",gap:6,marginBottom:14}}>
           <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
@@ -6181,7 +6212,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         {serviciosActivos.length === 0 ? (
           <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13}}>
-            {esEquipo ? "Este equipo aún no tiene servicios. Agrégalos aquí o copia los tuyos." : "No tienes servicios configurados."}
+            {esEquipo
+              ? (serviciosSinFormalizar.length > 0
+                  ? "Ya hay servicios en uso arriba ↑ — formalízalos con el botón, o agrega uno nuevo."
+                  : "Este equipo aún no tiene servicios. Agrégalos aquí o copia los tuyos.")
+              : "No tienes servicios configurados."}
           </div>
         ) : (
           <div ref={serviciosListRef} style={{display:"flex",flexDirection:"column",gap:6,position:"relative"}}>
