@@ -11,6 +11,7 @@ const VACIA = {
   fecha: new Date().toISOString().slice(0, 10),
   paciente: "", ficha_clinica: "", rut: "", edad: "", sexo: "",
   servicio_solicitante: "", medico_solicitante: "",
+  cama: "", servicio: "",
   motivo: "", diagnostico: "", resumen: "",
   prioridad: "normal",           // urgente | normal | electiva
   estado: "pendiente",           // pendiente | resuelta
@@ -72,6 +73,8 @@ Esquema exacto:
   "edad": numero o null,
   "sexo": "M" | "F" | null,
   "servicio_solicitante": "servicio o unidad que solicita (ej: 'Medicina Interna', 'Urgencia', 'UCI', 'Cirugía') o null",
+  "servicio": "servicio/unidad donde está hospitalizado el paciente (ej: 'Medicina 3er piso', 'UCI', 'Urgencia') o null",
+  "cama": "número o identificador de cama/box del paciente o null",
   "medico_solicitante": "nombre del médico que solicita o null",
   "motivo": "motivo de la interconsulta, en pocas palabras (ej: 'Retención urinaria aguda') o null",
   "diagnostico": "diagnóstico o hipótesis diagnóstica del solicitante o null",
@@ -138,6 +141,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
   const [fotos, setFotos] = useState([]);
   const [abiertoId, setAbiertoId] = useState(null);
   const [filtro, setFiltro] = useState("todas"); // todas | pendiente | resuelta
+  const [mostrarCaptura, setMostrarCaptura] = useState(false); // despliegue del bloque "Agregar interconsulta"
   const inputGaleriaRef = useRef(null);
   const inputCamaraRef = useRef(null);
 
@@ -170,7 +174,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
     // eslint-disable-next-line
   }, []);
 
-  const resetForm = () => { setIc(VACIA); setEditId(null); setFotos([]); setError(""); };
+  const resetForm = () => { setIc(VACIA); setEditId(null); setFotos([]); setError(""); setMostrarCaptura(false); };
 
   // ─── Foto → IA ───
   const onFotos = async (e) => {
@@ -192,6 +196,8 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
         edad: (x.edad ?? "") !== "" ? String(x.edad) : prev.edad,
         sexo: x.sexo || prev.sexo,
         servicio_solicitante: x.servicio_solicitante || prev.servicio_solicitante,
+        cama: x.cama ? String(x.cama).slice(0, 20) : prev.cama,
+        servicio: x.servicio ? String(x.servicio).slice(0, 60) : prev.servicio,
         medico_solicitante: x.medico_solicitante || prev.medico_solicitante,
         motivo: x.motivo || prev.motivo,
         diagnostico: x.diagnostico || prev.diagnostico,
@@ -225,6 +231,8 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
       sexo: ic.sexo || null,
       servicio_solicitante: ic.servicio_solicitante.trim() || null,
       medico_solicitante: ic.medico_solicitante.trim() || null,
+      cama: ic.cama.trim() || null,
+      servicio: ic.servicio.trim() || null,
       motivo: ic.motivo.trim() || null,
       diagnostico: ic.diagnostico.trim() || null,
       resumen: ic.resumen.trim() || null,
@@ -233,14 +241,18 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
       conducta: ic.conducta.trim() || null,
       texto_extraido: ic.texto_extraido.trim() || null,
     };
+    // Guarda tolerando que la tabla aún no tenga las columnas cama/servicio:
+    // si Postgres/PostgREST se queja de esas columnas, reintenta sin ellas.
+    const opGuardar = (p) => editId
+      ? supabase.from("interconsultas").update(p).eq("id", editId)
+      : supabase.from("interconsultas").insert(p);
     try {
-      if (editId) {
-        const { error } = await supabase.from("interconsultas").update(payload).eq("id", editId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("interconsultas").insert(payload);
-        if (error) throw error;
+      let { error } = await opGuardar(payload);
+      if (error && /(cama|servicio)/i.test(error.message || "") && /(column|find|schema)/i.test(error.message || "")) {
+        const { cama, servicio, ...resto } = payload;
+        ({ error } = await opGuardar(resto));
       }
+      if (error) throw error;
       resetForm();
       setVista("lista");
       await cargar();
@@ -255,6 +267,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
       paciente: r.paciente || "", ficha_clinica: r.ficha_clinica || "", rut: r.rut || "",
       edad: r.edad != null ? String(r.edad) : "", sexo: r.sexo || "",
       servicio_solicitante: r.servicio_solicitante || "", medico_solicitante: r.medico_solicitante || "",
+      cama: r.cama || "", servicio: r.servicio || "",
       motivo: r.motivo || "", diagnostico: r.diagnostico || "", resumen: r.resumen || "",
       prioridad: r.prioridad || "normal", estado: r.estado || "pendiente",
       conducta: r.conducta || "", texto_extraido: r.texto_extraido || "",
@@ -305,7 +318,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
   }, [lista]);
 
   const exportarCSV = () => {
-    const cols = ["fecha", "paciente", "ficha_clinica", "rut", "edad", "sexo", "servicio_solicitante", "medico_solicitante", "motivo", "diagnostico", "prioridad", "estado", "conducta", "resumen"];
+    const cols = ["fecha", "paciente", "ficha_clinica", "rut", "edad", "sexo", "servicio", "cama", "servicio_solicitante", "medico_solicitante", "motivo", "diagnostico", "prioridad", "estado", "conducta", "resumen"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const filas = [cols.join(";"), ...lista.map((r) => cols.map((c) => esc(r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -365,6 +378,8 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
                 <div style={{ fontSize: 26, marginBottom: 6 }}>🔍</div>
                 Leyendo la interconsulta…
               </div>
+            ) : !mostrarCaptura ? (
+              <button onClick={() => setMostrarCaptura(true)} style={{ ...btnPrim, width: "100%", padding: "12px", fontSize: 14 }}>➕ Agregar interconsulta</button>
             ) : (
               <>
                 <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
@@ -375,6 +390,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
                   <button onClick={() => inputGaleriaRef.current?.click()} style={btnSec}>🖼 Galería / archivos</button>
                   <button onClick={() => { resetForm(); setVista("nueva"); }} style={btnSec}>✍️ A mano</button>
                 </div>
+                <button onClick={() => setMostrarCaptura(false)} style={{ background: "none", border: "none", color: "var(--texto-ter)", fontSize: 12, cursor: "pointer", marginTop: 10 }}>Cancelar</button>
               </>
             )}
           </div>
@@ -419,6 +435,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
                   {abierto && (
                     <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--texto)", lineHeight: 1.5, display: "flex", flexDirection: "column", gap: 3 }}>
                       {r.edad != null && <div><b>Paciente:</b> {r.edad} años{r.sexo ? ` · ${r.sexo}` : ""}</div>}
+                      {(r.servicio || r.cama) && <div><b>Ubicación:</b> {[r.servicio, r.cama ? `cama ${r.cama}` : ""].filter(Boolean).join(" · ")}</div>}
                       {r.medico_solicitante && <div><b>Solicita:</b> {r.medico_solicitante}</div>}
                       {r.diagnostico && <div><b>Diagnóstico:</b> {r.diagnostico}</div>}
                       {r.resumen && <div><b>Resumen:</b> {r.resumen}</div>}
@@ -470,6 +487,8 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
             ))}
             {campo("Servicio solicitante", <input style={inp} value={ic.servicio_solicitante} onChange={(e) => set("servicio_solicitante", e.target.value)} placeholder="Medicina, Urgencia, UCI…" />)}
             {campo("Médico solicitante", <input style={inp} value={ic.medico_solicitante} onChange={(e) => set("medico_solicitante", e.target.value)} />)}
+            {campo("Servicio (ubicación del paciente)", <input style={inp} value={ic.servicio} onChange={(e) => set("servicio", e.target.value.slice(0, 60))} placeholder="Medicina 3er piso, UCI…" />)}
+            {campo("Cama", <input style={inp} value={ic.cama} onChange={(e) => set("cama", e.target.value.slice(0, 20))} placeholder="Cama / box" />)}
             <div style={{ gridColumn: "1 / -1" }}>
               {campo("Motivo", <input style={inp} value={ic.motivo} onChange={(e) => set("motivo", e.target.value)} list="motivos-ic" placeholder="Retención urinaria…" />)}
               <datalist id="motivos-ic">{MOTIVOS_FRECUENTES.map((m) => <option key={m} value={m} />)}</datalist>
