@@ -1242,8 +1242,17 @@ const SALUDOS_UROS = [
   "👋 ¡Hola, {n}! ¿Qué duda te trajo por aquí?",
   "🩺 Qué gusto, {n}. Dime en qué te ayudo.",
   "👋 Hola {n}. Tu asistente de urología, listo.",
-  "😊 ¡Hola, {n}! ¿Empezamos con algo del turno?",
+  "😊 ¡Hola, {n}! ¿Revisamos algún caso?",
   "👋 Buenas, {n}. Aquí Uros. ¿Qué necesitas hoy?",
+  "🔬 Hola {n}. ¿Alguna duda de manejo o diagnóstico?",
+  "👋 ¡Hola, {n}! ¿Te ayudo a preparar una cirugía?",
+  "🩺 Qué tal, {n}. ¿Vemos una guía o un score?",
+  "👋 Hola {n}. ¿Buscamos evidencia para un caso?",
+  "😊 ¡Hola, {n}! ¿Repasamos algo de oncología uro?",
+  "📋 Buenas, {n}. ¿Ordenamos tu logbook o vemos métricas?",
+  "👋 Hola {n}, soy Uros. ¿Consultamos algo puntual?",
+  "🔎 ¡Hola, {n}! ¿Qué te gustaría profundizar hoy?",
+  "🩺 Hola {n}. Tu apoyo en urología, cuando lo necesites.",
 ];
 function saludoAleatorio(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
@@ -1279,7 +1288,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.4";
+const VERSION = "v1.9.6";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -7300,8 +7309,11 @@ function NotificationBell({ currentUser }) {
 
   return (
     <div style={{position:"relative"}}>
-      <button ref={btnRef} onClick={abrir} title="Notificaciones" style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",padding:0,position:"relative"}}>
-        🔔
+      <button ref={btnRef} onClick={abrir} title="Notificaciones" style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,position:"relative"}}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--primario)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
         {noLeidas > 0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,borderRadius:9,background:"var(--peligro)",color:"var(--texto-inv)",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{noLeidas}</span>}
       </button>
       {abierto && (
@@ -7461,16 +7473,41 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
 const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const appMovil = useIsMobile();  // ocultar el header solo tiene sentido en celular
   const [headerOculto, setHeaderOculto] = useState(false); // se oculta al hacer scroll hacia abajo
-  const ultimoScrollRef = useRef(0);
-  // Detecta scroll en cualquier contenedor interno y oculta/muestra la barra superior
+  const scrollRef = useRef({ ultimo: 0, acum: 0, bloqueoHasta: 0 });
+  // Detección estable: hay que acumular movimiento sostenido en una dirección para
+  // cambiar de estado (evita el parpadeo por el "salto" del contenido al colapsar).
   const onScrollContenido = (e) => {
+    if (!appMovil) return;  // en escritorio la barra siempre visible (hay espacio de sobra)
     const y = e.target.scrollTop;
-    if (y < 0) return;
-    const prev = ultimoScrollRef.current;
-    if (y > prev + 6 && y > 60) setHeaderOculto(true);        // bajando → ocultar
-    else if (y < prev - 6 || y < 30) setHeaderOculto(false);  // subiendo o arriba → mostrar
-    ultimoScrollRef.current = y;
+    if (typeof y !== "number" || y < 0) return;
+    const s = scrollRef.current;
+    const ahora = Date.now();
+
+    // Tras cambiar de estado, ignorar el rebote que produce el reflow del contenido
+    if (ahora < s.bloqueoHasta) { s.ultimo = y; return; }
+
+    // Zona muerta: cerca del tope, el header siempre visible
+    if (y < 40) {
+      s.acum = 0; s.ultimo = y;
+      if (headerOculto) setHeaderOculto(false);
+      return;
+    }
+
+    const delta = y - s.ultimo;
+    s.ultimo = y;
+    // Reiniciar el acumulador si se cambia de dirección
+    if ((delta > 0 && s.acum < 0) || (delta < 0 && s.acum > 0)) s.acum = 0;
+    s.acum += delta;
+
+    const UMBRAL_OCULTAR = 56;  // bajar ~56px sostenidos para esconder
+    const UMBRAL_MOSTRAR = 44;  // subir ~44px sostenidos para reaparecer
+    if (!headerOculto && s.acum > UMBRAL_OCULTAR) {
+      setHeaderOculto(true); s.acum = 0; s.bloqueoHasta = ahora + 350;
+    } else if (headerOculto && s.acum < -UMBRAL_MOSTRAR) {
+      setHeaderOculto(false); s.acum = 0; s.bloqueoHasta = ahora + 350;
+    }
   };
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [perfilOpen, setPerfilOpen] = useState(false); // modal "Mi perfil"
@@ -8350,21 +8387,30 @@ if (!currentUser) {
         borderBottom: headerOculto ? "none" : "0.5px solid var(--borde)",
         background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative",
       }}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:14}}>
-            <LogoUroSearch size={40}/>
-            <div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:21,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
-                {isAdmin && <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:appMovil?8:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:appMovil?9:14,minWidth:0}}>
+            <LogoUroSearch size={appMovil?30:40}/>
+            {appMovil ? (
+              // En celular: todo en una línea para ocupar menos alto
+              <div style={{display:"flex",alignItems:"baseline",gap:6,minWidth:0}}>
+                <span style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:17,color:"var(--texto)",letterSpacing:"-0.3px",flexShrink:0}}>UroSearch</span>
+                <span style={{fontSize:11,color:"var(--texto-ter)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· Urología</span>
+                {isAdmin && <span style={{fontSize:9,fontWeight:600,padding:"1px 5px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,flexShrink:0}}>ADMIN</span>}
               </div>
-              <div style={{fontSize:14,color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
-            </div>
+            ) : (
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:21,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
+                  {isAdmin && <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
+                </div>
+                <div style={{fontSize:14,color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
+              </div>
+            )}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <NotificationBell currentUser={currentUser}/>
-            <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:"5px 14px 5px 5px",cursor:"pointer"}}>
-              <div style={{width:38,height:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
+            <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:appMovil?"4px 10px 4px 4px":"5px 14px 5px 5px",cursor:"pointer"}}>
+              <div style={{width:appMovil?32:38,height:appMovil?32:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:appMovil?13:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
               <span style={{fontSize:14,color:"var(--texto)",fontWeight:500}}>▾</span>
             </button>
           </div>
