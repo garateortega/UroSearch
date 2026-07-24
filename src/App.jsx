@@ -1288,7 +1288,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.7";
+const VERSION = "v1.9.8";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -1397,18 +1397,40 @@ function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
   return conScore.sort((a,b) => b.score - a.score).slice(0, maxDocs);
 }
 
-// Íconos SVG coherentes para las pestañas (mismo trazo, mismo estilo).
-// Reemplazan los emojis para que la barra de navegación se vea uniforme.
+// Íconos SVG coherentes para las pestañas: forma redondeada y trazo grueso,
+// con relleno suave (duotono), en el mismo azul que usa la campana de notificaciones.
 function IconoTab({ tipo, activo }) {
-  const c = activo ? "var(--primario)" : "var(--texto-sec)";
-  const p = { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: c, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0 } };
+  const trazo = activo ? "var(--primario)" : "var(--texto-sec)";
+  const relleno = activo ? "var(--chip-azul-bg)" : "none";
+  const p = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: trazo, strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0 } };
   switch (tipo) {
-    case "chat":         return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
-    case "hospital":     return <svg {...p}><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/></svg>;
-    case "logbook":      return <svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
-    case "conocimiento": return <svg {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
-    case "admin":        return <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>;
-    default:             return null;
+    case "chat":
+      return <svg {...p}>
+        <path d="M4 12a8 8 0 1 1 3.5 6.6L4 20l1-3.2A8 8 0 0 1 4 12z" fill={relleno}/>
+        <circle cx="9" cy="12" r="1" fill={trazo} stroke="none"/><circle cx="12" cy="12" r="1" fill={trazo} stroke="none"/><circle cx="15" cy="12" r="1" fill={trazo} stroke="none"/>
+      </svg>;
+    case "hospital":
+      return <svg {...p}>
+        <path d="M5 20V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12" fill={relleno}/>
+        <path d="M3 20h18"/>
+        <path d="M12 9v4M10 11h4"/>
+      </svg>;
+    case "logbook":
+      return <svg {...p}>
+        <path d="M6 4h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1 0-4h11" fill={relleno}/>
+        <path d="M10 9h5" strokeWidth={2}/>
+      </svg>;
+    case "conocimiento":
+      return <svg {...p}>
+        <path d="M5 5a2 2 0 0 1 2-2h11v16H7a2 2 0 0 0-2 2z" fill={relleno}/>
+        <path d="M9 8h6" strokeWidth={2}/>
+      </svg>;
+    case "admin":
+      return <svg {...p}>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" fill={relleno}/>
+        <circle cx="12" cy="7" r="4" fill={relleno}/>
+      </svg>;
+    default: return null;
   }
 }
 
