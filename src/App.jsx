@@ -11,6 +11,7 @@ import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
 import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
+import { guardarSnapshot, leerSnapshot } from "./offlineCache";
 
 // ============================================================
 // NOTIFICACIONES (nivel 1: dentro de la app)
@@ -4396,8 +4397,10 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
     if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
 
-    // Al completar una cirugía → crear automáticamente el paciente hospitalizado
-    if (nuevoEstado === "completada") {
+    // Al completar una cirugía → crear automáticamente el paciente hospitalizado.
+    // Solo en la transición REAL a "completada": si ya estaba completada y se
+    // vuelve a pulsar "completar", no se recrea el paciente (evita duplicados).
+    if (nuevoEstado === "completada" && cirugia.estado !== "completada") {
       // Avisar al equipo
       if (esEquipo) {
         try {
@@ -4415,7 +4418,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         iniciales: (cirugia.iniciales || "").toUpperCase(),
         edad: cirugia.edad || null,
         sexo: "M", // editable después en la ficha
-        cama: "Por asignar",
+        cama: "",
         servicio: "Urología",
         diagnostico: `Post-operado: ${cirugia.procedimiento}${cirugia.lateralidad ? ` (${cirugia.lateralidad})` : ""}`,
         plan_manejo: null,
@@ -5130,7 +5133,28 @@ const PARAMETROS_LAB = {
     { key: "ttpa", label: "TTPA", unidad: "seg" },
     { key: "fibrinogeno", label: "Fibrinógeno", unidad: "mg/dL" },
   ],
+  "PCR": [
+    { key: "pcr", label: "PCR", unidad: "mg/L" },
+  ],
+  "ELP": [
+    { key: "na", label: "Na", unidad: "mEq/L" },
+    { key: "k", label: "K", unidad: "mEq/L" },
+    { key: "cl", label: "Cl", unidad: "mEq/L" },
+  ],
 };
+
+// Dirección clínicamente desfavorable de cada parámetro, para las flechas de tendencia:
+//   "altoMalo" → subir es malo (rojo ▲, verde ▼) · "bajoMalo" → bajar es malo (rojo ▼, verde ▲)
+// Los que no figuran aquí se muestran en gris (neutro), sin juzgar dirección.
+const SEMANTICA_LAB = {
+  pcr: "altoMalo", crea: "altoMalo", bun: "altoMalo", leucocitos: "altoMalo", neutrofilos: "altoMalo",
+  hb: "bajoMalo", hto: "bajoMalo", plaquetas: "bajoMalo", vfg: "bajoMalo", linfocitos: "bajoMalo",
+};
+function _numLab(v) {
+  if (v === null || v === undefined) return null;
+  const n = parseFloat(String(v).replace(",", ".").replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? null : n;
+}
 
 const PLANTILLAS_SOAP = {
   "Post-operatorio sin complicaciones": {
@@ -5327,31 +5351,43 @@ const [miembrosEquipo, setMiembrosEquipo] = useState([]);
   // Cargar pacientes según contexto
   const cargarPacientes = async () => {
     setLoadingPacientes(true);
-    if (contexto === "personal") {
-      // "Mis Pacientes": personales + donde soy encargado en cualquier equipo
-      const personales = await listarPacientes(currentUser.id, "personal");
-      let combinados = personales.ok ? [...personales.pacientes] : [];
-      // Mis equipos
-      const misEquipos = equipos.filter(e =>
-        e.dueno_id === currentUser.id ||
-        e.miembros_equipo?.some(m => m.user_id === currentUser.id)
-      );
-      for (const eq of misEquipos) {
-        const res = await listarPacientes(currentUser.id, eq.id);
-        if (res.ok) {
-          const asignados = res.pacientes.filter(p =>
-            Array.isArray(p.encargados) && p.encargados.includes(currentUser.id)
-          );
-          // Evitar duplicados por id
-          asignados.forEach(p => {
-            if (!combinados.some(x => x.id === p.id)) combinados.push(p);
-          });
+    const cacheKey = `pacientes:${currentUser.id}:${contexto}`;
+    // 1) Pinta al instante lo último guardado (clave para rondas sin señal);
+    //    la red, si hay, refresca a continuación.
+    try {
+      const cache = await leerSnapshot(cacheKey);
+      if (Array.isArray(cache) && cache.length) setPacientes(cache);
+    } catch {}
+    try {
+      if (contexto === "personal") {
+        // "Mis Pacientes": personales + donde soy encargado en cualquier equipo
+        const personales = await listarPacientes(currentUser.id, "personal");
+        let combinados = personales.ok ? [...personales.pacientes] : [];
+        // Mis equipos
+        const misEquipos = equipos.filter(e =>
+          e.dueno_id === currentUser.id ||
+          e.miembros_equipo?.some(m => m.user_id === currentUser.id)
+        );
+        for (const eq of misEquipos) {
+          const res = await listarPacientes(currentUser.id, eq.id);
+          if (res.ok) {
+            const asignados = res.pacientes.filter(p =>
+              Array.isArray(p.encargados) && p.encargados.includes(currentUser.id)
+            );
+            // Evitar duplicados por id
+            asignados.forEach(p => {
+              if (!combinados.some(x => x.id === p.id)) combinados.push(p);
+            });
+          }
         }
+        // Solo sobrescribimos (y cacheamos) si la red respondió; si no, queda lo de caché.
+        if (personales.ok) { setPacientes(combinados); guardarSnapshot(cacheKey, combinados); }
+      } else {
+        const result = await listarPacientes(currentUser.id, contexto);
+        if (result.ok) { setPacientes(result.pacientes); guardarSnapshot(cacheKey, result.pacientes); }
       }
-      setPacientes(combinados);
-    } else {
-      const result = await listarPacientes(currentUser.id, contexto);
-      if (result.ok) setPacientes(result.pacientes);
+    } catch {
+      // Sin red: nos quedamos con lo hidratado desde caché.
     }
     setLoadingPacientes(false);
   };
@@ -5359,8 +5395,12 @@ const [miembrosEquipo, setMiembrosEquipo] = useState([]);
   // Cargar servicios del equipo si estoy en contexto equipo
   const cargarServiciosEquipo = async () => {
     if (esEquipo) {
-      const result = await listarServiciosEquipo(contexto);
-      if (result.ok) setServiciosEquipo(result.servicios);
+      const kServ = `servicios:${contexto}`;
+      try { const c = await leerSnapshot(kServ); if (Array.isArray(c) && c.length) setServiciosEquipo(c); } catch {}
+      try {
+        const result = await listarServiciosEquipo(contexto);
+        if (result.ok) { setServiciosEquipo(result.servicios); guardarSnapshot(kServ, result.servicios); }
+      } catch {}
     }
   };
 // Cargar miembros del equipo (para asignar encargados)
@@ -5456,6 +5496,17 @@ const cargarMiembrosEquipo = async () => {
   const [dragCol, setDragCol] = useState(null); // { nombre, dx } → la columna flota siguiendo el dedo
   const dragColInfo = useRef(null);
   const kanbanRef = useRef(null);
+  const listaScrollElRef = useRef(null);   // contenedor scrolleable de la vista lista
+  const listaScrollPosRef = useRef(0);      // última posición de scroll de la lista
+  const formEvoRef = useRef(null);          // tarjeta del formulario "Nueva evolución"
+  const formExamenRef = useRef(null);       // tarjeta del formulario "Nuevo examen"
+  const [showDistribucion, setShowDistribucion] = useState(false);
+  // Al volver a la lista (desde una ficha), restaura la posición de scroll previa.
+  useEffect(() => {
+    if (vista === "lista" && listaScrollElRef.current) {
+      listaScrollElRef.current.scrollTop = listaScrollPosRef.current;
+    }
+  }, [vista]);
   const pressTimer = useRef(null);
   const pressPos = useRef(null);
 
@@ -5756,16 +5807,26 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const abrirFicha = async (paciente) => {
     setSeleccionado(paciente);
     setVista("ficha");
+    setExtraccionMsg("");
     setMostrarEvosAntiguas(false);
     setMostrarExAntiguos(false);
     setEditandoHistoria(false);
     setAbrirFormPendiente(false);
     setAbrirFormEvo(false);
     setAbrirFormExamen(false);
-    const evoResult = await listarEvoluciones(paciente.id);
-    if (evoResult.ok) setEvoluciones(evoResult.evoluciones);
-    const exResult = await listarExamenes(paciente.id);
-    if (exResult.ok) setExamenes(exResult.examenes.map(normalizarExamen));
+    // Hidrata el curso del paciente desde caché (visible sin señal); la red refresca.
+    const kEvo = `evoluciones:${paciente.id}`;
+    const kEx = `examenes:${paciente.id}`;
+    try { const c = await leerSnapshot(kEvo); setEvoluciones(Array.isArray(c) ? c : []); } catch { setEvoluciones([]); }
+    try { const c = await leerSnapshot(kEx); setExamenes(Array.isArray(c) ? c : []); } catch { setExamenes([]); }
+    try {
+      const evoResult = await listarEvoluciones(paciente.id);
+      if (evoResult.ok) { setEvoluciones(evoResult.evoluciones); guardarSnapshot(kEvo, evoResult.evoluciones); }
+    } catch {}
+    try {
+      const exResult = await listarExamenes(paciente.id);
+      if (exResult.ok) { const norm = exResult.examenes.map(normalizarExamen); setExamenes(norm); guardarSnapshot(kEx, norm); }
+    } catch {}
     cargarPendientesPaciente(paciente.id);
   };
 
@@ -5989,7 +6050,31 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     setNuevoServicio("");
   };
 
-  const quitarServicio = async (servicioId) => {
+  const quitarServicio = async (servicio) => {
+    // Acepta el objeto servicio (o un id suelto por compatibilidad).
+    const servicioId = typeof servicio === "object" && servicio ? servicio.id : servicio;
+    const nombre = typeof servicio === "object" && servicio ? servicio.nombre : null;
+
+    // Pacientes que "cuelgan" de este servicio (por nombre). Se eliminan junto
+    // con el servicio para que no reaparezca luego como "servicio sin formalizar".
+    const pacientesDelServicio = nombre ? pacientes.filter(p => p.servicio === nombre) : [];
+    if (pacientesDelServicio.length > 0) {
+      if (!confirm(`El servicio "${nombre}" tiene ${pacientesDelServicio.length} paciente(s) asignado(s).\n\nAl eliminar el servicio se ELIMINARÁN también esos pacientes con sus evoluciones y exámenes. Esta acción no se puede deshacer.\n\n¿Continuar?`)) return;
+    } else {
+      if (!confirm(`¿Eliminar el servicio "${nombre || ""}"?`)) return;
+    }
+
+    // 1) Eliminar los pacientes del servicio
+    const idsEliminados = [];
+    for (const p of pacientesDelServicio) {
+      const rp = await eliminarPaciente(p.id);
+      if (rp.ok) idsEliminados.push(p.id);
+    }
+    if (idsEliminados.length > 0 && setPacientes) {
+      setPacientes(prev => prev.filter(p => !idsEliminados.includes(p.id)));
+    }
+
+    // 2) Eliminar el servicio propiamente tal
     if (esEquipo) {
       const result = await eliminarServicioEquipo(servicioId);
       if (!result.ok) return alert("Error: " + result.error);
@@ -6096,7 +6181,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </div>
           <div>
             <label style={labelStyle}>Cama</label>
-            <input value={nuevo.cama} onChange={e=>setNuevo({...nuevo,cama:e.target.value})} placeholder="3-12" style={inputStyle}/>
+            <input value={nuevo.cama} onFocus={e=>e.target.select()} onChange={e=>setNuevo({...nuevo,cama:e.target.value})} placeholder="3-12" style={inputStyle}/>
           </div>
         </div>
 
@@ -6246,7 +6331,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     )}
                     <div style={{fontSize:13,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.nombre}</div>
                   </div>
-                  <button onClick={()=>quitarServicio(s.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14,flexShrink:0}}>🗑</button>
+                  <button onClick={()=>quitarServicio(s)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14,flexShrink:0}}>🗑</button>
                 </div>
               );
             })}
@@ -6300,7 +6385,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{display:"flex",gap:8}}>
         <div style={{flex:1}}>
           <label style={labelStyle}>Cama</label>
-          <input value={editForm.cama} onChange={e=>setEditForm({...editForm,cama:e.target.value})} style={inputStyle}/>
+          <input value={editForm.cama} onFocus={e=>e.target.select()} onChange={e=>setEditForm({...editForm,cama:e.target.value})} placeholder="3-12" style={inputStyle}/>
         </div>
         <div style={{flex:2}}>
           <label style={labelStyle}>Servicio / Piso</label>
@@ -6371,7 +6456,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div>
           <div style={{fontSize:18,fontWeight:700,color:"var(--texto)"}}>{seleccionado.iniciales} <span style={{fontSize:20,fontWeight:700,color:seleccionado.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{seleccionado.sexo==="F"?"♀":"♂"}</span></div>
           <div style={{fontSize:16,fontWeight:600,color:"var(--texto-sec)",marginTop:4}}>
-            {seleccionado.edad} años · Cama {seleccionado.cama} · {seleccionado.servicio}
+            {seleccionado.edad} años · Cama {seleccionado.cama || "por asignar"} · {seleccionado.servicio}
           </div>
           {(seleccionado.ficha_clinica || seleccionado.rut) && (
             <div style={{fontSize:13,color:"var(--texto-ter)",marginTop:3}}>
@@ -6499,7 +6584,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         {/* ÚLTIMA EVOLUCIÓN + anteriores colapsadas */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>📝 Evoluciones</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>📝 Evoluciones</div>
+            {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
+          </div>
           {evoluciones.length === 0 ? (
             <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay evoluciones registradas</div>
           ) : (
@@ -6529,7 +6617,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         {/* EXÁMENES agrupados por día + anteriores colapsados */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>🧪 Exámenes</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>🧪 Exámenes</div>
+            {!soloLectura && <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
+          </div>
           {examenes.length === 0 ? (
             <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay exámenes registrados</div>
           ) : (() => {
@@ -6564,9 +6655,28 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6}}>
                       {Object.entries(ex.datos_estructurados.parametros).map(([k,v]) => {
                         const def = (PARAMETROS_LAB[ex.nombre] || []).find(p => p.key === k);
+                        // Flecha de tendencia: compara con el mismo parámetro del examen
+                        // previo (misma "nombre", fecha anterior) y colorea según utilidad clínica.
+                        let flecha = null;
+                        const actual = _numLab(v);
+                        if (actual !== null && ex.fecha_examen) {
+                          const previo = examenes
+                            .filter(o => o.id !== ex.id && o.nombre === ex.nombre && o.fecha_examen && o.fecha_examen < ex.fecha_examen
+                              && o.datos_estructurados?.parametros && o.datos_estructurados.parametros[k] !== undefined && o.datos_estructurados.parametros[k] !== "")
+                            .sort((a,b) => String(b.fecha_examen).localeCompare(String(a.fecha_examen)))[0];
+                          const prev = previo ? _numLab(previo.datos_estructurados.parametros[k]) : null;
+                          if (prev !== null && actual !== prev) {
+                            const sube = actual > prev;
+                            const sem = SEMANTICA_LAB[k];
+                            let color = "var(--texto-ter)";
+                            if (sem === "altoMalo") color = sube ? "var(--peligro)" : "var(--exito)";
+                            else if (sem === "bajoMalo") color = sube ? "var(--exito)" : "var(--peligro)";
+                            flecha = <span title={`Previo: ${previo.datos_estructurados.parametros[k]}${def?.unidad?` ${def.unidad}`:""} · ${previo.fecha_examen}`} style={{color,fontWeight:700,marginLeft:4}}>{sube?"▲":"▼"}</span>;
+                          }
+                        }
                         return (
                           <span key={k} style={{fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8}}>
-                            <strong>{def?.label || k}:</strong> {v}{def?.unidad ? ` ${def.unidad}` : ""}
+                            <strong>{def?.label || k}:</strong> {v}{def?.unidad ? ` ${def.unidad}` : ""}{flecha}
                           </span>
                         );
                       })}
@@ -6674,7 +6784,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* NUEVA EVOLUCIÓN (formulario) */}
-        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+        <div ref={formEvoRef} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormEvo?10:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nueva evolución</div>
             <button onClick={()=>setAbrirFormEvo(!abrirFormEvo)} style={{padding:"5px 12px",fontSize:12,background:abrirFormEvo?"var(--superficie)":"var(--primario)",color:abrirFormEvo?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormEvo?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormEvo?"Cerrar":"+ Agregar evolución"}</button>
@@ -6841,7 +6951,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* NUEVO EXAMEN (formulario) */}
-        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
+        <div ref={formExamenRef} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormExamen?10:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
             <button onClick={()=>setAbrirFormExamen(!abrirFormExamen)} style={{padding:"5px 12px",fontSize:12,background:abrirFormExamen?"var(--superficie)":"var(--primario)",color:abrirFormExamen?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormExamen?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormExamen?"Cerrar":"+ Agregar examen"}</button>
@@ -6864,7 +6974,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {nuevoEx.tipo === "Laboratorio" && (
             <select value={nuevoEx.nombre} onChange={e=>{setNuevoEx({...nuevoEx,nombre:e.target.value}); setParamsLab({});}} style={inputStyle}>
               <option value="">Selecciona examen...</option>
-              {["Función renal","Hemograma","Coagulación","VFG","PCR","ELP","Pruebas hepáticas","Glicemia","Orina completa","Antígeno prostático (PSA)","Testosterona","Gases venosos","Lactato","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
+              {["Función renal","Hemograma","Coagulación","PCR","ELP","Pruebas hepáticas","Glicemia","Orina completa","Antígeno prostático (PSA)","Testosterona","Gases venosos","Lactato","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           )}
           {/* Panel de parámetros numéricos para exámenes con set definido */}
@@ -7029,7 +7139,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   // ============================================================
 
   return (
-    <div style={{padding:"16px",overflowY:"auto"}}>
+    <div ref={listaScrollElRef} onScroll={e=>{listaScrollPosRef.current = e.currentTarget.scrollTop;}} style={{padding:"16px",overflowY:"auto"}}>
 
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {!soloLectura && (
@@ -7038,6 +7148,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               {filtroServicio==="todos" ? "Todos los servicios" : filtroServicio}{filtroEstado!=="activo" ? ` · ${ETIQUETA_ESTADO[filtroEstado]||filtroEstado}` : ""} {serviciosMenuOpen?"▴":"▾"}
             </button>
             <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
+            <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
 
             {/* Menú desplegable de servicios + estado (estilo Hospital) */}
             {serviciosMenuOpen && (
@@ -7102,6 +7213,31 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
       </div>
 
+      {/* MODAL: distribución de pacientes por encargado */}
+      {showDistribucion && (
+        <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:14,padding:"18px",width:"100%",maxWidth:360,maxHeight:"80vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:15,fontWeight:700,color:"var(--texto)"}}>👥 Distribución de pacientes</div>
+              <button onClick={()=>setShowDistribucion(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"var(--texto-ter)",lineHeight:1}}>✕</button>
+            </div>
+            {cargaPorMedico.length === 0 ? (
+              <div style={{fontSize:12.5,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>Aún no hay pacientes activos con encargados asignados.</div>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {cargaPorMedico.map((c,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"var(--fondo-suave)",borderRadius:8}}>
+                    <span style={{fontSize:13,color:"var(--texto)"}}>{c.nombre}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 10px",borderRadius:10}}>{c.n}</span>
+                  </div>
+                ))}
+                <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4,textAlign:"right"}}>Un paciente con varios encargados se cuenta en cada uno.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {loadingPacientes && (
         <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando pacientes...</div>
       )}
@@ -7162,7 +7298,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                           <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
                             {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
                           </div>
-                          <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
+                          <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
                         </div>
                         <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
                         {(p.ficha_clinica || p.rut) && (
@@ -7413,6 +7549,34 @@ function NotificationBell({ currentUser }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ─── Estado de conexión: true si el navegador cree tener red ───
+function useOnline() {
+  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  useEffect(() => {
+    const subir = () => setOnline(true);
+    const bajar = () => setOnline(false);
+    window.addEventListener("online", subir);
+    window.addEventListener("offline", bajar);
+    return () => { window.removeEventListener("online", subir); window.removeEventListener("offline", bajar); };
+  }, []);
+  return online;
+}
+
+// Banda superior discreta que avisa cuando no hay conexión (datos desde caché).
+function OfflineBanner() {
+  const online = useOnline();
+  if (online) return null;
+  return (
+    <div style={{
+      background: "var(--alerta-bg, #FEF3C7)", color: "var(--alerta, #92400E)",
+      fontSize: 12, fontWeight: 600, textAlign: "center", padding: "5px 12px",
+      borderBottom: "0.5px solid var(--alerta-borde, #FCD34D)", flexShrink: 0,
+    }}>
+      Sin conexión · mostrando datos guardados
     </div>
   );
 }
@@ -8446,6 +8610,7 @@ if (!currentUser) {
 
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
+      <OfflineBanner/>
       <style>{`
         html, body, #root { background: var(--fondo); overscroll-behavior: none; }
         /* Todo contenedor con scroll propio: sin rebote ni franja blanca al final */
