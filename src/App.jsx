@@ -252,6 +252,62 @@ Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre complet
   return Array.isArray(parsed?.cirugias) ? parsed.cirugias : [];
 }
 
+// ─── Extracción de EXÁMENES desde foto(s): devuelve arreglo de exámenes ───
+// Mapea los valores de laboratorio a las MISMAS keys que usa PARAMETROS_LAB.
+async function extraerExamenes(imagenesBase64) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const instrucciones = `Analiza la(s) foto(s) de resultados de exámenes (laboratorio, urocultivo/antibiograma, imágenes) y extrae TODOS los exámenes en JSON.
+Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
+Si un dato no aparece, usa null. NO inventes datos. La fecha de hoy es ${hoy}.
+
+Una misma hoja puede traer varias familias de exámenes: crea UNA entrada por familia.
+Usa EXACTAMENTE estos nombres y estas "keys" para los parámetros de laboratorio:
+- "Hemograma": hb, hto, leucocitos, plaquetas, neutrofilos, linfocitos, vcm
+- "Función renal": crea (creatinina), bun, vfg, na, k, cl
+- "Coagulación": inr, tp, ttpa, fibrinogeno
+- "PCR": pcr
+- "ELP": na, k, cl
+
+Esquema exacto:
+{
+  "examenes": [
+    {
+      "tipo": "Laboratorio" | "Cultivo" | "Imágenes" | "Otro",
+      "nombre": "Hemograma" | "Función renal" | "Coagulación" | "PCR" | "ELP" | "Urocultivo" | "<nombre del examen>",
+      "fecha_examen": "YYYY-MM-DD o null",
+      "parametros": { "<key>": "<valor tal cual, solo el número>" },   // SOLO para tipo Laboratorio, usando las keys de arriba
+      "germen": "germen aislado o 'Cultivo negativo' o null",           // SOLO para tipo Cultivo
+      "antibiograma": [ { "atb": "nombre del antibiótico", "sens": "Sensible" | "Intermedio" | "Resistente" } ],  // SOLO para Cultivo
+      "resultado": "texto libre (para imágenes/otros) o null"
+    }
+  ]
+}
+Reglas:
+- Para laboratorio, incluye en "parametros" solo las keys cuyo valor aparezca; el valor debe ser solo el número (ej: "13.5", no "13.5 g/dL").
+- Para urocultivo con recuento y antibiograma, usa tipo "Cultivo", nombre "Urocultivo", llena "germen" y "antibiograma".
+- No inventes valores que no estén en la imagen.`;
+
+  const content = imagenesBase64.map((b64) => ({
+    type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 },
+  }));
+  content.push({ type: "text", text: instrucciones });
+
+  const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({
+      model: "claude-sonnet-5", max_tokens: 3000,
+      system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido.",
+      messages: [{ role: "user", content }],
+    }),
+  });
+  const data = await res.json();
+  const txt = data.content?.find((b) => b.type === "text")?.text || "";
+  const clean = txt.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(clean);
+  return Array.isArray(parsed?.examenes) ? parsed.examenes : [];
+}
+
 // ─── Modal "Mi perfil": datos que alimentan las recetas/prescripciones ───
 function PerfilModal({ currentUser, setCurrentUser, onClose }) {
   const [form, setForm] = useState({
@@ -5096,6 +5152,145 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
  
 
+// ─── Foto → exámenes: captura múltiple, confirma, extrae con IA y guarda ───
+function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
+  const [fotos, setFotos] = useState([]);       // dataUrls comprimidos
+  const [fase, setFase] = useState("capturar"); // capturar | extrayendo | revisar
+  const [extraidos, setExtraidos] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef(null);
+
+  const onFiles = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 5 - fotos.length);
+    if (!files.length) return;
+    const nuevas = [];
+    for (const f of files) { try { nuevas.push(await comprimirImagenPac(f)); } catch {} }
+    setFotos(prev => [...prev, ...nuevas].slice(0, 5));
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const extraer = async () => {
+    if (!fotos.length) return;
+    setFase("extrayendo"); setError("");
+    try {
+      const b64s = fotos.map(d => d.split(",")[1]);
+      const arr = await extraerExamenes(b64s);
+      if (!arr.length) { setError("No se detectaron exámenes. Prueba con una foto más nítida."); setFase("capturar"); return; }
+      const hoy = new Date().toISOString().slice(0, 10);
+      setExtraidos(arr.map(ex => ({ ...ex, fecha_examen: ex.fecha_examen || hoy, incluir: true })));
+      setFase("revisar");
+    } catch (e) {
+      setError("No se pudo leer los exámenes. " + (e?.message || e)); setFase("capturar");
+    }
+  };
+
+  const resumenParams = (ex) => {
+    if (ex.tipo === "Cultivo") {
+      const abg = Array.isArray(ex.antibiograma) ? ex.antibiograma.filter(a => a?.atb).map(a => `${a.atb} (${a.sens?.[0] || "?"})`).join(", ") : "";
+      return [ex.germen ? `Germen: ${ex.germen}` : "", abg ? `Antibiograma: ${abg}` : ""].filter(Boolean).join(" · ");
+    }
+    if (ex.parametros && typeof ex.parametros === "object") {
+      return Object.entries(ex.parametros).filter(([, v]) => v !== null && v !== "").map(([k, v]) => `${k}: ${v}`).join(" · ");
+    }
+    return ex.resultado || "";
+  };
+
+  const guardarTodos = async () => {
+    const aGuardar = extraidos.filter(e => e.incluir);
+    if (!aGuardar.length) { setError("Marca al menos un examen para guardar."); return; }
+    setGuardando(true); setError("");
+    let ok = 0;
+    for (const ex of aGuardar) {
+      const estructurados = {};
+      if (ex.parametros && typeof ex.parametros === "object") {
+        const params = {};
+        Object.entries(ex.parametros).forEach(([k, v]) => { if (v !== null && v !== "" && v !== undefined) params[k] = String(v); });
+        if (Object.keys(params).length) estructurados.parametros = params;
+      }
+      if (ex.germen) estructurados.germen = ex.germen;
+      if (Array.isArray(ex.antibiograma) && ex.antibiograma.length) estructurados.antibiograma = ex.antibiograma.filter(a => a && a.atb);
+      if (ex.tipo === "Cultivo" && ex.nombre) estructurados.tipoCultivo = ex.nombre;
+      const datos = {
+        tipo: ex.tipo || "Laboratorio",
+        nombre: ex.nombre || "Examen",
+        resultado: ex.resultado || null,
+        fecha_examen: ex.fecha_examen,
+        datos_estructurados: estructurados,
+      };
+      const r = await crearExamen(paciente.id, currentUser.id, datos);
+      if (r.ok) ok++;
+    }
+    setGuardando(false);
+    if (ok > 0) { await onGuardado?.(); onClose(); }
+    else setError("No se pudo guardar. Revisa tu conexión.");
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 440, maxHeight: "88vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📷 Exámenes desde foto</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+        </div>
+
+        <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={onFiles} />
+
+        {fase === "capturar" && (
+          <>
+            <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>Toma o sube hasta 5 fotos de los resultados. Revisa antes de extraer.</div>
+            {fotos.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                {fotos.map((d, i) => (
+                  <div key={i} style={{ position: "relative" }}>
+                    <img src={d} alt={`foto ${i + 1}`} style={{ height: 76, borderRadius: 6, border: "0.5px solid var(--borde)" }} />
+                    <button onClick={() => setFotos(fotos.filter((_, j) => j !== i))} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: "var(--peligro)", color: "#fff", border: "none", fontSize: 11, cursor: "pointer", lineHeight: 1 }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {fotos.length < 5 && (
+              <button onClick={() => inputRef.current?.click()} style={{ width: "100%", padding: "10px", fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10 }}>{fotos.length ? "+ Agregar otra foto" : "📸 Tomar / subir foto"}</button>
+            )}
+            {error && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 8 }}>{error}</div>}
+            <button onClick={extraer} disabled={!fotos.length} style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 600, background: fotos.length ? "var(--primario)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: fotos.length ? "pointer" : "default" }}>Extraer datos de {fotos.length} foto{fotos.length === 1 ? "" : "s"}</button>
+          </>
+        )}
+
+        {fase === "extrayendo" && (
+          <div style={{ textAlign: "center", padding: "24px 0", color: "var(--texto-sec)" }}>
+            <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
+            Leyendo los exámenes…
+          </div>
+        )}
+
+        {fase === "revisar" && (
+          <>
+            <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>Revisa y confirma. Puedes ajustar la fecha o desmarcar los que no quieras guardar.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              {extraidos.map((ex, i) => (
+                <div key={i} style={{ background: "var(--fondo-suave)", borderRadius: 8, padding: "10px 12px", opacity: ex.incluir ? 1 : 0.5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <input type="checkbox" checked={ex.incluir} onChange={() => setExtraidos(prev => prev.map((e, j) => j === i ? { ...e, incluir: !e.incluir } : e))} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", flex: 1 }}>{ex.nombre || ex.tipo}</span>
+                    <input type="date" value={ex.fecha_examen} onChange={e => setExtraidos(prev => prev.map((x, j) => j === i ? { ...x, fecha_examen: e.target.value } : x))} style={{ fontSize: 11.5, padding: "3px 6px", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.4, paddingLeft: 24 }}>{resumenParams(ex) || <em style={{ color: "var(--texto-ter)" }}>sin valores detectados</em>}</div>
+                </div>
+              ))}
+            </div>
+            {error && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 8 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { setFase("capturar"); setExtraidos([]); }} style={{ padding: "10px 14px", fontSize: 13, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Atrás</button>
+              <button onClick={guardarTodos} disabled={guardando} style={{ flex: 1, padding: 12, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : `Guardar ${extraidos.filter(e => e.incluir).length} examen(es)`}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Orden de transfusión (HBV): pre-llena desde la ficha y genera PDF ───
 const PRODUCTOS_TX = ["Sangre total", "Glóbulos rojos", "Plasma", "Plaquetas", "Crioprecipitado", "Autotransfusión", "Otros"];
 const CARACTER_TX = ["Inmediata (sin pruebas de compatibilidad)", "Urgente (entre 1 y 4 horas)", "Dentro del día", "Otros"];
@@ -5515,6 +5710,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [antibiograma, setAntibiograma] = useState([]); // filas {atb, sens} del antibiograma
   const [formAtb, setFormAtb] = useState({ atb: "", sens: "" });
   const [ordenTxAbierta, setOrdenTxAbierta] = useState(false); // modal orden de transfusión
+  const [fotoExamenesAbierto, setFotoExamenesAbierto] = useState(false); // modal exámenes desde foto
   const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
   const servBtnRef = useRef(null); // posición real del botón, para que el menú (position:fixed) no se recorte
   const [verCargaMedicos, setVerCargaMedicos] = useState(false); // resumen de pacientes por médico
@@ -6614,6 +6810,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     return (
       <div style={{padding:"16px",overflowY:"auto"}}>
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
+        {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
         <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
        {/* Cabecera */}
@@ -6885,7 +7082,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>🧪 Exámenes</div>
-            {!soloLectura && <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
+            {!soloLectura && <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>setFotoExamenesAbierto(true)} title="Exámenes desde foto" aria-label="Exámenes desde foto" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📷</button>
+              <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>
+            </div>}
           </div>
           {examenes.length === 0 ? (
             <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay exámenes registrados</div>
