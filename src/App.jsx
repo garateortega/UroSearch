@@ -1211,10 +1211,49 @@ function ScoreBriganti() {
   );
 }
 
-// Saludo inicial de Uros (incluye el aviso de apoyo clínico una sola vez, al abrir)
-function saludoUros(nombre) {
+// Saludo inicial de Uros — 30 variantes que rotan al azar cada vez que se entra.
+// {n} se reemplaza por el primer nombre de la persona.
+const SALUDOS_UROS = [
+  "👋 Hola {n}. Soy Uros, tu asistente clínico. ¿En qué te puedo ayudar?",
+  "👋 ¡Qué bueno verte, {n}! Soy Uros. ¿Con qué partimos hoy?",
+  "🩺 Hola {n}. Uros a la orden. ¿Qué necesitas revisar?",
+  "👋 ¡Hola, {n}! ¿En qué caso andas trabajando hoy?",
+  "😊 Buenas, {n}. Soy Uros. Pregúntame lo que necesites.",
+  "👋 Hola {n}. ¿Vemos algún paciente o una duda clínica?",
+  "🔎 Hola {n}, soy Uros. ¿Qué buscamos hoy?",
+  "👋 ¡Listo para ayudarte, {n}! ¿Por dónde empezamos?",
+  "🩺 Hola {n}. Cuéntame en qué te doy una mano.",
+  "👋 ¡Hola de nuevo, {n}! ¿Qué tienes entre manos?",
+  "😊 Hola {n}, soy Uros. Aquí estoy para lo que necesites.",
+  "👋 Buenas, {n}. ¿Una consulta rápida o algo más largo?",
+  "📋 Hola {n}. ¿Revisamos guías, pacientes o logbook?",
+  "👋 ¡Hey, {n}! Soy Uros. Dispara tu pregunta.",
+  "🩺 Hola {n}, ¿en qué anda la urología hoy?",
+  "👋 ¡Hola, {n}! ¿Te ayudo con una duda clínica?",
+  "😊 Qué tal, {n}. Soy Uros, tu copiloto clínico.",
+  "👋 Hola {n}. Estoy listo cuando tú lo estés.",
+  "🔬 Buenas, {n}. ¿Qué caso analizamos?",
+  "👋 ¡Hola, {n}! Cuéntame qué necesitas resolver.",
+  "🩺 Hola {n}, soy Uros. ¿Partimos con una consulta?",
+  "👋 ¡Bienvenido de vuelta, {n}! ¿En qué te apoyo?",
+  "😊 Hola {n}. Pregunta con confianza, para eso estoy.",
+  "👋 Buenas, {n}. ¿Vemos algo de litiasis, próstata, o…?",
+  "📖 Hola {n}, soy Uros. ¿Estudiamos o consultamos?",
+  "👋 ¡Hola, {n}! ¿Qué duda te trajo por aquí?",
+  "🩺 Qué gusto, {n}. Dime en qué te ayudo.",
+  "👋 Hola {n}. Tu asistente de urología, listo.",
+  "😊 ¡Hola, {n}! ¿Empezamos con algo del turno?",
+  "👋 Buenas, {n}. Aquí Uros. ¿Qué necesitas hoy?",
+];
+function saludoAleatorio(nombre) {
   const primer = (nombre || "").split(" ")[0] || "";
-  return `👋 Hola ${primer}. Soy **Uros**, tu asistente clínico de UroSearch.\n\n¿En qué te puedo ayudar?`;
+  const base = SALUDOS_UROS[Math.floor(Math.random() * SALUDOS_UROS.length)];
+  return base.replace("{n}", primer).replace(" .", ".").replace("  ", " ");
+}
+
+// Saludo inicial de Uros (texto plano para el chat)
+function saludoUros(nombre) {
+  return saludoAleatorio(nombre);
 }
 const MAX_CONVERSACIONES = 20; // máximo por usuario; al superarlo se eliminan las más antiguas
 
@@ -1240,7 +1279,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.3";
+const VERSION = "v1.9.4";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -1410,8 +1449,9 @@ function UrosAvatar({ size = 30 }) {
 }
 // Portada del chat: figura hero + saludo. Se muestra al entrar a la pestaña Chat.
 function PortadaChat({ nombre }) {
-  const primer = (nombre || "").split(" ")[0] || "";
   const movil = useIsMobile();
+  // Un saludo al azar, fijo mientras la portada esté montada
+  const saludo = useMemo(() => saludoAleatorio(nombre), [nombre]);
 
   // En móvil: apilado (Uros arriba grande, mensaje abajo, colita hacia arriba).
   // En escritorio: en fila (mensaje a la izquierda, Uros a la derecha, colita al lado).
@@ -1453,8 +1493,7 @@ function PortadaChat({ nombre }) {
         maxWidth: movil ? "92%" : 440,
         boxShadow:"0 10px 28px rgba(37,99,235,.15)"
       }}>
-        👋 Hola {primer}. Soy <strong>Uros</strong>, tu asistente clínico.
-        <div style={{ marginTop:10 }}>¿En qué te puedo ayudar?</div>
+        {saludo}
         <div style={bubbleTail} />
       </div>
     </div>
@@ -1482,7 +1521,8 @@ function pasosTutorial(rol, movil = false) {
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
     { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
     ...(movil ? [{ tab: "hospital", subtab: "pacientes", uros: "point", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." }] : []),
-    { tab: "hospital", subtab: "pacientes", uros: "pensativo", titulo: "Ordena los servicios a tu manera", texto: "Deja presionado el nombre de un servicio hasta que vibre y arrástralo a su lugar. Al soltarlo, el orden se guarda y todo tu equipo lo ve igual." },
+    { tab: "hospital", subtab: "pacientes", uros: "point", titulo: "El menú de servicios", texto: "El botón «Todos los servicios ▾» abre un menú: elige un servicio para ver solo esos pacientes, filtra por estado (activos, operados, sin operar, de alta) y, en equipo, mira cuántos pacientes tiene cada médico." },
+    { tab: "hospital", subtab: "pacientes", uros: "pensativo", titulo: "Ordena los servicios a tu manera", texto: "En «Administrar servicios», deja presionado el ☰ de un servicio y arrástralo a su lugar. En un equipo, el orden y la lista se comparten con todos." },
     { tab: "hospital", subtab: "interconsultas", uros: "camara", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
 
     // ─── SEGUIMIENTO ───
@@ -5158,6 +5198,13 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [tumores, setTumores] = useState([]); // lista de tumores agregados
   const [formTumor, setFormTumor] = useState({ organo: "", sublocalizacion: "", tamano: "" });
   const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
+  const [verCargaMedicos, setVerCargaMedicos] = useState(false); // resumen de pacientes por médico
+  // Nombre de un miembro del equipo a partir de su user_id
+  const nombreMiembroPac = (id) => {
+    if (id === currentUser.id) return currentUser.nombre + " (tú)";
+    const m = miembrosEquipo.find(x => x.perfiles?.id === id || x.user_id === id);
+    return m?.perfiles?.nombre || m?.nombre || "Miembro";
+  };
 
   // Servicios
   const [nuevoServicio, setNuevoServicio] = useState("");
@@ -5287,11 +5334,50 @@ const cargarMiembrosEquipo = async () => {
   // Nombres para el desplegable del formulario
   const serviciosDisponibles = serviciosActivos.map(s => s.nombre);
 
-  // Filtrar pacientes
+  // Filtrar pacientes según el estado elegido
   const pacientesFiltrados = pacientes.filter(p => {
-    if (filtroEstado !== "todos" && p.estado !== filtroEstado) return false;
     if (filtroServicio !== "todos" && p.servicio !== filtroServicio) return false;
+    switch (filtroEstado) {
+      case "todos":     break;
+      case "activo":    if (p.estado !== "activo") return false; break;
+      case "alta":      if (p.estado !== "alta") return false; break;
+      case "operado":   if (!p.operado) return false; break;
+      case "sin_operar":if (p.operado || p.estado === "alta") return false; break;
+      default: break;
+    }
     return true;
+  });
+
+  // Estados disponibles en el menú (valor, etiqueta)
+  const ESTADOS_PACIENTE = [
+    ["activo", "Activos"],
+    ["todos", "Todos"],
+    ["alta", "Dados de alta"],
+    ["operado", "Operados"],
+    ["sin_operar", "Sin operar"],
+  ];
+  const ETIQUETA_ESTADO = Object.fromEntries(ESTADOS_PACIENTE.map(([v,l])=>[v,l]));
+
+  // Cuántos pacientes activos tiene asignado cada médico del equipo
+  const cargaPorMedico = useMemo(() => {
+    const conteo = new Map();
+    pacientes.forEach(p => {
+      if (p.estado === "alta") return;
+      const ids = Array.isArray(p.encargados) ? p.encargados : [];
+      ids.forEach(id => conteo.set(id, (conteo.get(id)||0) + 1));
+    });
+    return Array.from(conteo.entries())
+      .map(([id,n]) => ({ nombre: nombreMiembroPac(id), n }))
+      .sort((a,b) => b.n - a.n);
+  }, [pacientes, miembrosEquipo]);
+
+  // Estilo de cada ítem del menú desplegable
+  const itemMenu = (activo) => ({
+    display:"block", width:"100%", textAlign:"left",
+    padding:"8px 10px", fontSize:12.5, borderRadius:7, cursor:"pointer",
+    background: activo ? "var(--primario-suave, #E8F3FB)" : "none",
+    color: activo ? "var(--primario)" : "var(--texto)",
+    fontWeight: activo ? 700 : 500, border:"none",
   });
 
   // Agrupar por servicio para vista kanban
@@ -6864,38 +6950,69 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <div style={{padding:"16px",overflowY:"auto"}}>
 
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
-        <div style={{fontSize:11,color:"var(--texto-ter)"}}>
-          {pacientesFiltrados.length} pacientes{filtroServicio!=="todos"?` · ${filtroServicio}`:""}{filtroEstado!=="activo"?` · ${filtroEstado==="alta"?"dados de alta":"todos"}`:""}
-        </div>
         {!soloLectura && (
-          <div style={{display:"flex",gap:6,marginLeft:"auto",flexWrap:"wrap"}}>
-            <button onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>⚙️ Servicios {serviciosMenuOpen?"▴":"▾"}</button>
-            <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",position:"relative"}}>
+            <button onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
+              {filtroServicio==="todos" ? "Todos los servicios" : filtroServicio}{filtroEstado!=="activo" ? ` · ${ETIQUETA_ESTADO[filtroEstado]||filtroEstado}` : ""} {serviciosMenuOpen?"▴":"▾"}
+            </button>
+            <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
+
+            {/* Menú desplegable de servicios + estado (estilo Hospital) */}
+            {serviciosMenuOpen && (
+              <>
+                <div onClick={()=>setServiciosMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:40}}/>
+                <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:41,minWidth:240,maxWidth:300,maxHeight:"70vh",overflowY:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 12px 32px rgba(15,23,42,0.22)",padding:"6px"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"6px 10px 4px"}}>SERVICIOS</div>
+                  <button onClick={()=>{ setFiltroServicio("todos"); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio==="todos")}>
+                    Todos los servicios {filtroServicio==="todos" ? "✓" : ""}
+                  </button>
+                  {serviciosDisponibles.map(s => (
+                    <button key={s} onClick={()=>{ setFiltroServicio(s); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio===s)}>
+                      {s} {filtroServicio===s ? "✓" : ""}
+                    </button>
+                  ))}
+
+                  <div style={{height:"0.5px",background:"var(--borde)",margin:"6px 8px"}}/>
+                  <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"4px 10px"}}>ESTADO</div>
+                  {ESTADOS_PACIENTE.map(([val,lbl]) => (
+                    <button key={val} onClick={()=>{ setFiltroEstado(val); setServiciosMenuOpen(false); }} style={itemMenu(filtroEstado===val)}>
+                      {lbl} {filtroEstado===val ? "✓" : ""}
+                    </button>
+                  ))}
+
+                  <div style={{height:"0.5px",background:"var(--borde)",margin:"6px 8px"}}/>
+                  <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"4px 10px"}}>
+                    VIENDO: {(esEquipo ? (equipoActual?.nombre||"EQUIPO") : "MIS PACIENTES").toUpperCase()}
+                  </div>
+                  <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{...itemMenu(false),color:"var(--primario)"}}>
+                    🗂️ {esEquipo ? "Administrar servicios del equipo" : "Administrar mis servicios"}
+                  </button>
+                  {esEquipo && (
+                    <button onClick={()=>setVerCargaMedicos(v=>!v)} style={{...itemMenu(false),color:"var(--primario)"}}>
+                      👥 Pacientes por médico {verCargaMedicos?"▴":"▾"}
+                    </button>
+                  )}
+                  {esEquipo && verCargaMedicos && (
+                    <div style={{padding:"2px 10px 8px"}}>
+                      {cargaPorMedico.length === 0 ? (
+                        <div style={{fontSize:11,color:"var(--texto-ter)",padding:"4px 0"}}>Nadie tiene pacientes asignados.</div>
+                      ) : cargaPorMedico.map(({nombre,n}) => (
+                        <div key={nombre} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11.5,padding:"3px 0",color:"var(--texto-sec)"}}>
+                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>
+                          <b style={{color:"var(--primario)",flexShrink:0}}>{n}</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
-      </div>
-
-      {/* Panel de servicios y filtros (se abre con el botón ⚙️ Servicios) */}
-      {serviciosMenuOpen && !soloLectura && (
-        <div style={{marginBottom:12,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10,display:"flex",flexDirection:"column",gap:10}}>
-          <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🗂️ {esEquipo ? "Servicios del equipo" : "Mis servicios"}</button>
-          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-            <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Servicio a visualizar</label>
-            <select value={filtroServicio} onChange={e=>setFiltroServicio(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-              <option value="todos">Todos los servicios</option>
-              {serviciosDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-            <label style={{fontSize:11,fontWeight:600,color:"var(--texto-sec)"}}>Estado</label>
-            <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"6px 10px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none",cursor:"pointer"}}>
-              <option value="activo">Solo activos</option>
-              <option value="alta">Solo dados de alta</option>
-              <option value="todos">Todos</option>
-            </select>
-          </div>
+        <div style={{fontSize:11,color:"var(--texto-ter)",marginLeft:soloLectura?0:"auto"}}>
+          {pacientesFiltrados.length} pacientes
         </div>
-      )}
+      </div>
 
       {loadingPacientes && (
         <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando pacientes...</div>
@@ -6945,21 +7062,21 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     onPointerCancel={cancelarLongPress}
                     onPointerLeave={cancelarLongPress}
                     title={soloLectura ? undefined : "Deja presionado y arrastra para reordenar"}
-                    style={{fontSize:15,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
+                    style={{fontSize:13,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
                     {!soloLectura && <span style={{fontSize:13,color:"var(--texto-ter)",flexShrink:0}}>☰</span>}
                     <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{servicio}</span>
-                    <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:13,flexShrink:0}}>({porServicio[servicio].length})</span>
+                    <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:11.5,flexShrink:0}}>({porServicio[servicio].length})</span>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {porServicio[servicio].map(p => (
                       <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                          <div style={{fontSize:15,fontWeight:600,color:"var(--texto)"}}>
-                            {p.iniciales} <span style={{fontSize:19,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
+                          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
+                            {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
                           </div>
-                          <div style={{fontSize:13,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
+                          <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama}</div>
                         </div>
-                        <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
+                        <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
                         {(p.ficha_clinica || p.rut) && (
                           <div style={{fontSize:10.5,color:"var(--texto-ter)",marginBottom:3}}>
                             {p.ficha_clinica ? `FC ${p.ficha_clinica}` : ""}{p.ficha_clinica && p.rut ? " · " : ""}{p.rut || ""}
@@ -7344,6 +7461,17 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
 const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [headerOculto, setHeaderOculto] = useState(false); // se oculta al hacer scroll hacia abajo
+  const ultimoScrollRef = useRef(0);
+  // Detecta scroll en cualquier contenedor interno y oculta/muestra la barra superior
+  const onScrollContenido = (e) => {
+    const y = e.target.scrollTop;
+    if (y < 0) return;
+    const prev = ultimoScrollRef.current;
+    if (y > prev + 6 && y > 60) setHeaderOculto(true);        // bajando → ocultar
+    else if (y < prev - 6 || y < 30) setHeaderOculto(false);  // subiendo o arriba → mostrar
+    ultimoScrollRef.current = y;
+  };
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [perfilOpen, setPerfilOpen] = useState(false); // modal "Mi perfil"
   const bottomRef = useRef(null);
@@ -8213,7 +8341,15 @@ if (!currentUser) {
           @keyframes uro-slide-der { from { opacity: .5; } to { opacity: 1; } }
         }
       `}</style>
-      <div style={{padding:"16px 20px 0",borderBottom:"0.5px solid var(--borde)",background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative"}}>
+      <div style={{
+        padding: headerOculto ? "0 20px" : "16px 20px 0",
+        maxHeight: headerOculto ? 0 : 200,
+        opacity: headerOculto ? 0 : 1,
+        overflow:"hidden",
+        transition:"max-height .28s ease, opacity .2s ease, padding .28s ease",
+        borderBottom: headerOculto ? "none" : "0.5px solid var(--borde)",
+        background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative",
+      }}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             <LogoUroSearch size={40}/>
@@ -8319,7 +8455,7 @@ if (!currentUser) {
         </>
       )}
 
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onScrollCapture={onScrollContenido} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
       <div key={tab} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,animation:`uro-slide-${dirTab < 0 ? "izq" : "der"} .24s cubic-bezier(.22,.8,.3,1)`}}>
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
