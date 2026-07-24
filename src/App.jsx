@@ -7553,6 +7553,25 @@ function NotificationBell({ currentUser }) {
   );
 }
 
+// Lee la sesión que Supabase persiste en localStorage (clave "sb-<ref>-auth-token").
+// Sirve para restaurar el login sin red, aunque supabase-js no logre refrescar el
+// token offline. Devuelve un objeto con al menos { user: { id } }, o null.
+function leerSesionPersistida() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith("sb-") || !/auth-token/.test(k)) continue;
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      let val;
+      try { val = JSON.parse(raw); } catch { continue; }
+      const sesion = val?.currentSession || val?.session || val;
+      if (sesion?.user?.id) return sesion;
+    }
+  } catch {}
+  return null;
+}
+
 // ─── Estado de conexión: true si el navegador cree tener red ───
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
@@ -7830,18 +7849,31 @@ useEffect(() => {
     if (result.ok && result.session) {
       setSession(result.session);
       cargarPerfil(result.session);
+      setLoadingSession(false);
+      return;
+    }
+    // Sin sesión desde getSession (típico sin red): intentamos la sesión
+    // persistida cruda de Supabase para entrar offline con el perfil cacheado.
+    const persistida = leerSesionPersistida();
+    if (persistida?.user?.id) {
+      setSession(persistida);
+      cargarPerfil(persistida);
     }
     setLoadingSession(false);
   });
 
   // Suscribirse a cambios futuros (login, logout)
   const unsubscribe = onAuthChange((event, newSession) => {
-    setSession(newSession);
     if (newSession) {
+      setSession(newSession);
       cargarPerfil(newSession);
-    } else {
-      setCurrentUser(null);
+      return;
     }
+    // Sin sesión nueva. Offline esto suele ser un "soft sign-out" de supabase-js
+    // por no poder refrescar el token: NO botamos al usuario al login.
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    setSession(null);
+    setCurrentUser(null);
   });
 
   return () => unsubscribe();
