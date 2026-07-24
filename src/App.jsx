@@ -7845,11 +7845,12 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
 // Verificar si hay sesión al cargar la app, y suscribirse a cambios
 useEffect(() => {
   // Verificar sesión inicial
-  getSession().then((result) => {
+  const arrancar = async () => {
+    let result = { ok: false };
+    try { result = await getSession(); } catch { result = { ok: false }; }
     if (result.ok && result.session) {
       setSession(result.session);
-      cargarPerfil(result.session);
-      setLoadingSession(false);
+      await cargarPerfil(result.session);
       return;
     }
     // Sin sesión desde getSession (típico sin red): intentamos la sesión
@@ -7857,10 +7858,15 @@ useEffect(() => {
     const persistida = leerSesionPersistida();
     if (persistida?.user?.id) {
       setSession(persistida);
-      cargarPerfil(persistida);
+      await cargarPerfil(persistida);
+      return;
     }
-    setLoadingSession(false);
-  });
+    // Ni sesión de red ni persistida: si estamos offline, último recurso = perfil en caché.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      await restaurarPerfilOffline();
+    }
+  };
+  arrancar().finally(() => setLoadingSession(false));
 
   // Suscribirse a cambios futuros (login, logout)
   const unsubscribe = onAuthChange((event, newSession) => {
@@ -7990,13 +7996,39 @@ const eliminarConv = async (conversacionId) => {
 };
 
 // Cargar el perfil del usuario cuando hay una sesión activa
+// Restaura el perfil desde la caché para entrar sin conexión (sin pasar por login).
+const restaurarPerfilOffline = async () => {
+  try {
+    const cacheado = await leerSnapshot("perfil:ultimo");
+    if (cacheado && cacheado.id) {
+      setCurrentUser(cacheado);
+      let tabGuardado = null;
+      try { tabGuardado = localStorage.getItem("uro_tab"); } catch {}
+      const tabsValidos = tabsPorRol(cacheado.rol).map(t => t[0]);
+      setTab(tabGuardado && tabsValidos.includes(tabGuardado) ? tabGuardado : (cacheado.rol === "admin" ? "admin" : "chat"));
+      if (cacheado.rol !== "admin") {
+        setConversacionActual(null);
+        setMessages([{ role: "assistant", content: saludoUros(cacheado.nombre) }]);
+      }
+      return true;
+    }
+  } catch {}
+  return false;
+};
+
 const cargarPerfil = async (sessionData) => {
   if (!sessionData?.user) {
     setCurrentUser(null);
     return;
   }
   
-  const result = await getPerfil(sessionData.user.id);
+  let result;
+  try {
+    result = await getPerfil(sessionData.user.id);
+  } catch (e) {
+    // Sin red, la consulta a Supabase LANZA (no devuelve {ok:false}). Lo tratamos igual.
+    result = { ok: false, error: e?.message || "network" };
+  }
   
   if (!result.ok) {
     // Falló la carga del perfil por red. NO cerramos sesión a la ligera:
@@ -8004,6 +8036,7 @@ const cargarPerfil = async (sessionData) => {
     console.warn("No se pudo cargar el perfil desde la red:", result.error);
     let cacheado = null;
     try { cacheado = await leerSnapshot(`perfil:${sessionData.user.id}`); } catch {}
+    if (!cacheado || !cacheado.id) { try { cacheado = await leerSnapshot("perfil:ultimo"); } catch {} }
     if (cacheado && cacheado.id) {
       setCurrentUser(cacheado);
       let tabGuardado = null;
@@ -8054,6 +8087,7 @@ const cargarPerfil = async (sessionData) => {
   
   setCurrentUser(userAdaptado);
   try { guardarSnapshot(`perfil:${perfil.id}`, userAdaptado); } catch {}
+  try { guardarSnapshot("perfil:ultimo", userAdaptado); } catch {}
   let tabGuardado = null;
   try { tabGuardado = localStorage.getItem("uro_tab"); } catch {}
   const tabsValidos = tabsPorRol(perfil.rol).map(t => t[0]);
