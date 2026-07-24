@@ -5096,6 +5096,237 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
  
 
+// ─── Orden de transfusión (HBV): pre-llena desde la ficha y genera PDF ───
+const PRODUCTOS_TX = ["Sangre total", "Glóbulos rojos", "Plasma", "Plaquetas", "Crioprecipitado", "Autotransfusión", "Otros"];
+const CARACTER_TX = ["Inmediata (sin pruebas de compatibilidad)", "Urgente (entre 1 y 4 horas)", "Dentro del día", "Otros"];
+const PREVISIONES_TX = ["FONASA A", "FONASA B", "FONASA C", "FONASA D", "ISAPRE", "PRAIS", "Otra"];
+
+function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
+  // Últimos valores de Hb y plaquetas desde los exámenes (ya vienen ordenados desc).
+  const ultimoParam = (key) => {
+    for (const ex of (examenes || [])) {
+      const v = ex?.datos_estructurados?.parametros?.[key];
+      if (v !== undefined && v !== "") return String(v);
+    }
+    return "";
+  };
+  const [prevision, setPrevision] = useState("");
+  const [peso, setPeso] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [diagnostico, setDiagnostico] = useState(paciente.diagnostico || "");
+  const [hb, setHb] = useState(ultimoParam("hb"));
+  const [plaquetas, setPlaquetas] = useState(ultimoParam("plaquetas"));
+  const [productos, setProductos] = useState({}); // { nombre: { on, cant } }
+  const [caracter, setCaracter] = useState("");
+  const [caracterOtro, setCaracterOtro] = useState("");
+  const [txPrevias, setTxPrevias] = useState("");
+  const [reacciones, setReacciones] = useState("");
+  const [reaccionTipo, setReaccionTipo] = useState("");
+  const [generando, setGenerando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const toggleProd = (nom) => setProductos(p => ({ ...p, [nom]: { on: !p[nom]?.on, cant: p[nom]?.cant || "" } }));
+  const setCantProd = (nom, cant) => setProductos(p => ({ ...p, [nom]: { on: true, cant } }));
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
+  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+
+  const generarPDF = async () => {
+    const algunProd = Object.values(productos).some(p => p?.on);
+    if (!algunProd) { setMsg("⚠️ Marca al menos un producto a transfundir."); return; }
+    if (!caracter) { setMsg("⚠️ Indica el carácter de la transfusión."); return; }
+    setGenerando(true); setMsg("");
+    try {
+      let jsPDF;
+      try { jsPDF = (await import("jspdf")).jsPDF; }
+      catch { setMsg("No se pudo cargar el generador de PDF. Cierra y reabre la app."); setGenerando(false); return; }
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const W = doc.internal.pageSize.getWidth();
+      const M = 14;
+      let y = 14;
+
+      // Encabezado institucional
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(30, 30, 30);
+      doc.text("MINISTERIO DE SALUD", M, y); y += 3.6;
+      doc.text("SERVICIO DE SALUD VALDIVIA", M, y); y += 3.6;
+      doc.text("HOSPITAL CLÍNICO REGIONAL VALDIVIA", M, y); y += 3.6;
+      doc.text("UNIDAD DE BANCO DE SANGRE", M, y);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90);
+      doc.text("USO BANCO DE SANGRE", W - M, 14, { align: "right" });
+      doc.rect(W - M - 34, 15.5, 34, 8);
+      y += 6;
+
+      // Barra roja de título
+      doc.setFillColor(200, 30, 30); doc.rect(M, y, W - 2 * M, 8, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
+      doc.text("ORDEN DE TRANSFUSIÓN", W / 2, y + 5.6, { align: "center" });
+      y += 11;
+      doc.setFillColor(200, 30, 30); doc.rect(M, y, 62, 6, "F");
+      doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+      doc.text("USO MÉDICO EXCLUSIVO", M + 2, y + 4.2);
+      y += 10;
+
+      doc.setTextColor(20, 20, 20);
+      const campo = (label, valor, x, ancho, yy) => {
+        doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(90, 90, 90);
+        doc.text(label, x, yy);
+        doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.2);
+        doc.roundedRect(x, yy + 1.5, ancho, 7, 1, 1);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(20, 20, 20);
+        if (valor) doc.text(String(valor).slice(0, Math.floor(ancho / 1.6)), x + 2, yy + 6.3);
+      };
+      const full = W - 2 * M;
+      // Nombre
+      campo("NOMBRE", paciente.iniciales || "", M, full, y); y += 11;
+      // Servicio / Sala-Pabellón / Cama / Hora / Fecha
+      const w5 = (full - 4 * 3) / 5;
+      const hoy = new Date();
+      campo("SERVICIO", paciente.servicio || "", M, w5, y);
+      campo("SALA/PABELLÓN", "", M + (w5 + 3), w5, y);
+      campo("CAMA/N° PAB.", paciente.cama || "", M + 2 * (w5 + 3), w5, y);
+      campo("HORA", `${String(hoy.getHours()).padStart(2, "0")}:${String(hoy.getMinutes()).padStart(2, "0")}`, M + 3 * (w5 + 3), w5, y);
+      campo("FECHA", hoy.toLocaleDateString("es-CL"), M + 4 * (w5 + 3), w5, y); y += 11;
+      // Diagnóstico / N° Ficha o RUT
+      campo("DIAGNÓSTICO", diagnostico, M, full * 0.62, y);
+      campo("N° FICHA O RUT", paciente.ficha_clinica || paciente.rut || "", M + full * 0.62 + 3, full * 0.38 - 3, y); y += 11;
+      // Motivo / Previsión
+      campo("MOTIVO DE LA TRANSFUSIÓN", motivo, M, full * 0.72, y);
+      campo("PREVISIÓN", prevision, M + full * 0.72 + 3, full * 0.28 - 3, y); y += 11;
+      // Sexo / Edad / Plaquetas / Hb / Peso
+      campo("SEXO", paciente.sexo || "", M, w5, y);
+      campo("EDAD", paciente.edad ? `${paciente.edad} años` : "", M + (w5 + 3), w5, y);
+      campo("RCTO. PLAQUETAS", plaquetas, M + 2 * (w5 + 3), w5, y);
+      campo("Hb", hb, M + 3 * (w5 + 3), w5, y);
+      campo("PESO", peso ? `${peso} kg` : "", M + 4 * (w5 + 3), w5, y); y += 12;
+
+      // Producto y cantidad (izq) · Carácter (der)
+      const colY = y;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(40, 40, 40);
+      doc.text("PRODUCTO Y CANTIDAD", M, y);
+      doc.text("CARÁCTER DE LA TRANSFUSIÓN", W / 2 + 4, y);
+      let yl = y + 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+      const check = (x, yy, on) => { doc.setDrawColor(80, 80, 80); doc.rect(x, yy - 3, 3.5, 3.5); if (on) { doc.setFont("helvetica", "bold"); doc.text("X", x + 0.55, yy - 0.3); doc.setFont("helvetica", "normal"); } };
+      PRODUCTOS_TX.forEach(nom => {
+        const p = productos[nom];
+        check(M, yl, p?.on);
+        doc.setTextColor(20, 20, 20);
+        doc.text(nom, M + 5.5, yl);
+        if (p?.on && p.cant) doc.text(`${p.cant} U`, M + 55, yl);
+        yl += 6.2;
+      });
+      let yr = colY + 5;
+      CARACTER_TX.forEach(c => {
+        const on = caracter === c;
+        check(W / 2 + 4, yr, on);
+        doc.text(c === "Otros" && caracterOtro ? `Otros: ${caracterOtro}` : c, W / 2 + 9.5, yr, { maxWidth: (W / 2) - M - 10 });
+        yr += 7;
+      });
+      y = Math.max(yl, yr) + 4;
+
+      // Transfusiones previas / reacciones
+      doc.setFontSize(8);
+      check(M, y, txPrevias === "si"); doc.text("Transf. previas: Sí", M + 5.5, y);
+      check(M + 42, y, txPrevias === "no"); doc.text("No", M + 47.5, y);
+      check(M + 62, y, reacciones === "si"); doc.text("Reacciones adversas: Sí", M + 67.5, y);
+      check(M + 118, y, reacciones === "no"); doc.text("No", M + 123.5, y);
+      y += 6;
+      if (reacciones === "si" && reaccionTipo) { doc.text(`Tipo de reacción: ${reaccionTipo}`, M, y); y += 6; }
+
+      // Médico solicitante
+      y += 4;
+      doc.setDrawColor(150, 150, 150); doc.line(M, y, M + 90, y);
+      doc.setFontSize(7.5); doc.setTextColor(90, 90, 90);
+      doc.text("NOMBRE Y FIRMA MÉDICO SOLICITANTE", M, y + 4);
+      doc.setFontSize(9); doc.setTextColor(20, 20, 20);
+      doc.text(currentUser?.nombre || "", M, y - 1.5);
+
+      // Nota al pie
+      doc.setFont("helvetica", "italic"); doc.setFontSize(7); doc.setTextColor(120, 120, 120);
+      doc.text("NOTA: cualquier solicitud incompleta o ilegible será rechazada por el Banco de Sangre. · Generado con UroSearch", M, 288);
+
+      const nombreArch = `orden_transfusion_${(paciente.iniciales || "paciente").replace(/\s+/g, "_")}.pdf`;
+      doc.save(nombreArch);
+      setMsg("✓ PDF generado.");
+    } catch (e) {
+      setMsg("Error al generar el PDF: " + (e?.message || e));
+    }
+    setGenerando(false);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 420, maxHeight: "88vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>🩸 Orden de transfusión</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginBottom: 12, background: "var(--fondo-suave)", padding: "8px 10px", borderRadius: 7 }}>
+          {paciente.iniciales} · {paciente.edad} años · {paciente.sexo} · Cama {paciente.cama || "—"} · {paciente.servicio}
+        </div>
+
+        <label style={lbl}>Diagnóstico</label>
+        <input value={diagnostico} onChange={e => setDiagnostico(e.target.value)} style={inp} />
+        <label style={lbl}>Motivo de la transfusión</label>
+        <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej: anemia sintomática, sangrado…" style={inp} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>Hb (g/dL)</label><input value={hb} onChange={e => setHb(e.target.value)} inputMode="decimal" style={inp} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>Plaquetas</label><input value={plaquetas} onChange={e => setPlaquetas(e.target.value)} inputMode="numeric" style={inp} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>Peso (kg)</label><input value={peso} onChange={e => setPeso(e.target.value)} inputMode="decimal" style={inp} /></div>
+        </div>
+        <label style={lbl}>Previsión</label>
+        <select value={prevision} onChange={e => setPrevision(e.target.value)} style={inp}>
+          <option value="">—</option>
+          {PREVISIONES_TX.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "6px 0 6px" }}>Producto y cantidad</div>
+        {PRODUCTOS_TX.map(nom => (
+          <div key={nom} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, fontSize: 13, color: "var(--texto)", cursor: "pointer" }}>
+              <input type="checkbox" checked={!!productos[nom]?.on} onChange={() => toggleProd(nom)} />
+              {nom}
+            </label>
+            {productos[nom]?.on && nom !== "Autotransfusión" && (
+              <input value={productos[nom]?.cant || ""} onChange={e => setCantProd(nom, e.target.value)} placeholder="U" inputMode="numeric" style={{ width: 60, padding: "6px 8px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
+            )}
+          </div>
+        ))}
+
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "10px 0 6px" }}>Carácter</div>
+        {CARACTER_TX.map(c => (
+          <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: 13, color: "var(--texto)", cursor: "pointer" }}>
+            <input type="radio" name="caracterTx" checked={caracter === c} onChange={() => setCaracter(c)} />
+            {c}
+          </label>
+        ))}
+        {caracter === "Otros" && (
+          <input value={caracterOtro} onChange={e => setCaracterOtro(e.target.value)} placeholder="Especificar carácter" style={{ ...inp, marginTop: 6 }} />
+        )}
+
+        <div style={{ display: "flex", gap: 16, margin: "10px 0" }}>
+          <div style={{ fontSize: 12.5, color: "var(--texto)" }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Transf. previas</div>
+            <label style={{ marginRight: 10 }}><input type="radio" name="txp" checked={txPrevias === "si"} onChange={() => setTxPrevias("si")} /> Sí</label>
+            <label><input type="radio" name="txp" checked={txPrevias === "no"} onChange={() => setTxPrevias("no")} /> No</label>
+          </div>
+          <div style={{ fontSize: 12.5, color: "var(--texto)" }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>Reacciones adversas</div>
+            <label style={{ marginRight: 10 }}><input type="radio" name="rxa" checked={reacciones === "si"} onChange={() => setReacciones("si")} /> Sí</label>
+            <label><input type="radio" name="rxa" checked={reacciones === "no"} onChange={() => setReacciones("no")} /> No</label>
+          </div>
+        </div>
+        {reacciones === "si" && (
+          <input value={reaccionTipo} onChange={e => setReaccionTipo(e.target.value)} placeholder="Tipo de reacción" style={inp} />
+        )}
+
+        {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1, marginTop: 4 }}>{generando ? "Generando…" : "📄 Generar orden en PDF"}</button>
+      </div>
+    </div>
+  );
+}
+
 function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
   // Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
@@ -5283,6 +5514,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [formTumor, setFormTumor] = useState({ organo: "", sublocalizacion: "", tamano: "" });
   const [antibiograma, setAntibiograma] = useState([]); // filas {atb, sens} del antibiograma
   const [formAtb, setFormAtb] = useState({ atb: "", sens: "" });
+  const [ordenTxAbierta, setOrdenTxAbierta] = useState(false); // modal orden de transfusión
   const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
   const servBtnRef = useRef(null); // posición real del botón, para que el menú (position:fixed) no se recorte
   const [verCargaMedicos, setVerCargaMedicos] = useState(false); // resumen de pacientes por médico
@@ -6381,6 +6613,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const esCreador = seleccionado.medico_id === currentUser.id;
     return (
       <div style={{padding:"16px",overflowY:"auto"}}>
+        {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
        {/* Cabecera */}
@@ -6499,6 +6732,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:14,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏️</button>
+          {!soloLectura && <button onClick={()=>setOrdenTxAbierta(true)} title="Orden de transfusión" aria-label="Orden de transfusión" style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🩸 Transfusión</button>}
           {!soloLectura && <>
             <input ref={inputFotoFichaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoFichaIngreso}/>
             <button onClick={()=>inputFotoFichaRef.current?.click()} disabled={extrayendoIngreso} title="Agregar ingreso desde foto" aria-label="Agregar ingreso desde foto" style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoIngreso?"default":"pointer",fontWeight:500,opacity:extrayendoIngreso?0.6:1}}>{extrayendoIngreso?"🔍 Leyendo…":"📷 Ingreso"}</button>
