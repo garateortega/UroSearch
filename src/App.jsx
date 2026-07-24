@@ -5143,6 +5143,20 @@ const PARAMETROS_LAB = {
   ],
 };
 
+// Uropatógenos frecuentes (urocultivo / cultivo de orina o litiasis) para sugerencias.
+const UROPATOGENOS = [
+  "Escherichia coli", "Klebsiella pneumoniae", "Proteus mirabilis", "Enterococcus faecalis",
+  "Pseudomonas aeruginosa", "Staphylococcus saprophyticus", "Enterobacter cloacae",
+  "Streptococcus agalactiae", "Staphylococcus aureus", "Candida albicans", "Cultivo negativo",
+];
+// Antibióticos frecuentes para el antibiograma.
+const ANTIBIOTICOS = [
+  "Ampicilina", "Amoxicilina/clavulánico", "Cefazolina", "Ceftriaxona", "Ceftazidima", "Cefepime",
+  "Ciprofloxacino", "Levofloxacino", "Nitrofurantoína", "Fosfomicina", "Gentamicina", "Amikacina",
+  "Cotrimoxazol (TMP/SMX)", "Piperacilina/tazobactam", "Ertapenem", "Meropenem", "Vancomicina", "Linezolid",
+];
+const SENSIBILIDAD = ["Sensible", "Intermedio", "Resistente"];
+
 // Dirección clínicamente desfavorable de cada parámetro, para las flechas de tendencia:
 //   "altoMalo" → subir es malo (rojo ▲, verde ▼) · "bajoMalo" → bajar es malo (rojo ▼, verde ▲)
 // Los que no figuran aquí se muestran en gris (neutro), sin juzgar dirección.
@@ -5261,12 +5275,14 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [tipoEvo, setTipoEvo] = useState("estructurada");
 
   // Form de exámenes
-  const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "" });
+  const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
   const [paramsLab, setParamsLab] = useState({}); // valores de los parámetros numéricos del lab seleccionado
   const [litiasis, setLitiasis] = useState([]); // lista de litiasis agregadas
   const [formLitiasis, setFormLitiasis] = useState({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
   const [tumores, setTumores] = useState([]); // lista de tumores agregados
   const [formTumor, setFormTumor] = useState({ organo: "", sublocalizacion: "", tamano: "" });
+  const [antibiograma, setAntibiograma] = useState([]); // filas {atb, sens} del antibiograma
+  const [formAtb, setFormAtb] = useState({ atb: "", sens: "" });
   const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
   const servBtnRef = useRef(null); // posición real del botón, para que el menú (position:fixed) no se recorte
   const [verCargaMedicos, setVerCargaMedicos] = useState(false); // resumen de pacientes por médico
@@ -5353,11 +5369,14 @@ const [miembrosEquipo, setMiembrosEquipo] = useState([]);
     setLoadingPacientes(true);
     const cacheKey = `pacientes:${currentUser.id}:${contexto}`;
     // 1) Pinta al instante lo último guardado (clave para rondas sin señal);
-    //    la red, si hay, refresca a continuación.
+    //    la red, si hay, refresca en segundo plano.
+    let pinto = false;
     try {
       const cache = await leerSnapshot(cacheKey);
-      if (Array.isArray(cache) && cache.length) setPacientes(cache);
+      if (Array.isArray(cache) && cache.length) { setPacientes(cache); pinto = true; }
     } catch {}
+    // Si ya pintamos desde caché, quitamos el spinner de inmediato (no esperamos la red).
+    if (pinto) setLoadingPacientes(false);
     try {
       if (contexto === "personal") {
         // "Mis Pacientes": personales + donde soy encargado en cualquier equipo
@@ -5389,7 +5408,7 @@ const [miembrosEquipo, setMiembrosEquipo] = useState([]);
     } catch {
       // Sin red: nos quedamos con lo hidratado desde caché.
     }
-    setLoadingPacientes(false);
+    if (!pinto) setLoadingPacientes(false);
   };
 
   // Cargar servicios del equipo si estoy en contexto equipo
@@ -5959,6 +5978,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (nuevoEx.pesoProstatico) estructurados.pesoProstatico = nuevoEx.pesoProstatico;
     if (nuevoEx.tipo === "Anatomía patológica" && nuevoEx.lugar) estructurados.lugar = nuevoEx.lugar;
     if (nuevoEx.tipo === "Cultivo" && nuevoEx.tipoCultivo) estructurados.tipoCultivo = nuevoEx.tipoCultivo;
+    // Germen y antibiograma del cultivo
+    if (nuevoEx.tipo === "Cultivo") {
+      const germenFinal = nuevoEx.germen === "Otro" ? (nuevoEx.germenOtro || "").trim() : nuevoEx.germen;
+      if (germenFinal) estructurados.germen = germenFinal;
+      if (antibiograma.length > 0) estructurados.antibiograma = antibiograma;
+    }
     // Parámetros de laboratorio (solo los que se llenaron)
     if (PARAMETROS_LAB[nuevoEx.nombre]) {
       const params = {};
@@ -5995,6 +6020,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (estructurados.pesoProstatico) partesEx.push(`Próstata ${estructurados.pesoProstatico} g`);
     if (estructurados.lugar) partesEx.push(`Lugar: ${estructurados.lugar}`);
     if (estructurados.tipoCultivo) partesEx.push(estructurados.tipoCultivo);
+    if (estructurados.germen) partesEx.push("Germen: " + estructurados.germen);
+    if (estructurados.antibiograma) {
+      const abg = estructurados.antibiograma.map(a => `${a.atb} (${a.sens?.[0] || "?"})`).join(", ");
+      if (abg) partesEx.push("Antibiograma: " + abg);
+    }
     if (estructurados.parametros) {
       const ps = Object.entries(estructurados.parametros).map(([k,v]) => {
         const def = (PARAMETROS_LAB[nuevoEx.nombre] || []).find(p => p.key === k);
@@ -6017,12 +6047,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const evoResult = await crearEvolucion(seleccionado.id, currentUser.id, textoEvo, "examen");
     if (evoResult.ok) setEvoluciones(prev => [evoResult.evolucion, ...prev]);
 
-    setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "" });
+    setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
     setParamsLab({});
     setLitiasis([]);
     setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
     setTumores([]);
     setFormTumor({ organo: "", sublocalizacion: "", tamano: "" });
+    setAntibiograma([]);
+    setFormAtb({ atb: "", sens: "" });
   };
 
   const eliminarEx = async (exId) => {
@@ -6651,6 +6683,20 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
                     </div>
                   )}
+                  {ex.datos_estructurados && ex.datos_estructurados.germen && (
+                    <div style={{marginTop:5}}>
+                      <span style={{fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8,fontWeight:600,fontStyle:"italic"}}>🦠 {ex.datos_estructurados.germen}</span>
+                    </div>
+                  )}
+                  {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.antibiograma) && ex.datos_estructurados.antibiograma.length > 0 && (
+                    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:5}}>
+                      {ex.datos_estructurados.antibiograma.map((a,i) => {
+                        const col = a.sens === "Sensible" ? "var(--exito)" : a.sens === "Resistente" ? "var(--peligro)" : "var(--texto-ter)";
+                        const bg = a.sens === "Sensible" ? "var(--exito-bg)" : a.sens === "Resistente" ? "var(--peligro-bg, #FEE2E2)" : "var(--fondo-suave)";
+                        return <span key={i} style={{fontSize:10.5,background:bg,color:col,padding:"2px 7px",borderRadius:8,fontWeight:600}}>{a.atb} · {a.sens?.[0] || "?"}</span>;
+                      })}
+                    </div>
+                  )}
                   {ex.datos_estructurados && ex.datos_estructurados.parametros && Object.keys(ex.datos_estructurados.parametros).length > 0 && (
                     <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6}}>
                       {Object.entries(ex.datos_estructurados.parametros).map(([k,v]) => {
@@ -7009,6 +7055,58 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <option value="">Tipo de cultivo...</option>
               {["Urocultivo","Cultivo herida operatoria","Hemocultivo","Otro"].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
+          )}
+          {/* GERMEN + ANTIBIOGRAMA (cultivo) */}
+          {nuevoEx.tipo === "Cultivo" && nuevoEx.tipoCultivo && (
+            <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🦠 Germen y antibiograma</div>
+              <select value={nuevoEx.germen} onChange={e=>setNuevoEx({...nuevoEx,germen:e.target.value,germenOtro:""})} style={{...inputStyle,marginBottom:6}}>
+                <option value="">Germen aislado...</option>
+                {UROPATOGENOS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value="Otro">Otro (especificar)</option>
+              </select>
+              {nuevoEx.germen === "Otro" && (
+                <input value={nuevoEx.germenOtro} onChange={e=>setNuevoEx({...nuevoEx,germenOtro:e.target.value})} placeholder="Nombre del germen" style={{...inputStyle,marginBottom:6}}/>
+              )}
+              {/* Antibiograma: solo si hay germen y no es cultivo negativo */}
+              {nuevoEx.germen && nuevoEx.germen !== "Cultivo negativo" && (
+                <>
+                  {antibiograma.length > 0 && (
+                    <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
+                      {antibiograma.map((a, idx) => {
+                        const col = a.sens === "Sensible" ? "var(--exito)" : a.sens === "Resistente" ? "var(--peligro)" : "var(--texto-ter)";
+                        return (
+                          <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
+                            <span>{a.atb} · <strong style={{color:col}}>{a.sens}</strong></span>
+                            <button onClick={()=>setAntibiograma(antibiograma.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <select value={formAtb.atb} onChange={e=>setFormAtb({...formAtb,atb:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1.4}}>
+                      <option value="">Antibiótico...</option>
+                      {ANTIBIOTICOS.map(o => <option key={o} value={o}>{o}</option>)}
+                      <option value="__otro">Otro…</option>
+                    </select>
+                    <select value={formAtb.sens} onChange={e=>setFormAtb({...formAtb,sens:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1}}>
+                      <option value="">S/I/R</option>
+                      {SENSIBILIDAD.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                    <button onClick={()=>{
+                      const atb = formAtb.atb === "__otro" ? (formAtb.atbOtro || "") : formAtb.atb;
+                      if (!atb || !formAtb.sens) return;
+                      setAntibiograma([...antibiograma, { atb, sens: formAtb.sens }]);
+                      setFormAtb({ atb: "", sens: "" });
+                    }} style={{padding:"7px 12px",fontSize:12,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",flexShrink:0}}>+</button>
+                  </div>
+                  {formAtb.atb === "__otro" && (
+                    <input value={formAtb.atbOtro || ""} onChange={e=>setFormAtb({...formAtb,atbOtro:e.target.value})} placeholder="Nombre del antibiótico" style={{...inputStyle,marginTop:6,marginBottom:0}}/>
+                  )}
+                </>
+              )}
+            </div>
           )}
           {(nuevoEx.tipo === "Cistoscopia" || nuevoEx.tipo === "Otro") && (
             <input value={nuevoEx.nombre} onChange={e=>setNuevoEx({...nuevoEx,nombre:e.target.value})} placeholder={nuevoEx.tipo==="Cistoscopia"?"Detalle (opcional)":"Nombre del examen"} style={inputStyle}/>
@@ -7846,6 +7944,15 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
 useEffect(() => {
   // Verificar sesión inicial
   const arrancar = async () => {
+    // ── Camino rápido OFFLINE: entrar YA con el perfil cacheado (IndexedDB, ms),
+    //    sin esperar a que las llamadas de red expiren. La red, si vuelve, refresca.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      const persistida = leerSesionPersistida();
+      if (persistida?.user?.id) setSession(persistida);
+      const restaurado = await restaurarPerfilOffline();
+      if (restaurado) return; // ya estamos dentro; no tocamos la red
+      // Sin caché aún: seguimos al flujo normal (mostrará login).
+    }
     let result = { ok: false };
     try { result = await getSession(); } catch { result = { ok: false }; }
     if (result.ok && result.session) {
