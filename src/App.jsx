@@ -7967,10 +7967,30 @@ const cargarPerfil = async (sessionData) => {
   const result = await getPerfil(sessionData.user.id);
   
   if (!result.ok) {
-    // Si no se pudo cargar el perfil, cerrar sesión
-    console.error("Error al cargar perfil:", result.error);
-    await logoutUser();
-    setCurrentUser(null);
+    // Falló la carga del perfil por red. NO cerramos sesión a la ligera:
+    // si tenemos el perfil en caché, entramos en modo offline con él.
+    console.warn("No se pudo cargar el perfil desde la red:", result.error);
+    let cacheado = null;
+    try { cacheado = await leerSnapshot(`perfil:${sessionData.user.id}`); } catch {}
+    if (cacheado && cacheado.id) {
+      setCurrentUser(cacheado);
+      let tabGuardado = null;
+      try { tabGuardado = localStorage.getItem("uro_tab"); } catch {}
+      const tabsValidos = tabsPorRol(cacheado.rol).map(t => t[0]);
+      setTab(tabGuardado && tabsValidos.includes(tabGuardado) ? tabGuardado : (cacheado.rol === "admin" ? "admin" : "chat"));
+      if (cacheado.rol !== "admin") {
+        setConversacionActual(null);
+        setMessages([{ role: "assistant", content: saludoUros(cacheado.nombre) }]);
+      }
+      return; // modo offline: no seguimos con las cargas de red
+    }
+    // Sin caché: solo cerramos sesión si de verdad hay conexión (error real de auth).
+    // Offline y sin caché → dejamos la sesión intacta para reintentar al volver la red.
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      console.error("Error al cargar perfil:", result.error);
+      await logoutUser();
+      setCurrentUser(null);
+    }
     return;
   }
   
@@ -8001,7 +8021,7 @@ const cargarPerfil = async (sessionData) => {
 };
   
   setCurrentUser(userAdaptado);
-  // Respetar la pestaña guardada; si no hay, usar la por defecto según rol
+  try { guardarSnapshot(`perfil:${perfil.id}`, userAdaptado); } catch {}
   let tabGuardado = null;
   try { tabGuardado = localStorage.getItem("uro_tab"); } catch {}
   const tabsValidos = tabsPorRol(perfil.rol).map(t => t[0]);
