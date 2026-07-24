@@ -1288,7 +1288,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.9.6";
+const VERSION = "v1.9.7";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -1297,11 +1297,11 @@ const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrologí
 const ROLES_ASIGNABLES = [["urologo","Urólogo/a"],["residente","Residente"],["interno","Interno/a"],["enfermeria","Enfermería"]];
 const ROL_LABEL = { admin:"Administrador", urologo:"Urólogo/a", residente:"Residente", interno:"Interno/a", enfermeria:"Enfermería" };
 function tabsPorRol(rol, pendientesCount = 0) {
-  const chat = ["chat","💬 Chat"];
-  const hospital = ["hospital","🏥 Hospital"];
-  const biblio = ["conocimiento","📖 Biblioteca"];
-  const logbook = ["logbook","📓 Logbook"];
-  if (rol === "admin") return [["admin",`👤 Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`], chat, hospital, logbook, biblio];
+  const chat = ["chat","Chat"];
+  const hospital = ["hospital","Hospital"];
+  const biblio = ["conocimiento","Biblioteca"];
+  const logbook = ["logbook","Logbook"];
+  if (rol === "admin") return [["admin",`Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`], chat, hospital, logbook, biblio];
   if (rol === "enfermeria") return [chat, hospital];              // sin Biblioteca ni Logbook
   return [chat, hospital, logbook, biblio];                       // urologo, residente, interno
 }
@@ -1395,6 +1395,21 @@ function buscarEnConocimiento(consulta, documentos, maxDocs = 3) {
   const conScore = puntuados.filter(d => d.score >= 20);
   if (conScore.length === 0) return [];
   return conScore.sort((a,b) => b.score - a.score).slice(0, maxDocs);
+}
+
+// Íconos SVG coherentes para las pestañas (mismo trazo, mismo estilo).
+// Reemplazan los emojis para que la barra de navegación se vea uniforme.
+function IconoTab({ tipo, activo }) {
+  const c = activo ? "var(--primario)" : "var(--texto-sec)";
+  const p = { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: c, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0 } };
+  switch (tipo) {
+    case "chat":         return <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+    case "hospital":     return <svg {...p}><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4"/></svg>;
+    case "logbook":      return <svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
+    case "conocimiento": return <svg {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
+    case "admin":        return <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>;
+    default:             return null;
+  }
 }
 
 function LogoUroSearch({ size = 40 }) {
@@ -7310,9 +7325,9 @@ function NotificationBell({ currentUser }) {
   return (
     <div style={{position:"relative"}}>
       <button ref={btnRef} onClick={abrir} title="Notificaciones" style={{width:38,height:38,borderRadius:"50%",background:"var(--superficie)",border:"0.5px solid var(--borde)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,position:"relative"}}>
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--primario)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="var(--primario)" stroke="var(--primario)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" fill="none"/>
         </svg>
         {noLeidas > 0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,borderRadius:9,background:"var(--peligro)",color:"var(--texto-inv)",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{noLeidas}</span>}
       </button>
@@ -8388,14 +8403,16 @@ if (!currentUser) {
         background:"var(--header-bg)",borderRadius:"var(--border-radius-lg) var(--border-radius-lg) 0 0",position:"relative",
       }}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:appMovil?8:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:appMovil?9:14,minWidth:0}}>
-            <LogoUroSearch size={appMovil?30:40}/>
+          <div style={{display:"flex",alignItems:"center",gap:appMovil?10:14,minWidth:0}}>
+            <LogoUroSearch size={appMovil?40:44}/>
             {appMovil ? (
-              // En celular: todo en una línea para ocupar menos alto
-              <div style={{display:"flex",alignItems:"baseline",gap:6,minWidth:0}}>
-                <span style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:17,color:"var(--texto)",letterSpacing:"-0.3px",flexShrink:0}}>UroSearch</span>
-                <span style={{fontSize:11,color:"var(--texto-ter)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· Urología</span>
-                {isAdmin && <span style={{fontSize:9,fontWeight:600,padding:"1px 5px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,flexShrink:0}}>ADMIN</span>}
+              // En celular: título y subtítulo apilados, cada uno en una línea, compactos
+              <div style={{minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:18,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</span>
+                  {isAdmin && <span style={{fontSize:9,fontWeight:600,padding:"1px 5px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,flexShrink:0}}>ADMIN</span>}
+                </div>
+                <div style={{fontSize:11,color:"var(--texto-sec)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>Asistente Clínico de Urología</div>
               </div>
             ) : (
               <div>
@@ -8410,7 +8427,7 @@ if (!currentUser) {
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             <NotificationBell currentUser={currentUser}/>
             <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:appMovil?"4px 10px 4px 4px":"5px 14px 5px 5px",cursor:"pointer"}}>
-              <div style={{width:appMovil?32:38,height:appMovil?32:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:appMovil?13:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
+              <div style={{width:appMovil?34:38,height:appMovil?34:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:appMovil?13:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
               <span style={{fontSize:14,color:"var(--texto)",fontWeight:500}}>▾</span>
             </button>
           </div>
@@ -8448,7 +8465,8 @@ if (!currentUser) {
             <button key={id} data-tour={"tab-"+id} onClick={() => {
               if (tab === id) setSubmenuOpen(o => !o); // 2º toque: despliega las secciones
               else { setTab(id); setSubmenuOpen(false); }
-            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px"}}>
+            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <IconoTab tipo={id} activo={tab===id}/>
               {label}{tab===id && submenu ? (submenuOpen ? " ▴" : " ▾") : ""}
             </button>
           ))}
