@@ -6346,6 +6346,20 @@ const cargarMiembrosEquipo = async () => {
     setPacientes(prev => prev.map(x => nuevo[x.id] !== undefined ? { ...x, orden: nuevo[x.id] } : x));
     await Promise.all(col.map((x, idx) => actualizarPaciente(x.id, { orden: idx })));
   };
+  const dragPacRef = useRef(null);
+  const [dragPos, setDragPos] = useState(null); // posición del clon flotante {x,y}
+  const reordenarSobre = (p, overId) => {
+    const col = (porServicio[p.servicio] || []).map(x => x.id).filter(id => id !== p.id);
+    const idx = col.indexOf(overId);
+    if (idx < 0) return;
+    col.splice(idx, 0, p.id);
+    const ord = {}; col.forEach((id, i) => { ord[id] = i; });
+    setPacientes(prev => prev.map(x => ord[x.id] !== undefined ? { ...x, orden: ord[x.id] } : x));
+  };
+  const persistirOrdenColumna = async (servicio) => {
+    const col = porServicio[servicio] || [];
+    await Promise.all(col.map((x, i) => actualizarPaciente(x.id, { orden: i })));
+  };
   // Al volver a la lista (desde una ficha), restaura la posición de scroll previa.
   useEffect(() => {
     if (vista === "lista" && listaScrollElRef.current) {
@@ -8186,6 +8200,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       })()}
 
       {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
+      {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:12.5,fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
 
       {showDistribucion && (
         <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
@@ -8266,22 +8281,24 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {porServicio[servicio].map(p => (
-                      <div key={p.id}
+                      <div key={p.id} data-pac-id={p.id}
                         onClick={()=>{ if (longPressPacRef.current) { longPressPacRef.current = false; return; } abrirFicha(p); }}
                         onPointerDown={(e)=>{ if (soloLectura) return; pressPosPac.current={x:e.clientX,y:e.clientY}; longPressPacRef.current=false; clearTimeout(pressTimerPac.current); pressTimerPac.current=setTimeout(()=>{ longPressPacRef.current=true; try{navigator.vibrate?.(20);}catch{} setMoverPaciente(p); }, 500); }}
                         onPointerMove={(e)=>{ if (pressPosPac.current && (Math.abs(e.clientX-pressPosPac.current.x)>10||Math.abs(e.clientY-pressPosPac.current.y)>10)) clearTimeout(pressTimerPac.current); }}
                         onPointerUp={()=>clearTimeout(pressTimerPac.current)}
                         onPointerLeave={()=>clearTimeout(pressTimerPac.current)}
-                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y"}}>
+                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y",opacity:dragPos&&dragPacRef.current?.id===p.id?0.4:1}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
                             {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            {!soloLectura && <div style={{display:"flex",flexDirection:"column",gap:1}}>
-                              <button onClick={(e)=>{e.stopPropagation();reordenarPaciente(p,-1);}} title="Subir" style={{width:18,height:14,padding:0,fontSize:9,lineHeight:1,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:3,cursor:"pointer"}}>▲</button>
-                              <button onClick={(e)=>{e.stopPropagation();reordenarPaciente(p,1);}} title="Bajar" style={{width:18,height:14,padding:0,fontSize:9,lineHeight:1,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:3,cursor:"pointer"}}>▼</button>
-                            </div>}
+                            {!soloLectura && <div
+                              onClick={(e)=>e.stopPropagation()}
+                              onPointerDown={(e)=>{ e.stopPropagation(); e.preventDefault(); clearTimeout(pressTimerPac.current); try{e.currentTarget.setPointerCapture(e.pointerId);}catch{} dragPacRef.current=p; setDragPos({x:e.clientX,y:e.clientY}); }}
+                              onPointerMove={(e)=>{ if(!dragPacRef.current) return; setDragPos({x:e.clientX,y:e.clientY}); const el=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-pac-id]"); const over=el?.getAttribute("data-pac-id"); if(over && over!==dragPacRef.current.id) reordenarSobre(dragPacRef.current, over); }}
+                              onPointerUp={(e)=>{ if(dragPacRef.current){ const s=dragPacRef.current.servicio; dragPacRef.current=null; setDragPos(null); persistirOrdenColumna(s); try{e.currentTarget.releasePointerCapture(e.pointerId);}catch{} } }}
+                              title="Arrastra para reordenar" style={{cursor:"grab",fontSize:16,color:"var(--texto-ter)",padding:"0 3px",touchAction:"none",lineHeight:1,userSelect:"none"}}>⠿</div>}
                             <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
                           </div>
                         </div>
