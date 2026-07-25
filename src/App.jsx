@@ -5593,6 +5593,25 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     box(M, y); doc.text("NO CONSIENTO (asumo la responsabilidad)", M + 6, y); y += 10;
     doc.text("Firma paciente o sustituto: ____________________", M, y); y += 8;
     doc.text(`Firma profesional: ${currentUser?.nombre || "__________"}   Fecha: ${f.fingreso}`, M, y);
+    // ── Anexo 3: Evaluación preanestésica ──
+    doc.addPage(); y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("HOSPITAL BASE VALDIVIA — EVALUACIÓN PREANESTÉSICA (ANEXO II)", M, y, { maxWidth: W - 2 * M }); y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(`Nombre: ${f.nombre || ""}`, M, y); doc.text(`RUT: ${f.rut || ""}`, W - M - 55, y); y += 5;
+    doc.text(`Edad: ${f.edad || ""}   Peso: ${f.peso || ""} kg   Talla: ${f.talla || ""} cm   PA: ${f.pa || ""}   FC: ____   FR: ____   T°: ____`, M, y); y += 5;
+    doc.text(`Diagnóstico: ${f.hipotesis || ""}`, M, y, { maxWidth: W - 2 * M }); y += 5;
+    doc.text("Procedimiento propuesto: ____________________________   Cirujano: ____________________", M, y); y += 7;
+    doc.setFont("helvetica", "bold"); doc.text("ANTECEDENTES MÓRBIDOS (marque; * = negativo si asintomático):", M, y); y += 5; doc.setFont("helvetica", "normal");
+    ["Cardiovascular: HTA / IC / coronario / IAM / otro", "Respiratorio: asma / EPOC / SAHOS / TBC / otro", "Neurológico: convulsiones / AVC-TIA / otro", "Hepático / Renal (IRC etapa ___, HD/PD)", "Gastrointestinal / Hematología (anemia, coagulopatía)", "Endocrino (DM, tiroides) / Musculoesquelético"].forEach(t => { box(M, y); doc.text(t, M + 6, y); y += 5.2; });
+    y += 1; doc.text("Alergias: ____________________   Medicamentos actuales: ____________________________", M, y, { maxWidth: W - 2 * M }); y += 5;
+    doc.text("Hábitos: Tabaco ____  OH ____   Cirugías/anestesias previas: ____________________", M, y, { maxWidth: W - 2 * M }); y += 7;
+    doc.setFont("helvetica", "bold"); doc.text("CLASIFICACIÓN ASA:", M, y); doc.setFont("helvetica", "normal");
+    doc.text("[ ] I    [ ] II    [ ] III    [ ] IV", M + 40, y); y += 6;
+    doc.text("Vía aérea: Mallampati ____   Intubación difícil: [ ] Sí  [ ] No   Dentición: ____________", M, y, { maxWidth: W - 2 * M }); y += 6;
+    doc.text("Exámenes: Hto ____  Hb ____  Plaq ____  TP/INR ____  TTPA ____  Crea ____  Glicemia ____", M, y, { maxWidth: W - 2 * M }); y += 6;
+    doc.text("Necesidad de UCI/UTI post-op: [ ] Sí  [ ] No", M, y); y += 6;
+    doc.text("Plan anestésico / observaciones: ____________________________________________________", M, y, { maxWidth: W - 2 * M }); y += 10;
+    doc.text(`Médico tratante: ${currentUser?.nombre || "__________"}   Fecha: ${f.fingreso}      Firma anestesiólogo: ______________`, M, y, { maxWidth: W - 2 * M });
     doc.save(`anexos_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
   };
 
@@ -6300,6 +6319,11 @@ const cargarMiembrosEquipo = async () => {
   const formExamenRef = useRef(null);       // tarjeta del formulario "Nuevo examen"
   const [showDistribucion, setShowDistribucion] = useState(false);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
+  useEffect(() => {
+    const h = (e) => { if (e.detail?.accion === "ingreso") setIngresoAbierto(true); };
+    window.addEventListener("uro-submenu-accion", h);
+    return () => window.removeEventListener("uro-submenu-accion", h);
+  }, []);
   const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
   const longPressPacRef = useRef(false);
   const pressTimerPac = useRef(null);
@@ -7656,7 +7680,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div ref={formEvoRef} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormEvo?10:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nueva evolución</div>
-            <button onClick={()=>setAbrirFormEvo(!abrirFormEvo)} style={{padding:"5px 12px",fontSize:12,background:abrirFormEvo?"var(--superficie)":"var(--primario)",color:abrirFormEvo?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormEvo?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormEvo?"Cerrar":"+ Agregar evolución"}</button>
+            {abrirFormEvo && <button onClick={()=>setAbrirFormEvo(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>}
           </div>
           {abrirFormEvo && (<>
           {/* Selector tipo */}
@@ -7823,7 +7847,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div ref={formExamenRef} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormExamen?10:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
-            <button onClick={()=>setAbrirFormExamen(!abrirFormExamen)} style={{padding:"5px 12px",fontSize:12,background:abrirFormExamen?"var(--superficie)":"var(--primario)",color:abrirFormExamen?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormExamen?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormExamen?"Cerrar":"+ Agregar examen"}</button>
+            {abrirFormExamen && <button onClick={()=>setAbrirFormExamen(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>}
           </div>
           {abrirFormExamen && (<>
 
@@ -8070,7 +8094,6 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             </button>
             <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
             <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
-            {!soloLectura && <button onClick={()=>setIngresoAbierto(true)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>📋 Ingreso</button>}
 
             {/* Menú desplegable de servicios + estado (estilo Hospital) */}
             {serviciosMenuOpen && (
@@ -9658,6 +9681,7 @@ if (!currentUser) {
       activo: subTabHospital,
       elegir: setSubTabHospital,
       extras: [
+        ...(subTabHospital === "pacientes" ? [["📋 Nuevo ingreso", () => accion("ingreso")]] : []),
         ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
