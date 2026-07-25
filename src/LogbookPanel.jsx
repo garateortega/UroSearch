@@ -464,6 +464,20 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     }
     setGuardando(false);
     if (!result.ok) return setError(result.error);
+    // Si hay un paciente hospitalizado con nombre coincidente (sin tildes), le adjunta el protocolo.
+    if (!editId) {
+      try {
+        const nom = sinTildes(datos.iniciales || "").replace(/\s+/g, " ").trim();
+        if (nom) {
+          const { data: pacs } = await supabase.from("pacientes").select("id, iniciales").neq("estado", "alta");
+          const m = (pacs || []).find((p) => sinTildes(p.iniciales || "").replace(/\s+/g, " ").trim() === nom);
+          if (m) {
+            const texto = `PROTOCOLO OPERATORIO — ${datos.procedimiento || "Cirugía"}${datos.fecha ? ` (${datos.fecha})` : ""}${datos.cirujano ? `\nCirujano: ${datos.cirujano}` : ""}${datos.ayudantes ? `\nAyudantes: ${datos.ayudantes}` : ""}`;
+            await supabase.from("evoluciones").insert({ paciente_id: m.id, autor_id: currentUser.id, texto, tipo: "protocolo" });
+          }
+        }
+      } catch { /* no bloquea el guardado del logbook */ }
+    }
     resetForm();
     setVista("lista");
   };
