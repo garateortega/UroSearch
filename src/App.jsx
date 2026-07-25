@@ -5448,6 +5448,157 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
   );
 }
 
+// ─── Módulo Ingresos (HBV Urología): formulario → PDF + agregar a hospitalizados ───
+const INDICACIONES_HBV = `Reposo relativo
+Régimen liviano, cero desde 22:00
+Preparar para pabellón (rasurar vello genital y abdominal)
+Cefazolina o Amikacina preoperatoria
+Mantener fármacos crónicos (excepto AAS, TACO, Metformina)
+Fleet enema a las 21:00 en caso de radical
+Enoxaparina/Heparina 5000 U c/12 SC, suspender 12 h previo a pabellón
+Omeprazol 20 mg/día VO
+Pruebas de compatibilidad y Rh · Reserva de 2 U de GR
+CSV + MAT · Kinesioterapia motora/ventilatoria
+Pabellón el día ____ en horario ____`;
+
+function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
+  const HOY = new Date().toISOString().slice(0, 10);
+  const [f, setF] = useState({
+    nombre: "", ficha: "", rut: "", fnac: "", edad: "", sexo: "", domicilio: "", telefono: "", fingreso: HOY,
+    anamnesis: "", morbidos: "", farmacos: "", quirurgicos: "", alergias: "NO", tabaco: "", oh: "", familiares: "",
+    transfusiones: "", urocultivo: "", peso: "", talla: "", pa: "",
+    cabeza: "Normocráneo, sin lesiones, no palpo adenopatías", torax: "Normoexpansible, RR2TSS, MP(+) SRA",
+    abdomen: "RHA(+), BDI, sin signos de irritación peritoneal", fosas: "Sin alteraciones",
+    eeii: "Sin edema, pulsos distales presentes, simétricos y conservados", genitales: "NR", rectal: "NR",
+    hipotesis: "", indicaciones: INDICACIONES_HBV,
+  });
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const imc = (f.peso && f.talla) ? (parseFloat(f.peso) / Math.pow(parseFloat(f.talla) / 100, 2)).toFixed(1) : "";
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
+  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+  const campo = (l, k, ml = false) => (<div><label style={lbl}>{l}</label>{ml ? <textarea rows={2} value={f[k]} onChange={e => set(k, e.target.value)} style={{ ...inp, resize: "vertical" }} /> : <input value={f[k]} onChange={e => set(k, e.target.value)} style={inp} />}</div>);
+
+  const historiaTexto = () => {
+    const L = [];
+    L.push(`INGRESO AL SERVICIO DE UROLOGÍA — ${f.fingreso}`);
+    if (f.anamnesis) L.push("ANAMNESIS PRÓXIMA: " + f.anamnesis);
+    const ar = [];
+    if (f.morbidos) ar.push("Mórbidos: " + f.morbidos);
+    if (f.farmacos) ar.push("Fármacos: " + f.farmacos);
+    if (f.quirurgicos) ar.push("Quirúrgicos: " + f.quirurgicos);
+    ar.push("Alergias: " + (f.alergias || "NO"));
+    if (ar.length) L.push("ANAMNESIS REMOTA: " + ar.join(" · "));
+    const ot = [];
+    if (f.tabaco) ot.push("Tabaco: " + f.tabaco);
+    if (f.oh) ot.push("OH: " + f.oh);
+    if (f.familiares) ot.push("Familiares: " + f.familiares);
+    if (f.transfusiones) ot.push("Acepta transfusiones: " + f.transfusiones);
+    if (f.urocultivo) ot.push("Urocultivo: " + f.urocultivo);
+    if (ot.length) L.push("OTROS: " + ot.join(" · "));
+    const ef = [`Peso ${f.peso || "—"} kg`, `Talla ${f.talla || "—"} cm`, imc ? `IMC ${imc}` : "", `PA ${f.pa || "—"}`].filter(Boolean).join(" · ");
+    L.push("EXAMEN FÍSICO: " + ef);
+    L.push(`  Cabeza y cuello: ${f.cabeza}\n  Tórax: ${f.torax}\n  Abdomen: ${f.abdomen}\n  Fosas renales: ${f.fosas}\n  EEII: ${f.eeii}\n  Genitales: ${f.genitales}\n  T. rectal: ${f.rectal}`);
+    return L.join("\n\n");
+  };
+
+  const generarPDF = async () => {
+    setMsg("");
+    let jsPDF;
+    try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(40, 40, 40);
+    ["MINISTERIO DE SALUD", "SERVICIO DE SALUD VALDIVIA", "HOSPITAL BASE VALDIVIA", "SERVICIO UROLOGÍA"].forEach(t => { doc.text(t, M, y); y += 3.6; });
+    y += 3; doc.setFontSize(12); doc.text("INGRESO AL SERVICIO DE UROLOGÍA", W / 2, y, { align: "center" }); y += 8;
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    const linea = (t, indent = 0) => { const parts = doc.splitTextToSize(t, W - 2 * M - indent); parts.forEach(p => { if (y > 282) { doc.addPage(); y = 18; } doc.text(p, M + indent, y); y += 4.6; }); };
+    const kv = (k, v) => linea(`${k}: ${v || ""}`);
+    kv("NOMBRE", f.nombre); kv("N° FICHA", f.ficha); kv("RUT", f.rut);
+    kv("FECHA DE NACIMIENTO", f.fnac); kv("EDAD", f.edad); kv("SEXO", f.sexo);
+    kv("DOMICILIO", f.domicilio); kv("TELÉFONO", f.telefono); kv("FECHA DE INGRESO", f.fingreso);
+    y += 2; doc.setFont("helvetica", "bold"); linea("ANAMNESIS PRÓXIMA"); doc.setFont("helvetica", "normal"); linea(f.anamnesis || "—");
+    y += 1; doc.setFont("helvetica", "bold"); linea("ANAMNESIS REMOTA"); doc.setFont("helvetica", "normal");
+    linea("• Mórbidos: " + (f.morbidos || "—"), 2); linea("• Fármacos: " + (f.farmacos || "—"), 2); linea("• Quirúrgicos: " + (f.quirurgicos || "—"), 2); linea("• Alergias: " + (f.alergias || "NO"), 2);
+    y += 1; doc.setFont("helvetica", "bold"); linea("OTROS"); doc.setFont("helvetica", "normal");
+    linea(`Tabaco: ${f.tabaco || "—"} · OH: ${f.oh || "—"}`, 2); linea("Antec. familiares: " + (f.familiares || "—"), 2);
+    linea("Acepta transfusiones: " + (f.transfusiones || "—"), 2); linea("Urocultivo: " + (f.urocultivo || "—"), 2);
+    y += 1; doc.setFont("helvetica", "bold"); linea("EXAMEN FÍSICO SEGMENTARIO"); doc.setFont("helvetica", "normal");
+    linea(`Peso ${f.peso || "—"} kg · Talla ${f.talla || "—"} cm · IMC ${imc || "—"} · PA ${f.pa || "—"}`, 2);
+    linea("Cabeza y cuello: " + f.cabeza, 2); linea("Tórax: " + f.torax, 2); linea("Abdomen: " + f.abdomen, 2);
+    linea("Fosas renales: " + f.fosas, 2); linea("EEII: " + f.eeii, 2); linea("Genitales: " + f.genitales, 2); linea("T. rectal: " + f.rectal, 2);
+    y += 1; doc.setFont("helvetica", "bold"); linea("HIPÓTESIS DIAGNÓSTICA"); doc.setFont("helvetica", "normal"); linea(f.hipotesis || "—");
+    y += 1; doc.setFont("helvetica", "bold"); linea("INDICACIONES"); doc.setFont("helvetica", "normal"); linea(f.indicaciones);
+    y += 4; doc.setFontSize(8); doc.setTextColor(120, 120, 120); linea(`Becado que realiza ingreso: ${currentUser?.nombre || ""} · Generado con UroSearch`);
+    doc.save(`ingreso_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
+  };
+
+  const agregarAHospitalizados = async () => {
+    if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; }
+    setGuardando(true); setMsg("");
+    const datos = {
+      medico_id: currentUser.id,
+      equipo_id: contexto !== "personal" ? contexto : null,
+      iniciales: f.nombre.trim().toUpperCase(),
+      ficha_clinica: f.ficha.trim() || null,
+      rut: f.rut.trim() || null,
+      edad: f.edad ? parseInt(f.edad) : null,
+      sexo: f.sexo || null,
+      cama: "",
+      servicio: "Urología",
+      diagnostico: f.hipotesis.trim() || null,
+      historia: historiaTexto(),
+      plan_manejo: f.indicaciones.trim() || null,
+      fecha_ingreso: f.fingreso,
+      estado: "activo",
+    };
+    const r = await crearPaciente(datos);
+    setGuardando(false);
+    if (r.ok) { onCreado?.(r.paciente); onClose(); }
+    else setMsg("⚠️ No se pudo crear el paciente: " + r.error);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 460, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
+          <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre completo", "nombre")}</div>
+          {campo("N° Ficha", "ficha")}{campo("RUT", "rut")}
+          {campo("Fecha nac.", "fnac")}{campo("Edad", "edad")}
+          <div><label style={lbl}>Sexo</label><select value={f.sexo} onChange={e => set("sexo", e.target.value)} style={inp}><option value="">—</option><option value="M">M</option><option value="F">F</option></select></div>
+          {campo("Teléfono", "telefono")}
+          <div style={{ gridColumn: "1 / -1" }}>{campo("Domicilio", "domicilio")}</div>
+          {campo("Fecha ingreso", "fingreso")}
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>{campo("Anamnesis próxima", "anamnesis", true)}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Anamnesis remota</div>
+        {campo("Antecedentes mórbidos", "morbidos", true)}
+        {campo("Fármacos", "farmacos", true)}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Quirúrgicos", "quirurgicos")}{campo("Alergias", "alergias")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{campo("Tabaco", "tabaco")}{campo("OH", "oh")}{campo("Familiares", "familiares")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Acepta transfusiones", "transfusiones")}{campo("Urocultivo", "urocultivo")}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Examen físico {imc && <span style={{ fontWeight: 500, color: "var(--texto-ter)" }}>· IMC {imc}</span>}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{campo("Peso (kg)", "peso")}{campo("Talla (cm)", "talla")}{campo("PA", "pa")}</div>
+        {campo("Cabeza y cuello", "cabeza")}{campo("Tórax", "torax")}{campo("Abdomen", "abdomen")}{campo("Fosas renales", "fosas")}{campo("EEII", "eeii")}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Genitales", "genitales")}{campo("T. rectal", "rectal")}</div>
+        {campo("Hipótesis diagnóstica", "hipotesis", true)}
+        {campo("Indicaciones", "indicaciones", true)}
+        {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13.5, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Imprimir / PDF</button>
+          <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1, padding: 11, fontSize: 13.5, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Agregando…" : "➕ A hospitalizados"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Orden de transfusión (HBV): pre-llena desde la ficha y genera PDF ───
 const PRODUCTOS_TX = ["Sangre total", "Glóbulos rojos", "Plasma", "Plaquetas", "Crioprecipitado", "Autotransfusión", "Otros"];
 const CARACTER_TX = ["Inmediata (sin pruebas de compatibilidad)", "Urgente (entre 1 y 4 horas)", "Dentro del día", "Otros"];
@@ -5463,6 +5614,7 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
     return "";
   };
   const [prevision, setPrevision] = useState("");
+  const [establecimiento, setEstablecimiento] = useState("HOSPITAL CLÍNICO REGIONAL VALDIVIA");
   const [peso, setPeso] = useState("");
   const [motivo, setMotivo] = useState("");
   const [diagnostico, setDiagnostico] = useState(paciente.diagnostico || "");
@@ -5501,7 +5653,7 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
       doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(30, 30, 30);
       doc.text("MINISTERIO DE SALUD", M, y); y += 3.6;
       doc.text("SERVICIO DE SALUD VALDIVIA", M, y); y += 3.6;
-      doc.text("HOSPITAL CLÍNICO REGIONAL VALDIVIA", M, y); y += 3.6;
+      doc.text(establecimiento.toUpperCase().slice(0, 48), M, y); y += 3.6;
       doc.text("UNIDAD DE BANCO DE SANGRE", M, y);
       doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90);
       doc.text("USO BANCO DE SANGRE", W - M, 14, { align: "right" });
@@ -5617,6 +5769,8 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
           {paciente.iniciales} · {paciente.edad} años · {paciente.sexo} · Cama {paciente.cama || "—"} · {paciente.servicio}
         </div>
 
+        <label style={lbl}>Hospital / establecimiento</label>
+        <input value={establecimiento} onChange={e => setEstablecimiento(e.target.value)} style={inp} />
         <label style={lbl}>Diagnóstico</label>
         <input value={diagnostico} onChange={e => setDiagnostico(e.target.value)} style={inp} />
         <label style={lbl}>Motivo de la transfusión</label>
@@ -6094,6 +6248,8 @@ const cargarMiembrosEquipo = async () => {
     if (!porServicio[p.servicio]) porServicio[p.servicio] = [];
     porServicio[p.servicio].push(p);
   });
+  // Orden manual dentro de cada columna (campo "orden"); los sin orden van al final.
+  Object.keys(porServicio).forEach(s => porServicio[s].sort((a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9)));
 
   // ─── Orden COMPARTIDO de los servicios del kanban (se guarda por equipo) ───
   const claveOrden = contexto && contexto !== "personal" ? `equipo:${contexto}` : `personal:${currentUser.id}`;
@@ -6106,6 +6262,7 @@ const cargarMiembrosEquipo = async () => {
   const formEvoRef = useRef(null);          // tarjeta del formulario "Nueva evolución"
   const formExamenRef = useRef(null);       // tarjeta del formulario "Nuevo examen"
   const [showDistribucion, setShowDistribucion] = useState(false);
+  const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
   const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
   const longPressPacRef = useRef(false);
   const pressTimerPac = useRef(null);
@@ -6117,6 +6274,16 @@ const cargarMiembrosEquipo = async () => {
     const r = await actualizarPaciente(pac.id, { servicio: nuevoServicio });
     if (r.ok) setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, servicio: nuevoServicio } : x));
     else alert("No se pudo mover el paciente: " + r.error);
+  };
+  const reordenarPaciente = async (p, dir) => {
+    const col = [...(porServicio[p.servicio] || [])];
+    const i = col.findIndex(x => x.id === p.id);
+    const j = dir < 0 ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= col.length) return;
+    [col[i], col[j]] = [col[j], col[i]];
+    const nuevo = {}; col.forEach((x, idx) => { nuevo[x.id] = idx; });
+    setPacientes(prev => prev.map(x => nuevo[x.id] !== undefined ? { ...x, orden: nuevo[x.id] } : x));
+    await Promise.all(col.map((x, idx) => actualizarPaciente(x.id, { orden: idx })));
   };
   // Al volver a la lista (desde una ficha), restaura la posición de scroll previa.
   useEffect(() => {
@@ -7853,6 +8020,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             </button>
             <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
             <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
+            {!soloLectura && <button onClick={()=>setIngresoAbierto(true)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>📋 Ingreso</button>}
 
             {/* Menú desplegable de servicios + estado (estilo Hospital) */}
             {serviciosMenuOpen && (
@@ -7944,6 +8112,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         );
       })()}
 
+      {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
+
       {showDistribucion && (
         <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:14,padding:"18px",width:"100%",maxWidth:360,maxHeight:"80vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -8034,7 +8204,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                           <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
                             {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
                           </div>
-                          <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            {!soloLectura && <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                              <button onClick={(e)=>{e.stopPropagation();reordenarPaciente(p,-1);}} title="Subir" style={{width:18,height:14,padding:0,fontSize:9,lineHeight:1,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:3,cursor:"pointer"}}>▲</button>
+                              <button onClick={(e)=>{e.stopPropagation();reordenarPaciente(p,1);}} title="Bajar" style={{width:18,height:14,padding:0,fontSize:9,lineHeight:1,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:3,cursor:"pointer"}}>▼</button>
+                            </div>}
+                            <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
+                          </div>
                         </div>
                         <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
                         {(p.ficha_clinica || p.rut) && (
