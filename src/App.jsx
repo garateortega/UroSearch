@@ -5202,6 +5202,113 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
  
 
+// ─── Plantillas de exámenes: guarda sets frecuentes y los aplica de un toque ───
+const EXAMENES_PLANTILLA = ["Hemograma", "Función renal", "Coagulación", "PCR", "ELP", "Pruebas hepáticas", "Orina completa", "Antígeno prostático (PSA)", "Urocultivo"];
+function leerPlantillasEx() {
+  try { const raw = localStorage.getItem("uro_plantillas_examenes"); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function guardarPlantillasEx(lista) {
+  try { localStorage.setItem("uro_plantillas_examenes", JSON.stringify(lista)); } catch {}
+}
+function PlantillasExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
+  const [plantillas, setPlantillas] = useState(leerPlantillasEx);
+  const [modo, setModo] = useState("aplicar"); // aplicar | crear
+  const [sel, setSel] = useState([]);          // items marcados al crear
+  const [nombre, setNombre] = useState("");
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const toggle = (it) => setSel(s => s.includes(it) ? s.filter(x => x !== it) : [...s, it]);
+
+  const crearPlantilla = () => {
+    if (!nombre.trim() || sel.length === 0) { setMsg("Ponle nombre y marca al menos un examen."); return; }
+    const nueva = [...plantillas.filter(p => p.nombre !== nombre.trim()), { nombre: nombre.trim(), items: sel }];
+    setPlantillas(nueva); guardarPlantillasEx(nueva);
+    setNombre(""); setSel([]); setModo("aplicar"); setMsg("✓ Plantilla guardada.");
+  };
+  const borrarPlantilla = (nom) => {
+    const nueva = plantillas.filter(p => p.nombre !== nom);
+    setPlantillas(nueva); guardarPlantillasEx(nueva);
+  };
+
+  const aplicar = async (plantilla) => {
+    setGuardando(true); setMsg("");
+    let ok = 0;
+    for (const item of plantilla.items) {
+      const esUro = /urocultivo/i.test(item);
+      const datos = {
+        tipo: esUro ? "Cultivo" : "Laboratorio",
+        nombre: item,
+        resultado: null,
+        fecha_examen: fecha,
+        datos_estructurados: esUro ? { tipoCultivo: "Urocultivo" } : {},
+      };
+      const r = await crearExamen(paciente.id, currentUser.id, datos);
+      if (r.ok) ok++;
+    }
+    setGuardando(false);
+    if (ok > 0) { await onGuardado?.(); onClose(); }
+    else setMsg("No se pudo aplicar la plantilla.");
+  };
+
+  const chip = (activo) => ({ padding: "7px 11px", fontSize: 12.5, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: activo ? "var(--primario)" : "var(--fondo-suave)", color: activo ? "var(--texto-inv)" : "var(--texto)", fontWeight: activo ? 700 : 500 });
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 400, maxHeight: "86vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📋 Plantillas de exámenes</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setModo("aplicar")} style={{ ...chip(modo === "aplicar"), flex: 1 }}>Aplicar</button>
+          <button onClick={() => setModo("crear")} style={{ ...chip(modo === "crear"), flex: 1 }}>Crear nueva</button>
+        </div>
+
+        {modo === "aplicar" && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: "var(--texto-sec)" }}>Fecha:</span>
+              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ fontSize: 12.5, padding: "5px 8px", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
+            </div>
+            {plantillas.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: "var(--texto-ter)", fontStyle: "italic", padding: "6px 0" }}>Aún no tienes plantillas. Crea una en "Crear nueva".</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {plantillas.map(p => (
+                  <div key={p.nombre} style={{ background: "var(--fondo-suave)", borderRadius: 9, padding: "10px 12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--texto)" }}>{p.nombre}</span>
+                      <button onClick={() => borrarPlantilla(p.nombre)} style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: 13 }}>🗑</button>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginBottom: 8 }}>{p.items.join(" · ")}</div>
+                    <button onClick={() => aplicar(p)} disabled={guardando} style={{ width: "100%", padding: 9, fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 7, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Agregando…" : `Agregar ${p.items.length} examen(es)`}</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {modo === "crear" && (
+          <>
+            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la plantilla (ej: Control post-op)" style={{ width: "100%", padding: "9px 11px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 10 }} />
+            <div style={{ fontSize: 12, color: "var(--texto-sec)", marginBottom: 6 }}>Exámenes incluidos:</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+              {EXAMENES_PLANTILLA.map(it => <button key={it} onClick={() => toggle(it)} style={chip(sel.includes(it))}>{it}</button>)}
+            </div>
+            <button onClick={crearPlantilla} style={{ width: "100%", padding: 11, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar plantilla</button>
+          </>
+        )}
+
+        {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginTop: 10 }}>{msg}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Foto → exámenes: captura múltiple, confirma, extrae con IA y guarda ───
 function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
   const [fotos, setFotos] = useState([]);       // dataUrls comprimidos
@@ -5761,6 +5868,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [formAtb, setFormAtb] = useState({ atb: "", sens: "" });
   const [ordenTxAbierta, setOrdenTxAbierta] = useState(false); // modal orden de transfusión
   const [fotoExamenesAbierto, setFotoExamenesAbierto] = useState(false); // modal exámenes desde foto
+  const [plantillasAbierto, setPlantillasAbierto] = useState(false); // modal plantillas de exámenes
   const [serviciosMenuOpen, setServiciosMenuOpen] = useState(false); // submenú desplegable del botón "Servicios ▾"
   const servBtnRef = useRef(null); // posición real del botón, para que el menú (position:fixed) no se recorte
   const [verCargaMedicos, setVerCargaMedicos] = useState(false); // resumen de pacientes por médico
@@ -5998,6 +6106,18 @@ const cargarMiembrosEquipo = async () => {
   const formEvoRef = useRef(null);          // tarjeta del formulario "Nueva evolución"
   const formExamenRef = useRef(null);       // tarjeta del formulario "Nuevo examen"
   const [showDistribucion, setShowDistribucion] = useState(false);
+  const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
+  const longPressPacRef = useRef(false);
+  const pressTimerPac = useRef(null);
+  const pressPosPac = useRef(null);
+  const moverAServicio = async (nuevoServicio) => {
+    const pac = moverPaciente;
+    setMoverPaciente(null);
+    if (!pac || !nuevoServicio || nuevoServicio === pac.servicio) return;
+    const r = await actualizarPaciente(pac.id, { servicio: nuevoServicio });
+    if (r.ok) setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, servicio: nuevoServicio } : x));
+    else alert("No se pudo mover el paciente: " + r.error);
+  };
   // Al volver a la lista (desde una ficha), restaura la posición de scroll previa.
   useEffect(() => {
     if (vista === "lista" && listaScrollElRef.current) {
@@ -6861,6 +6981,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{padding:"16px",overflowY:"auto"}}>
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
+        {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setPlantillasAbierto(false)} />}
         <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
        {/* Cabecera */}
@@ -7133,6 +7254,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>🧪 Exámenes</div>
             {!soloLectura && <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>setPlantillasAbierto(true)} title="Plantillas de exámenes" aria-label="Plantillas de exámenes" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📋</button>
               <button onClick={()=>setFotoExamenesAbierto(true)} title="Exámenes desde foto" aria-label="Exámenes desde foto" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📷</button>
               <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>
             </div>}
@@ -7796,6 +7918,32 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </div>
 
       {/* MODAL: distribución de pacientes por encargado */}
+      {/* HOJA: mover paciente de servicio (mantén presionado una tarjeta) */}
+      {moverPaciente && (() => {
+        const destinos = Array.from(new Set([
+          ...(esEquipo ? serviciosEquipo : misServiciosLista).map(s => s.nombre),
+          ...Object.keys(porServicio),
+        ])).filter(Boolean);
+        return (
+          <div onClick={()=>setMoverPaciente(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:65}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"70vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+              <div style={{width:36,height:4,background:"var(--borde)",borderRadius:2,margin:"0 auto 12px"}}/>
+              <div style={{fontSize:14,fontWeight:700,color:"var(--texto)",marginBottom:2}}>Mover a otro servicio</div>
+              <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:12}}>{moverPaciente.iniciales} · actualmente en <b>{moverPaciente.servicio}</b></div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {destinos.filter(s => s !== moverPaciente.servicio).map(s => (
+                  <button key={s} onClick={()=>moverAServicio(s)} style={{textAlign:"left",padding:"11px 13px",fontSize:13.5,fontWeight:600,background:"var(--fondo-suave)",color:"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{s}</button>
+                ))}
+                {destinos.filter(s => s !== moverPaciente.servicio).length === 0 && (
+                  <div style={{fontSize:12.5,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay otros servicios configurados.</div>
+                )}
+              </div>
+              <button onClick={()=>setMoverPaciente(null)} style={{width:"100%",marginTop:12,padding:11,fontSize:13,background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {showDistribucion && (
         <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:14,padding:"18px",width:"100%",maxWidth:360,maxHeight:"80vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -7875,7 +8023,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {porServicio[servicio].map(p => (
-                      <div key={p.id} onClick={()=>abrirFicha(p)} style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`}}>
+                      <div key={p.id}
+                        onClick={()=>{ if (longPressPacRef.current) { longPressPacRef.current = false; return; } abrirFicha(p); }}
+                        onPointerDown={(e)=>{ if (soloLectura) return; pressPosPac.current={x:e.clientX,y:e.clientY}; longPressPacRef.current=false; clearTimeout(pressTimerPac.current); pressTimerPac.current=setTimeout(()=>{ longPressPacRef.current=true; try{navigator.vibrate?.(20);}catch{} setMoverPaciente(p); }, 500); }}
+                        onPointerMove={(e)=>{ if (pressPosPac.current && (Math.abs(e.clientX-pressPosPac.current.x)>10||Math.abs(e.clientY-pressPosPac.current.y)>10)) clearTimeout(pressTimerPac.current); }}
+                        onPointerUp={()=>clearTimeout(pressTimerPac.current)}
+                        onPointerLeave={()=>clearTimeout(pressTimerPac.current)}
+                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
                             {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
@@ -9203,21 +9357,22 @@ if (!currentUser) {
     if (!s0) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
-    if (Date.now() - s0.t > 900) return;
+    if (Date.now() - s0.t > 700) return;
 
     // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
-    if (dy > 26 && Math.abs(dy) > Math.abs(dx) * 1.1) {
+    // Gesto deliberado: harta distancia y claramente vertical, para que no salte solo.
+    if (dy > 60 && Math.abs(dy) > Math.abs(dx) * 1.8) {
       let el = s0.target, arriba = true;
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
-        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 8; break; }
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 2; break; }
         el = el.parentElement;
       }
       if (arriba && submenu) { setSubmenuOpen(true); try { navigator.vibrate?.(15); } catch {} }
       return;
     }
     // Deslizar hacia arriba estando el menú abierto: lo cierra
-    if (dy < -26 && Math.abs(dy) > Math.abs(dx) * 1.1 && submenuOpen) {
+    if (dy < -55 && Math.abs(dy) > Math.abs(dx) * 1.6 && submenuOpen) {
       setSubmenuOpen(false);
       return;
     }
