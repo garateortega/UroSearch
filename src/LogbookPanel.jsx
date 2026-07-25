@@ -467,11 +467,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     // Si hay un paciente hospitalizado con nombre coincidente (sin tildes), le adjunta el protocolo.
     if (!editId) {
       try {
-        const nom = sinTildes(datos.iniciales || "").replace(/\s+/g, " ").trim();
-        if (nom) {
+        const tk = (s) => new Set(sinTildes(s || "").replace(/[.,]/g, " ").split(/\s+/).filter((t) => t.length >= 2));
+        const nomTk = tk(datos.iniciales);
+        if (nomTk.size >= 2) {
           const { data: pacs } = await supabase.from("pacientes").select("id, iniciales").neq("estado", "alta");
-          const m = (pacs || []).find((p) => sinTildes(p.iniciales || "").replace(/\s+/g, " ").trim() === nom);
-          if (m) {
+          const cand = (pacs || [])
+            .map((p) => { const s = tk(p.iniciales); let c = 0; nomTk.forEach((t) => { if (s.has(t)) c++; }); return { p, c }; })
+            .filter((x) => x.c >= 2)
+            .sort((a, b) => b.c - a.c);
+          // Solo adjunta si hay un mejor match claro (único o con más coincidencias que el resto).
+          if (cand.length && (cand.length === 1 || cand[0].c > cand[1].c)) {
+            const m = cand[0].p;
             const texto = `PROTOCOLO OPERATORIO — ${datos.procedimiento || "Cirugía"}${datos.fecha ? ` (${datos.fecha})` : ""}${datos.cirujano ? `\nCirujano: ${datos.cirujano}` : ""}${datos.ayudantes ? `\nAyudantes: ${datos.ayudantes}` : ""}`;
             await supabase.from("evoluciones").insert({ paciente_id: m.id, autor_id: currentUser.id, texto, tipo: "protocolo" });
           }

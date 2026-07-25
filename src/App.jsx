@@ -6815,11 +6815,17 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     };
 
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
-    if (!result.ok) return alert("Error: " + result.error);
-    // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
-    const recarga = await listarExamenes(seleccionado.id);
-    if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
-    else setExamenes(prev => [normalizarExamen(result.examen), ...prev]);
+    if (!result.ok) {
+      // Sin conexión: guarda local y encola para sincronizar al reconectar.
+      encolar("crearExamen", { pacienteId: seleccionado.id, autorId: currentUser.id, datos });
+      const temp = normalizarExamen({ id: `tmp_${Date.now()}`, paciente_id: seleccionado.id, autor_id: currentUser.id, tipo: datos.tipo, nombre: datos.nombre, resultado: datos.resultado || null, fecha_examen: datos.fecha_examen, datos_estructurados: datos.datos_estructurados || {}, autor: { nombre: currentUser.nombre }, _pendiente: true });
+      setExamenes(prev => [temp, ...prev]);
+    } else {
+      // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
+      const recarga = await listarExamenes(seleccionado.id);
+      if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
+      else setExamenes(prev => [normalizarExamen(result.examen), ...prev]);
+    }
 
     // Copiar automáticamente el examen a la evolución del día
     const partesEx = [];
@@ -6854,6 +6860,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const textoEvo = `🧪 EXAMEN (${nuevoEx.fecha_examen}):\n${partesEx.join("\n")}`;
     const evoResult = await crearEvolucion(seleccionado.id, currentUser.id, textoEvo, "examen");
     if (evoResult.ok) setEvoluciones(prev => [evoResult.evolucion, ...prev]);
+    else encolar("crearEvolucion", { pacienteId: seleccionado.id, autorId: currentUser.id, texto: textoEvo, tipo: "examen" });
 
     setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
     setParamsLab({});
@@ -8852,7 +8859,7 @@ useEffect(() => {
 
 // Reintenta las escrituras pendientes (offline) al reconectar y al iniciar.
 useEffect(() => {
-  const handlers = { crearEvolucion: (a) => crearEvolucion(a.pacienteId, a.autorId, a.texto, a.tipo) };
+  const handlers = { crearEvolucion: (a) => crearEvolucion(a.pacienteId, a.autorId, a.texto, a.tipo), crearExamen: (a) => crearExamen(a.pacienteId, a.autorId, a.datos) };
   const flush = () => { procesarCola(handlers); };
   if (typeof navigator === "undefined" || navigator.onLine) flush();
   window.addEventListener("online", flush);
