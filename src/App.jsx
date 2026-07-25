@@ -6347,18 +6347,36 @@ const cargarMiembrosEquipo = async () => {
     await Promise.all(col.map((x, idx) => actualizarPaciente(x.id, { orden: idx })));
   };
   const dragPacRef = useRef(null);
-  const [dragPos, setDragPos] = useState(null); // posición del clon flotante {x,y}
-  const reordenarSobre = (p, overId) => {
-    const col = (porServicio[p.servicio] || []).map(x => x.id).filter(id => id !== p.id);
-    const idx = col.indexOf(overId);
-    if (idx < 0) return;
-    col.splice(idx, 0, p.id);
-    const ord = {}; col.forEach((id, i) => { ord[id] = i; });
-    setPacientes(prev => prev.map(x => ord[x.id] !== undefined ? { ...x, orden: ord[x.id] } : x));
-  };
-  const persistirOrdenColumna = async (servicio) => {
-    const col = porServicio[servicio] || [];
-    await Promise.all(col.map((x, i) => actualizarPaciente(x.id, { orden: i })));
+  const overRef = useRef(null);
+  const [dragPos, setDragPos] = useState(null); // clon flotante {x,y}
+  const [gapId, setGapId] = useState(null);      // tarjeta ante la que se insertará
+  const iniciarDragPac = (e, p) => {
+    if (soloLectura) return;
+    e.stopPropagation(); e.preventDefault(); clearTimeout(pressTimerPac.current);
+    dragPacRef.current = p; overRef.current = null; setGapId(null); setDragPos({ x: e.clientX, y: e.clientY });
+    const move = (ev) => {
+      if (ev.cancelable) ev.preventDefault();
+      setDragPos({ x: ev.clientX, y: ev.clientY });
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-pac-id]");
+      const id = el?.getAttribute("data-pac-id");
+      if (id && id !== p.id) { overRef.current = { id, serv: el.getAttribute("data-serv") }; setGapId(id); }
+      else { overRef.current = null; setGapId(null); }
+    };
+    const up = async () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      const over = overRef.current, dp = dragPacRef.current;
+      dragPacRef.current = null; overRef.current = null; setDragPos(null); setGapId(null);
+      if (!over || !dp) return;
+      const destServ = over.serv || dp.servicio;
+      const col = (porServicio[destServ] || []).map(x => x.id).filter(id => id !== dp.id);
+      let idx = col.indexOf(over.id); if (idx < 0) idx = col.length;
+      col.splice(idx, 0, dp.id);
+      const ord = {}; col.forEach((id, i) => { ord[id] = i; });
+      setPacientes(prev => prev.map(x => x.id === dp.id ? { ...x, servicio: destServ, orden: ord[x.id] } : (ord[x.id] !== undefined ? { ...x, orden: ord[x.id] } : x)));
+      await Promise.all(col.map((id, i) => actualizarPaciente(id, id === dp.id ? { servicio: destServ, orden: i } : { orden: i })));
+    };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", up);
   };
   // Al volver a la lista (desde una ficha), restaura la posición de scroll previa.
   useEffect(() => {
@@ -8281,7 +8299,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {porServicio[servicio].map(p => (
-                      <div key={p.id} data-pac-id={p.id}
+                      <Fragment key={p.id}>
+                      {gapId===p.id && <div style={{height:2,background:"var(--primario)",borderRadius:2,margin:"3px 0"}}/>}
+                      <div data-pac-id={p.id} data-serv={servicio}
                         onClick={()=>{ if (longPressPacRef.current) { longPressPacRef.current = false; return; } abrirFicha(p); }}
                         onPointerDown={(e)=>{ if (soloLectura) return; pressPosPac.current={x:e.clientX,y:e.clientY}; longPressPacRef.current=false; clearTimeout(pressTimerPac.current); pressTimerPac.current=setTimeout(()=>{ longPressPacRef.current=true; try{navigator.vibrate?.(20);}catch{} setMoverPaciente(p); }, 500); }}
                         onPointerMove={(e)=>{ if (pressPosPac.current && (Math.abs(e.clientX-pressPosPac.current.x)>10||Math.abs(e.clientY-pressPosPac.current.y)>10)) clearTimeout(pressTimerPac.current); }}
@@ -8295,10 +8315,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             {!soloLectura && <div
                               onClick={(e)=>e.stopPropagation()}
-                              onPointerDown={(e)=>{ e.stopPropagation(); e.preventDefault(); clearTimeout(pressTimerPac.current); try{e.currentTarget.setPointerCapture(e.pointerId);}catch{} dragPacRef.current=p; setDragPos({x:e.clientX,y:e.clientY}); }}
-                              onPointerMove={(e)=>{ if(!dragPacRef.current) return; setDragPos({x:e.clientX,y:e.clientY}); const el=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-pac-id]"); const over=el?.getAttribute("data-pac-id"); if(over && over!==dragPacRef.current.id) reordenarSobre(dragPacRef.current, over); }}
-                              onPointerUp={(e)=>{ if(dragPacRef.current){ const s=dragPacRef.current.servicio; dragPacRef.current=null; setDragPos(null); persistirOrdenColumna(s); try{e.currentTarget.releasePointerCapture(e.pointerId);}catch{} } }}
-                              title="Arrastra para reordenar" style={{cursor:"grab",fontSize:16,color:"var(--texto-ter)",padding:"0 3px",touchAction:"none",lineHeight:1,userSelect:"none"}}>⠿</div>}
+                              onPointerDown={(e)=>iniciarDragPac(e,p)}
+                              title="Arrastra para reordenar o cambiar de servicio" style={{cursor:"grab",fontSize:16,color:"var(--texto-ter)",padding:"0 3px",touchAction:"none",lineHeight:1,userSelect:"none"}}>⠿</div>}
                             <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
                           </div>
                         </div>
@@ -8312,6 +8330,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                         {p.estado === "alta" && <div style={{fontSize:9,color:"var(--neutro)",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
                         {esEquipo && <EncargadosPaciente paciente={p} miembros={miembrosEquipo} currentUser={currentUser} onActualizar={asignarEncargados} />}
                       </div>
+                      </Fragment>
                     ))}
                   </div>
                 </div>
