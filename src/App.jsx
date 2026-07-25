@@ -12,6 +12,7 @@ import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
 import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
 import { guardarSnapshot, leerSnapshot } from "./offlineCache";
+import { encolar, procesarCola, pendientesCount } from "./offlineQueue";
 
 // ============================================================
 // NOTIFICACIONES (nivel 1: dentro de la app)
@@ -5560,6 +5561,41 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     else setMsg("⚠️ No se pudo crear el paciente: " + r.error);
   };
 
+  const generarAnexos = async () => {
+    let jsPDF;
+    try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = doc.internal.pageSize.getWidth(), M = 16;
+    const box = (x, yy) => { doc.setDrawColor(90, 90, 90); doc.rect(x, yy - 3, 3.5, 3.5); };
+    let y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("HOSPITAL BASE VALDIVIA", M, y); y += 5;
+    doc.text("ANEXO N°1: RIESGO DE ENFERMEDAD TROMBOEMBÓLICA (ETE)", M, y, { maxWidth: W - 2 * M }); y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(`Paciente: ${f.nombre || ""}`, M, y); doc.text(`RUN: ${f.rut || ""}`, W - M - 55, y); y += 5;
+    doc.text(`Edad: ${f.edad || ""}   Sexo: ${f.sexo || ""}   Peso: ${f.peso || ""} kg   Talla: ${f.talla || ""} cm   IMC: ${imc || ""}`, M, y); y += 5;
+    doc.text(`Diagnóstico: ${f.hipotesis || ""}`, M, y, { maxWidth: W - 2 * M }); y += 7;
+    doc.setFont("helvetica", "bold"); doc.text("ALTO RIESGO DE ETE (marque X):", M, y); y += 5; doc.setFont("helvetica", "normal");
+    ["Antecedente de ETE previa o trombofilia", "Cáncer activo", "Cirugía oncológica", "Cirugía bariátrica", "Obesidad mórbida", "Politraumatizado", "Fractura pelvis/fémur/pierna", "Artroplastia cadera/rodilla", "AVE reciente o lesión medular aguda"].forEach(t => { box(M, y); doc.text(t, M + 6, y); y += 5.2; });
+    y += 2; doc.setFont("helvetica", "bold"); doc.text("Si no, ESCALA DE CAPRINI:", M, y); y += 5; doc.setFont("helvetica", "normal");
+    doc.text("1 pto: [ ] Edad 41-60  [ ] Várices  [ ] Embarazo/puerperio  [ ] IMC>25  [ ] ACO/TRH  [ ] Postrado", M, y, { maxWidth: W - 2 * M }); y += 5;
+    doc.text("2 ptos: [ ] Edad 61-74  [ ] Cirugía >60 min  [ ] Reposo >72 h  [ ] Artroscopia", M, y); y += 5;
+    doc.text("3 ptos: [ ] Edad >74     Muy bajo=0 · Bajo=1-2 · Moderado=3-4 · Alto>4", M, y); y += 7;
+    doc.text("TOTAL: ______ pts     RIESGO ETE: ______________", M, y); y += 8;
+    doc.text("Indicaciones: __________________________________________________________", M, y, { maxWidth: W - 2 * M }); y += 8;
+    doc.text(`Médico: ${currentUser?.nombre || "__________"}   Firma: __________   Fecha: ${f.fingreso}`, M, y);
+    doc.addPage(); y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("HOSPITAL BASE VALDIVIA — CONSENTIMIENTO INFORMADO", M, y, { maxWidth: W - 2 * M }); y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(`Yo, ${f.nombre || "____________________"}   RUN: ${f.rut || "____________"}`, M, y); y += 7;
+    doc.text("He sido informado por el médico Dr(a): ____________________ que:", M, y, { maxWidth: W - 2 * M }); y += 7;
+    ["1) Padezco la condición: " + (f.hipotesis || "____________________"), "2) Se requiere el procedimiento de: ____________________", "3) Se me explicaron objetivo, riesgos y beneficios.", "4) Pueden requerirse acciones no contempladas durante el procedimiento.", "5) ¿Alternativas?  [ ] No   [ ] Sí: ____________________"].forEach(t => { doc.text(t, M, y, { maxWidth: W - 2 * M }); y += 7; });
+    y += 3; box(M, y); doc.text("CONSIENTO la realización de la intervención", M + 6, y); y += 6;
+    box(M, y); doc.text("NO CONSIENTO (asumo la responsabilidad)", M + 6, y); y += 10;
+    doc.text("Firma paciente o sustituto: ____________________", M, y); y += 8;
+    doc.text(`Firma profesional: ${currentUser?.nombre || "__________"}   Fecha: ${f.fingreso}`, M, y);
+    doc.save(`anexos_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
+  };
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 460, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
@@ -5591,8 +5627,9 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
         {campo("Indicaciones", "indicaciones", true)}
         {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-          <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13.5, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Imprimir / PDF</button>
-          <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1, padding: 11, fontSize: 13.5, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Agregando…" : "➕ A hospitalizados"}</button>
+          <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Ingreso</button>
+          <button onClick={generarAnexos} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📎 Anexos</button>
+          <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1.2, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "…" : "➕ Hospitalizar"}</button>
         </div>
       </div>
     </div>
@@ -6710,8 +6747,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     }
 
     const result = await crearEvolucion(seleccionado.id, currentUser.id, texto, tipoEvo);
-    if (!result.ok) return alert("Error: " + result.error);
-    setEvoluciones(prev => [result.evolucion, ...prev]);
+    if (!result.ok) {
+      // Sin conexión: guarda localmente y encola para sincronizar al reconectar.
+      encolar("crearEvolucion", { pacienteId: seleccionado.id, autorId: currentUser.id, texto, tipo: tipoEvo });
+      const temp = { id: `tmp_${Date.now()}`, paciente_id: seleccionado.id, autor_id: currentUser.id, texto, tipo: tipoEvo, fecha_evolucion: new Date().toISOString().slice(0,10), hora_evolucion: new Date().toTimeString().slice(0,5), autor: { nombre: currentUser.nombre }, _pendiente: true };
+      setEvoluciones(prev => [temp, ...prev]);
+    } else {
+      setEvoluciones(prev => [result.evolucion, ...prev]);
+    }
     setEvoLibre("");
     setEvoEstructurada({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
     setDiuresis({ cantidad: "", via: "", caracteristicas: "" });
@@ -8807,7 +8850,14 @@ useEffect(() => {
   return () => unsubscribe();
 }, []);
 
-// Ofrecer notificaciones UNA sola vez (primera apertura, online, sin haber decidido aún).
+// Reintenta las escrituras pendientes (offline) al reconectar y al iniciar.
+useEffect(() => {
+  const handlers = { crearEvolucion: (a) => crearEvolucion(a.pacienteId, a.autorId, a.texto, a.tipo) };
+  const flush = () => { procesarCola(handlers); };
+  if (typeof navigator === "undefined" || navigator.onLine) flush();
+  window.addEventListener("online", flush);
+  return () => window.removeEventListener("online", flush);
+}, []);
 useEffect(() => {
   if (!currentUser) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;      // solo online
