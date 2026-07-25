@@ -517,6 +517,38 @@ const FUNCIONES_CONFIGURABLES = [
   ]},
 ];
 
+// ─── Onboarding de notificaciones: se ofrece UNA vez al abrir la app ───
+function OnboardingPushModal({ currentUser, onClose }) {
+  const [cargando, setCargando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const marcar = () => { try { localStorage.setItem("uro_push_onboarding", "1"); } catch {} };
+  const activar = async () => {
+    setCargando(true); setMsg("");
+    const conTope = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r({ ok: false, error: "La operación tardó demasiado. Revisa la conexión." }), 15000))]);
+    try {
+      const r = await conTope(activarPush(currentUser.id));
+      if (r.ok) { marcar(); onClose(); return; }
+      setMsg("⚠️ " + r.error);
+    } catch (e) { setMsg("⚠️ " + (e.message || String(e))); }
+    setCargando(false);
+  };
+  const ahoraNo = () => { marcar(); onClose(); };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 16, padding: 22, width: "100%", maxWidth: 340, textAlign: "center" }}>
+        <div style={{ fontSize: 34, marginBottom: 8 }}>🔔</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>Activa las notificaciones</div>
+        <div style={{ fontSize: 13, color: "var(--texto-sec)", lineHeight: 1.5, marginBottom: 16 }}>
+          Recibe avisos de cirugías, pendientes e interconsultas aunque tengas UroSearch cerrada.
+        </div>
+        {msg && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 10 }}>{msg}</div>}
+        <button onClick={activar} disabled={cargando} style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.6 : 1, marginBottom: 8 }}>{cargando ? "Activando…" : "Activar notificaciones"}</button>
+        <button onClick={ahoraNo} disabled={cargando} style={{ width: "100%", padding: 10, fontSize: 13, background: "none", color: "var(--texto-ter)", border: "none", cursor: "pointer" }}>Ahora no</button>
+      </div>
+    </div>
+  );
+}
+
 function ConfigModal({ onClose, currentUser }) {
   const [cfg, setCfg] = useState(cargarConfig);
   useBackClose(true, onClose);
@@ -4547,11 +4579,22 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           observaciones: c.diagnostico ? ("Dg: " + c.diagnostico).slice(0, 500) : null,
         }));
       if (filas.length === 0) { alert("No se pudo extraer ninguna cirugía de la foto. Intenta con mejor luz o encuadre."); return; }
-      if (!window.confirm(`Se detectaron ${filas.length} cirugías en la foto. ¿Importarlas?`)) return;
-      const result = await crearCirugiasBulk(filas);
+      // Evita duplicar si se re-sube la misma tabla: descarta las que ya existen
+      // (misma fecha + nombre + procedimiento, ignorando tildes y mayúsculas).
+      const _norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+      const _clave = (c) => `${c.fecha}|${_norm(c.iniciales)}|${_norm(c.procedimiento)}`;
+      const _existentes = new Set(tablaCirugias.map(_clave));
+      const nuevas = filas.filter(f => !_existentes.has(_clave(f)));
+      const dup = filas.length - nuevas.length;
+      if (nuevas.length === 0) { alert(`Las ${filas.length} cirugías detectadas ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); return; }
+      const msgConf = dup > 0
+        ? `Se detectaron ${filas.length} cirugías (${dup} ya existían y se omitirán). ¿Importar las ${nuevas.length} nuevas?`
+        : `Se detectaron ${nuevas.length} cirugías en la foto. ¿Importarlas?`;
+      if (!window.confirm(msgConf)) return;
+      const result = await crearCirugiasBulk(nuevas);
       if (!result.ok) { alert("Error al importar: " + result.error); return; }
       setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora)));
-      alert(`✓ ${result.cirugias.length} cirugías importadas desde la foto`);
+      alert(`✓ ${result.cirugias.length} cirugías importadas${dup > 0 ? ` · ${dup} omitidas por duplicado` : ""}`);
     } catch (err) {
       alert("No se pudo leer la foto de la tabla: " + (err?.message || err));
     } finally {
@@ -4763,19 +4806,26 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       // Confirmar antes de insertar
       const nCCV = filas.filter(f => f.pabellon === "CCV").length;
       const resumenCCV = nCCV > 0 ? ` (${nCCV} de ellas en CCV, lunes)` : "";
-      if (!confirm(`Se importarán ${filas.length} cirugías con nombre completo${resumenCCV}. ¿Continuar?`)) {
+      // Evita duplicar si se re-importa el mismo Excel (misma fecha + nombre + procedimiento).
+      const _normX = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+      const _claveX = (c) => `${c.fecha}|${_normX(c.iniciales)}|${_normX(c.procedimiento)}`;
+      const _existX = new Set(tablaCirugias.map(_claveX));
+      const nuevasX = filas.filter(f => !_existX.has(_claveX(f)));
+      const dupX = filas.length - nuevasX.length;
+      if (nuevasX.length === 0) { alert(`Las ${filas.length} cirugías del Excel ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); e.target.value = ""; return; }
+      if (!confirm(`Se importarán ${nuevasX.length} cirugías${dupX > 0 ? ` (${dupX} ya existían y se omiten)` : ""}${resumenCCV}. ¿Continuar?`)) {
         e.target.value = "";
         return;
       }
 
-      const result = await crearCirugiasBulk(filas);
+      const result = await crearCirugiasBulk(nuevasX);
       if (!result.ok) {
         alert("Error al importar: " + result.error);
         return;
       }
 
       setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
-      alert(`✓ ${result.cirugias.length} cirugías importadas`);
+      alert(`✓ ${result.cirugias.length} cirugías importadas${dupX > 0 ? ` · ${dupX} omitidas por duplicado` : ""}`);
       e.target.value = "";
     };
     reader.readAsArrayBuffer(file);
@@ -8151,6 +8201,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [invitaciones, setInvitaciones] = useState([]);
   const [playingVideo, setPlayingVideo] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [mostrarOnboardingPush, setMostrarOnboardingPush] = useState(false);
   const [tab, setTab] = useState(() => {
   try { return localStorage.getItem("uro_tab") || "chat"; }
   catch { return "chat"; }
@@ -8425,6 +8476,21 @@ useEffect(() => {
 
   return () => unsubscribe();
 }, []);
+
+// Ofrecer notificaciones UNA sola vez (primera apertura, online, sin haber decidido aún).
+useEffect(() => {
+  if (!currentUser) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;      // solo online
+  if (!pushSoportado()) return;
+  if (esIOS() && !estaInstalada()) return;                                // iOS: primero instalar
+  if (typeof Notification !== "undefined" && Notification.permission !== "default") return; // ya decidió
+  let yaPreguntado = false;
+  try { yaPreguntado = localStorage.getItem("uro_push_onboarding") === "1"; } catch {}
+  if (yaPreguntado) return;
+  let cancelado = false;
+  pushActivo().then((activo) => { if (!activo && !cancelado) setMostrarOnboardingPush(true); });
+  return () => { cancelado = true; };
+}, [currentUser]);
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, loading]);
 
   const isAdmin = currentUser?.rol === "admin";
@@ -9137,21 +9203,21 @@ if (!currentUser) {
     if (!s0) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
-    if (Date.now() - s0.t > 700) return;
+    if (Date.now() - s0.t > 900) return;
 
     // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
-    if (dy > 40 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+    if (dy > 26 && Math.abs(dy) > Math.abs(dx) * 1.1) {
       let el = s0.target, arriba = true;
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
-        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 2; break; }
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 8; break; }
         el = el.parentElement;
       }
       if (arriba && submenu) { setSubmenuOpen(true); try { navigator.vibrate?.(15); } catch {} }
       return;
     }
     // Deslizar hacia arriba estando el menú abierto: lo cierra
-    if (dy < -40 && Math.abs(dy) > Math.abs(dx) * 1.4 && submenuOpen) {
+    if (dy < -26 && Math.abs(dy) > Math.abs(dx) * 1.1 && submenuOpen) {
       setSubmenuOpen(false);
       return;
     }
@@ -9238,6 +9304,7 @@ if (!currentUser) {
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
       <OfflineBanner/>
+      {mostrarOnboardingPush && <OnboardingPushModal currentUser={currentUser} onClose={()=>setMostrarOnboardingPush(false)} />}
       <style>{`
         html, body, #root { background: var(--fondo); overscroll-behavior: none; }
         /* Todo contenedor con scroll propio: sin rebote ni franja blanca al final */
