@@ -5526,31 +5526,46 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     let jsPDF;
     try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 20, 12, 18, 18); } catch {}
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(40, 40, 40);
-    ["MINISTERIO DE SALUD", "SERVICIO DE SALUD VALDIVIA", "HOSPITAL BASE VALDIVIA", "SERVICIO UROLOGÍA"].forEach(t => { doc.text(t, M, y); y += 3.6; });
-    y += 3; doc.setFontSize(12); doc.text("INGRESO AL SERVICIO DE UROLOGÍA", W / 2, y, { align: "center" }); y += 8;
-    doc.setFontSize(9); doc.setFont("helvetica", "normal");
-    const linea = (t, indent = 0) => { const parts = doc.splitTextToSize(t, W - 2 * M - indent); parts.forEach(p => { if (y > 282) { doc.addPage(); y = 18; } doc.text(p, M + indent, y); y += 4.6; }); };
-    const kv = (k, v) => linea(`${k}: ${v || ""}`);
-    kv("NOMBRE", f.nombre); kv("N° FICHA", f.ficha); kv("RUT", f.rut);
-    kv("FECHA DE NACIMIENTO", f.fnac); kv("EDAD", f.edad); kv("SEXO", f.sexo);
-    kv("DOMICILIO", f.domicilio); kv("TELÉFONO", f.telefono); kv("FECHA DE INGRESO", f.fingreso);
-    y += 2; doc.setFont("helvetica", "bold"); linea("ANAMNESIS PRÓXIMA"); doc.setFont("helvetica", "normal"); linea(f.anamnesis || "—");
-    if (f.plan) { linea("Ingresa para " + f.plan); }
-    y += 1; doc.setFont("helvetica", "bold"); linea("ANAMNESIS REMOTA"); doc.setFont("helvetica", "normal");
-    linea("• Mórbidos: " + (f.morbidos || "—"), 2); linea("• Fármacos: " + (f.farmacos || "—"), 2); linea("• Quirúrgicos: " + (f.quirurgicos || "—"), 2); linea("• Alergias: " + (f.alergias || "NO"), 2);
-    y += 1; doc.setFont("helvetica", "bold"); linea("OTROS"); doc.setFont("helvetica", "normal");
-    linea(`Tabaco: ${f.tabaco || "—"} · OH: ${f.oh || "—"}`, 2); linea("Antec. familiares: " + (f.familiares || "—"), 2);
-    linea("Acepta transfusiones: " + (f.transfusiones || "—"), 2); linea("Urocultivo: " + (f.urocultivo || "—"), 2);
-    y += 1; doc.setFont("helvetica", "bold"); linea("EXAMEN FÍSICO SEGMENTARIO"); doc.setFont("helvetica", "normal");
-    linea(`Peso ${f.peso || "—"} kg · Talla ${f.talla || "—"} cm · IMC ${imc || "—"} · PA ${f.pa || "—"}`, 2);
-    linea("Cabeza y cuello: " + f.cabeza, 2); linea("Tórax: " + f.torax, 2); linea("Abdomen: " + f.abdomen, 2);
-    linea("Fosas renales: " + f.fosas, 2); linea("EEII: " + f.eeii, 2); linea("Genitales: " + f.genitales, 2); linea("T. rectal: " + f.rectal, 2);
-    y += 1; doc.setFont("helvetica", "bold"); linea("HIPÓTESIS DIAGNÓSTICA"); doc.setFont("helvetica", "normal"); linea(f.hipotesis || "—");
-    y += 1; doc.setFont("helvetica", "bold"); linea("INDICACIONES"); doc.setFont("helvetica", "normal"); linea(f.indicaciones);
-    y += 4; doc.setFontSize(8); doc.setTextColor(120, 120, 120); linea(`Becado que realiza ingreso: ${currentUser?.nombre || ""} · Generado con UroSearch`);
+    const W = doc.internal.pageSize.getWidth(), M = 20; let y = 18;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 22, 13, 20, 20); } catch {}
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("times", "bold"); doc.setFontSize(10);
+    ["MINISTERIO DE SALUD", "SERVICIO DE SALUD VALDIVIA", "HOSPITAL BASE VALDIVIA", "SERVICIO UROLOGIA."].forEach(t => { doc.text(t, M, y); y += 4.3; });
+    y += 3; doc.setFontSize(12); doc.text("INGRESO AL SERVICIO DE UROLOGIA", W / 2, y, { align: "center" });
+    const tw = doc.getTextWidth("INGRESO AL SERVICIO DE UROLOGIA"); doc.setLineWidth(0.3); doc.line(W / 2 - tw / 2, y + 1, W / 2 + tw / 2, y + 1);
+    y += 9; doc.setFontSize(10.5);
+    const nl = () => { if (y > 285) { doc.addPage(); y = 18; } };
+    const lab = (label, value, indent = 0) => {
+      nl(); doc.setFont("times", "bold"); doc.text(label, M + indent, y);
+      const lw = doc.getTextWidth(label + " "); doc.setFont("times", "normal");
+      if (value) { const parts = doc.splitTextToSize(String(value), W - 2 * M - indent - lw); doc.text(parts[0] || "", M + indent + lw, y); for (let i = 1; i < parts.length; i++) { y += 5; nl(); doc.text(parts[i], M + indent, y); } }
+      y += 5.4;
+    };
+    const par = (text, indent = 0) => { doc.setFont("times", "normal"); doc.splitTextToSize(String(text || "—"), W - 2 * M - indent).forEach(p => { nl(); doc.text(p, M + indent, y); y += 5; }); };
+    const sec = (title) => { y += 2.5; nl(); doc.setFont("times", "bold"); doc.text(title, M, y); const w = doc.getTextWidth(title); doc.setLineWidth(0.25); doc.line(M, y + 1, M + w, y + 1); y += 6; };
+
+    lab("NOMBRE:", f.nombre); lab("N° FICHA:", f.ficha); lab("RUT:", f.rut);
+    lab("FECHA DE NACIMIENTO:", f.fnac); lab("EDAD:", f.edad ? f.edad + " años" : ""); lab("SEXO:", f.sexo);
+    lab("DOMICILIO:", f.domicilio); lab("TELEFONO:", f.telefono); lab("FECHA DE INGRESO:", f.fingreso);
+    sec("ANAMNESIS PROXIMA:"); par(f.anamnesis); if (f.plan) par("Ingresa para " + f.plan);
+    sec("ANAMNESIS REMOTA:");
+    lab("- ANTECEDENTES MÓRBIDOS PERSONALES:", f.morbidos);
+    lab("- FÁRMACOS:", f.farmacos);
+    lab("- ANTECEDENTES QUIRÚRGICOS:", f.quirurgicos);
+    lab("- AL:", f.alergias || "NO");
+    sec("OTROS:");
+    lab("HÁBITOS — TABACO:", f.tabaco || "()"); lab("OH:", f.oh || "()");
+    lab("ANTECEDENTES FAMILIARES:", f.familiares);
+    lab("ACEPTA TRANSFUSIONES DE SANGRE:", f.transfusiones);
+    lab("UROCULTIVO:", f.urocultivo);
+    sec("EXAMENES FISICO SEGMENTARIO");
+    lab("PESO:", (f.peso || "") + " KG    TALLA: " + (f.talla || "") + " CM    IMC: " + (imc || ""));
+    lab("PA:", f.pa);
+    lab("CABEZA Y CUELLO:", f.cabeza); lab("TÓRAX:", f.torax); lab("ABDOMEN:", f.abdomen);
+    lab("FOSAS RENALES:", f.fosas); lab("EEII:", f.eeii); lab("GENITALES:", f.genitales); lab("T. RECTAL:", f.rectal);
+    sec("HIP. DIAGNÓSTICA:"); par(f.hipotesis);
+    sec("INDICACIONES:"); (f.indicaciones || "").split("\n").forEach(l => par(l));
+    y += 4; doc.setFont("times", "italic"); doc.setFontSize(9); nl(); doc.text(`Becado que realiza ingreso: ${currentUser?.nombre || ""}`, M, y);
     doc.save(`ingreso_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
   };
 
