@@ -3874,6 +3874,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
       {subTab === "prescripciones" && esUrologo && <PrescripcionesPanel currentUser={currentUser}/>}
       {subTab === "interconsultas" && <InterconsultasPanel currentUser={currentUser} contexto={contexto}/>}
+      {subTab === "ingresos" && <IngresosPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "seguimiento" && <SeguimientoPanel currentUser={currentUser} contexto={contexto}/>}
     </div>
   );
@@ -5477,9 +5478,9 @@ Pruebas de compatibilidad y Rh · Reserva de 2 U de GR
 CSV + MAT · Kinesioterapia motora/ventilatoria
 Pabellón el día ____ en horario ____`;
 
-function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
+function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
   const HOY = new Date().toISOString().slice(0, 10);
-  const [f, setF] = useState({
+  const DEFAULTS = {
     nombre: "", ficha: "", rut: "", fnac: "", edad: "", sexo: "", domicilio: "", telefono: "", fingreso: HOY,
     anamnesis: "", plan: "", morbidos: "", farmacos: "", quirurgicos: "", alergias: "NO", tabaco: "", oh: "", familiares: "",
     transfusiones: "", urocultivo: "", peso: "", talla: "", pa: "",
@@ -5487,7 +5488,9 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     abdomen: "RHA(+), BDI, sin signos de irritación peritoneal", fosas: "Sin alteraciones",
     eeii: "Sin edema, pulsos distales presentes, simétricos y conservados", genitales: "NR", rectal: "NR",
     hipotesis: "", indicaciones: INDICACIONES_HBV,
-  });
+  };
+  const [f, setF] = useState(() => ingresoExistente?.datos ? { ...DEFAULTS, ...ingresoExistente.datos } : DEFAULTS);
+  const [carpeta, setCarpeta] = useState(ingresoExistente?.carpeta || "");
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -5680,12 +5683,96 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
         {campo("Hipótesis diagnóstica", "hipotesis", true)}
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
         {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        {onGuardarIngreso && (
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Carpeta</label>
+              <input list="carpetas-list" value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="(sin carpeta)" style={inp} />
+              <datalist id="carpetas-list">{carpetas.map(c => <option key={c} value={c} />)}</datalist>
+            </div>
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso(f, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: 13, fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
           <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Ingreso</button>
           <button onClick={generarAnexos} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📎 Anexos</button>
           <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1.2, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "…" : "➕ Hospitalizar"}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Panel Ingresos: lista guardada, carpetas y gestión ───
+function IngresosPanel({ currentUser, contexto }) {
+  const [ingresos, setIngresos] = useState([]);
+  const [carpetasLocal, setCarpetasLocal] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [colapsadas, setColapsadas] = useState({});
+  const equipoId = contexto !== "personal" ? contexto : null;
+
+  const cargar = async () => {
+    setCargando(true);
+    let q = supabase.from("ingresos").select("*").order("updated_at", { ascending: false });
+    q = equipoId ? q.eq("equipo_id", equipoId) : q.eq("user_id", currentUser.id).is("equipo_id", null);
+    const { data, error } = await q;
+    if (!error) setIngresos(data || []);
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, [contexto]);
+
+  const carpetasBD = Array.from(new Set(ingresos.map(i => i.carpeta).filter(Boolean)));
+  const todasCarpetas = Array.from(new Set([...carpetasLocal, ...carpetasBD])).sort();
+
+  const guardarIngreso = async (datos, carpeta, id) => {
+    const fila = { user_id: currentUser.id, equipo_id: equipoId, carpeta: carpeta || null, nombre: datos.nombre || null, ficha: datos.ficha || null, datos, updated_at: new Date().toISOString() };
+    if (id) await supabase.from("ingresos").update(fila).eq("id", id);
+    else await supabase.from("ingresos").insert(fila);
+    await cargar();
+  };
+  const eliminar = async (id) => { if (!confirm("¿Eliminar este ingreso?")) return; await supabase.from("ingresos").delete().eq("id", id); await cargar(); };
+  const mover = async (ing) => {
+    const c = window.prompt(`Carpeta destino (vacío = sin carpeta).\nExistentes: ${todasCarpetas.join(", ") || "—"}`, ing.carpeta || "");
+    if (c === null) return;
+    await supabase.from("ingresos").update({ carpeta: c.trim() || null }).eq("id", ing.id); await cargar();
+  };
+  const nuevaCarpeta = () => { const n = window.prompt("Nombre de la nueva carpeta:"); if (n && n.trim()) setCarpetasLocal(prev => [...new Set([...prev, n.trim()])]); };
+
+  const grupos = {}; ingresos.forEach(i => { const k = i.carpeta || "Sin carpeta"; (grupos[k] = grupos[k] || []).push(i); });
+  todasCarpetas.forEach(c => { if (!grupos[c]) grupos[c] = []; });
+  const nombresGrupos = Object.keys(grupos).sort((a, b) => a === "Sin carpeta" ? 1 : b === "Sin carpeta" ? -1 : a.localeCompare(b));
+
+  return (
+    <div style={{ padding: 16 }}>
+      {modalAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={editando} carpetas={todasCarpetas} onGuardarIngreso={guardarIngreso} onCreado={() => {}} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: 13.5, fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo ingreso</button>
+        <button onClick={nuevaCarpeta} style={{ padding: "11px 14px", fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
+      </div>
+      {cargando ? <div style={{ color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div> :
+        ingresos.length === 0 && todasCarpetas.length === 0 ? <div style={{ color: "var(--texto-ter)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Aún no hay ingresos guardados.</div> :
+        nombresGrupos.map(g => (
+          <div key={g} style={{ marginBottom: 12 }}>
+            <div onClick={() => setColapsadas(p => ({ ...p, [g]: !p[g] }))} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--texto-sec)", padding: "4px 2px", cursor: "pointer" }}>
+              <span>📁 {g} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({grupos[g].length})</span></span>
+              <span>{colapsadas[g] ? "▸" : "▾"}</span>
+            </div>
+            {!colapsadas[g] && grupos[g].map(ing => (
+              <div key={ing.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "10px 12px", marginBottom: 6 }}>
+                <div onClick={() => { setEditando(ing); setModalAbierto(true); }} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ing.nombre || "(sin nombre)"}</div>
+                  <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>{ing.ficha ? "Ficha " + ing.ficha + " · " : ""}{(ing.updated_at || "").slice(0, 10)}</div>
+                </div>
+                <button onClick={() => mover(ing)} title="Mover a carpeta" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>📁</button>
+                <button onClick={() => eliminar(ing.id)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--peligro)" }}>🗑</button>
+              </div>
+            ))}
+            {!colapsadas[g] && grupos[g].length === 0 && <div style={{ fontSize: 11.5, color: "var(--texto-ter)", fontStyle: "italic", padding: "2px 4px 6px" }}>Carpeta vacía · usa 📁 en un ingreso para moverlo aquí.</div>}
+          </div>
+        ))
+      }
     </div>
   );
 }
@@ -8826,7 +8913,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   useEffect(() => {
     const h = (e) => {
       const s = e.detail?.subtab;
-      if (["pacientes", "tabla", "notas", "prescripciones"].includes(s)) setSubTabHospital(s);
+      if (["pacientes", "tabla", "notas", "prescripciones", "interconsultas", "seguimiento", "ingresos"].includes(s)) setSubTabHospital(s);
       if (["cirugias", "videos", "preguntas", "medicamentos", "scores", "documentos", "mapas"].includes(s)) setSubTabBiblio(s);
     };
     window.addEventListener("uro-tour-subtab", h);
@@ -9826,6 +9913,7 @@ if (!currentUser) {
         ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
         ...(!fnOculta(config, "hosp:interconsultas") ? [["interconsultas", "📄 Interconsultas"]] : []),
         ...(!fnOculta(config, "hosp:seguimiento") ? [["seguimiento", "🔄 Seguimiento"]] : []),
+        ["ingresos", "📋 Ingresos"],
       ],
       activo: subTabHospital,
       elegir: setSubTabHospital,
