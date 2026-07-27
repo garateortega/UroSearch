@@ -297,15 +297,30 @@ Reglas:
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
     body: JSON.stringify({
-      model: "claude-sonnet-5", max_tokens: 3000,
+      model: "claude-sonnet-5", max_tokens: 4096,
       system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido.",
       messages: [{ role: "user", content }],
     }),
   });
   const data = await res.json();
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
-  const clean = txt.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  let clean = txt.replace(/```json|```/g, "").trim();
+  if (!clean) return [];
+  const ini = clean.indexOf("{"), fin = clean.lastIndexOf("}");
+  if (ini >= 0 && fin > ini) clean = clean.slice(ini, fin + 1);
+  let parsed;
+  try { parsed = JSON.parse(clean); }
+  catch {
+    // Respuesta cortada: intenta reparar cerrando corchetes/llaves pendientes.
+    try {
+      let rep = clean.replace(/,\s*$/, "");
+      const faltaCorch = (rep.match(/\[/g) || []).length - (rep.match(/\]/g) || []).length;
+      const faltaLlave = (rep.match(/\{/g) || []).length - (rep.match(/\}/g) || []).length;
+      for (let k = 0; k < faltaCorch; k++) rep += "]";
+      for (let k = 0; k < faltaLlave; k++) rep += "}";
+      parsed = JSON.parse(rep);
+    } catch { return []; }
+  }
   return Array.isArray(parsed?.examenes) ? parsed.examenes : [];
 }
 
@@ -5466,7 +5481,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const [f, setF] = useState({
     nombre: "", ficha: "", rut: "", fnac: "", edad: "", sexo: "", domicilio: "", telefono: "", fingreso: HOY,
-    anamnesis: "", morbidos: "", farmacos: "", quirurgicos: "", alergias: "NO", tabaco: "", oh: "", familiares: "",
+    anamnesis: "", plan: "", morbidos: "", farmacos: "", quirurgicos: "", alergias: "NO", tabaco: "", oh: "", familiares: "",
     transfusiones: "", urocultivo: "", peso: "", talla: "", pa: "",
     cabeza: "Normocráneo, sin lesiones, no palpo adenopatías", torax: "Normoexpansible, RR2TSS, MP(+) SRA",
     abdomen: "RHA(+), BDI, sin signos de irritación peritoneal", fosas: "Sin alteraciones",
@@ -5486,6 +5501,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     const L = [];
     L.push(`INGRESO AL SERVICIO DE UROLOGÍA — ${f.fingreso}`);
     if (f.anamnesis) L.push("ANAMNESIS PRÓXIMA: " + f.anamnesis);
+    if (f.plan) L.push("Ingresa para " + f.plan);
     const ar = [];
     if (f.morbidos) ar.push("Mórbidos: " + f.morbidos);
     if (f.farmacos) ar.push("Fármacos: " + f.farmacos);
@@ -5511,6 +5527,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 20, 12, 18, 18); } catch {}
     doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(40, 40, 40);
     ["MINISTERIO DE SALUD", "SERVICIO DE SALUD VALDIVIA", "HOSPITAL BASE VALDIVIA", "SERVICIO UROLOGÍA"].forEach(t => { doc.text(t, M, y); y += 3.6; });
     y += 3; doc.setFontSize(12); doc.text("INGRESO AL SERVICIO DE UROLOGÍA", W / 2, y, { align: "center" }); y += 8;
@@ -5521,6 +5538,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     kv("FECHA DE NACIMIENTO", f.fnac); kv("EDAD", f.edad); kv("SEXO", f.sexo);
     kv("DOMICILIO", f.domicilio); kv("TELÉFONO", f.telefono); kv("FECHA DE INGRESO", f.fingreso);
     y += 2; doc.setFont("helvetica", "bold"); linea("ANAMNESIS PRÓXIMA"); doc.setFont("helvetica", "normal"); linea(f.anamnesis || "—");
+    if (f.plan) { linea("Ingresa para " + f.plan); }
     y += 1; doc.setFont("helvetica", "bold"); linea("ANAMNESIS REMOTA"); doc.setFont("helvetica", "normal");
     linea("• Mórbidos: " + (f.morbidos || "—"), 2); linea("• Fármacos: " + (f.farmacos || "—"), 2); linea("• Quirúrgicos: " + (f.quirurgicos || "—"), 2); linea("• Alergias: " + (f.alergias || "NO"), 2);
     y += 1; doc.setFont("helvetica", "bold"); linea("OTROS"); doc.setFont("helvetica", "normal");
@@ -5567,6 +5585,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth(), M = 16;
     const box = (x, yy) => { doc.setDrawColor(90, 90, 90); doc.rect(x, yy - 3, 3.5, 3.5); };
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, 12, 16, 16); } catch {}
     let y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
     doc.text("HOSPITAL BASE VALDIVIA", M, y); y += 5;
     doc.text("ANEXO N°1: RIESGO DE ENFERMEDAD TROMBOEMBÓLICA (ETE)", M, y, { maxWidth: W - 2 * M }); y += 8;
@@ -5617,7 +5636,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 460, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
@@ -5625,13 +5644,14 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
           <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre completo", "nombre")}</div>
           {campo("N° Ficha", "ficha")}{campo("RUT", "rut")}
-          {campo("Fecha nac.", "fnac")}{campo("Edad", "edad")}
+          <div><label style={lbl}>Fecha nac.</label><input type="date" value={f.fnac} onChange={e => { const v = e.target.value; let ed = f.edad; if (v) { const d = new Date(v); const h = new Date(); let a = h.getFullYear() - d.getFullYear(); const m = h.getMonth() - d.getMonth(); if (m < 0 || (m === 0 && h.getDate() < d.getDate())) a--; if (a >= 0 && a < 130) ed = String(a); } setF(p => ({ ...p, fnac: v, edad: ed })); }} style={inp} /></div>{campo("Edad", "edad")}
           <div><label style={lbl}>Sexo</label><select value={f.sexo} onChange={e => set("sexo", e.target.value)} style={inp}><option value="">—</option><option value="M">M</option><option value="F">F</option></select></div>
           {campo("Teléfono", "telefono")}
           <div style={{ gridColumn: "1 / -1" }}>{campo("Domicilio", "domicilio")}</div>
           {campo("Fecha ingreso", "fingreso")}
         </div>
         <div style={{ gridColumn: "1 / -1" }}>{campo("Anamnesis próxima", "anamnesis", true)}</div>
+        <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>Plan (ingresa para…)</label><input value={f.plan} onChange={e => set("plan", e.target.value)} placeholder="Ej: resección transuretral de próstata" style={inp} /></div>
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Anamnesis remota</div>
         {campo("Antecedentes mórbidos", "morbidos", true)}
         {campo("Fármacos", "farmacos", true)}
@@ -5643,7 +5663,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose }) {
         {campo("Cabeza y cuello", "cabeza")}{campo("Tórax", "torax")}{campo("Abdomen", "abdomen")}{campo("Fosas renales", "fosas")}{campo("EEII", "eeii")}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Genitales", "genitales")}{campo("T. rectal", "rectal")}</div>
         {campo("Hipótesis diagnóstica", "hipotesis", true)}
-        {campo("Indicaciones", "indicaciones", true)}
+        <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
         {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
           <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Ingreso</button>
@@ -5816,7 +5836,7 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 420, maxHeight: "88vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 640, maxHeight: "88vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>🩸 Orden de transfusión</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
@@ -6285,9 +6305,16 @@ const cargarMiembrosEquipo = async () => {
       ids.forEach(id => conteo.set(id, (conteo.get(id)||0) + 1));
     });
     return Array.from(conteo.entries())
-      .map(([id,n]) => ({ nombre: nombreMiembroPac(id), n }))
+      .map(([id,n]) => ({ id, nombre: nombreMiembroPac(id), n }))
       .sort((a,b) => b.n - a.n);
   }, [pacientes, miembrosEquipo]);
+
+  // Color estable por médico (derivado de su id), para la vista de Distribución.
+  const colorMedico = (id) => {
+    const s = String(id || "");
+    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    return `hsl(${h}, 62%, 45%)`;
+  };
 
   // Estilo de cada ítem del menú desplegable
   const itemMenu = (activo) => ({
@@ -6333,7 +6360,14 @@ const cargarMiembrosEquipo = async () => {
     setMoverPaciente(null);
     if (!pac || !nuevoServicio || nuevoServicio === pac.servicio) return;
     const r = await actualizarPaciente(pac.id, { servicio: nuevoServicio });
-    if (r.ok) setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, servicio: nuevoServicio } : x));
+    if (r.ok) {
+      setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, servicio: nuevoServicio } : x));
+      const nc = window.prompt(`${pac.iniciales} pasó a "${nuevoServicio}". Nueva cama (deja vacío para mantener):`, "");
+      if (nc !== null && nc.trim() !== "") {
+        await actualizarPaciente(pac.id, { cama: nc.trim() });
+        setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, cama: nc.trim() } : x));
+      }
+    }
     else alert("No se pudo mover el paciente: " + r.error);
   };
   const reordenarPaciente = async (p, dir) => {
@@ -6352,8 +6386,9 @@ const cargarMiembrosEquipo = async () => {
   const [gapId, setGapId] = useState(null);      // tarjeta ante la que se insertará
   const iniciarDragPac = (e, p) => {
     if (soloLectura) return;
-    e.stopPropagation(); e.preventDefault(); clearTimeout(pressTimerPac.current);
-    dragPacRef.current = p; overRef.current = null; setGapId(null); setDragPos({ x: e.clientX, y: e.clientY });
+    e.stopPropagation();
+    const startX = e.clientX, startY = e.clientY;
+    let activo = false;
     const move = (ev) => {
       if (ev.cancelable) ev.preventDefault();
       setDragPos({ x: ev.clientX, y: ev.clientY });
@@ -6374,9 +6409,36 @@ const cargarMiembrosEquipo = async () => {
       const ord = {}; col.forEach((id, i) => { ord[id] = i; });
       setPacientes(prev => prev.map(x => x.id === dp.id ? { ...x, servicio: destServ, orden: ord[x.id] } : (ord[x.id] !== undefined ? { ...x, orden: ord[x.id] } : x)));
       await Promise.all(col.map((id, i) => actualizarPaciente(id, id === dp.id ? { servicio: destServ, orden: i } : { orden: i })));
+      // Al cambiar de servicio, sugerir actualizar la cama asignada.
+      if (destServ !== dp.servicio) {
+        const nc = window.prompt(`${dp.iniciales} pasó a "${destServ}". Nueva cama (deja vacío para mantener):`, "");
+        if (nc !== null && nc.trim() !== "") {
+          await actualizarPaciente(dp.id, { cama: nc.trim() });
+          setPacientes(prev => prev.map(x => x.id === dp.id ? { ...x, cama: nc.trim() } : x));
+        }
+      }
     };
-    window.addEventListener("pointermove", move, { passive: false });
-    window.addEventListener("pointerup", up);
+    // Hay que MANTENER presionado el asa un instante antes de arrastrar,
+    // para no activar el drag al hacer scroll con el dedo encima del ⠿.
+    const arrancar = () => {
+      activo = true;
+      window.removeEventListener("pointermove", preMove); window.removeEventListener("pointerup", preUp);
+      dragPacRef.current = p; overRef.current = null; setGapId(null); setDragPos({ x: startX, y: startY });
+      try { navigator.vibrate?.(15); } catch {}
+      window.addEventListener("pointermove", move, { passive: false });
+      window.addEventListener("pointerup", up);
+    };
+    const holdTimer = setTimeout(arrancar, 200);
+    const preMove = (ev) => {
+      if (activo) return;
+      if (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8) {
+        clearTimeout(holdTimer);
+        window.removeEventListener("pointermove", preMove); window.removeEventListener("pointerup", preUp);
+      }
+    };
+    const preUp = () => { clearTimeout(holdTimer); window.removeEventListener("pointermove", preMove); window.removeEventListener("pointerup", preUp); };
+    window.addEventListener("pointermove", preMove, { passive: true });
+    window.addEventListener("pointerup", preUp);
   };
   // Al volver a la lista (desde una ficha), restaura la posición de scroll previa.
   useEffect(() => {
@@ -6684,6 +6746,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const abrirFicha = async (paciente) => {
     setSeleccionado(paciente);
     setVista("ficha");
+    setEvoluciones([]); setExamenes([]); setPendientesPaciente([]); // evita mostrar el curso del paciente anterior
     setExtraccionMsg("");
     setMostrarEvosAntiguas(false);
     setMostrarExAntiguos(false);
@@ -6705,6 +6768,26 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       if (exResult.ok) { const norm = exResult.examenes.map(normalizarExamen); setExamenes(norm); guardarSnapshot(kEx, norm); }
     } catch {}
     cargarPendientesPaciente(paciente.id);
+  };
+
+  const descargarEvolucionesPDF = async () => {
+    let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.text(`Nombre: ${seleccionado.iniciales || ""}`, M, y); doc.text(`Edad: ${seleccionado.edad || ""}`, W - M - 38, y); y += 5;
+    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || ""}    Servicio: ${seleccionado.servicio || ""}    Cama: ${seleccionado.cama || "—"}`, M, y); y += 5;
+    doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 5;
+    const evos = [...evoluciones].sort((a, b) => ((a.fecha_evolucion || "") + (a.hora_evolucion || "")).localeCompare((b.fecha_evolucion || "") + (b.hora_evolucion || "")));
+    evos.forEach(e => {
+      if (y > 280) { doc.addPage(); y = 18; }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+      doc.text(`${e.fecha_evolucion || ""} ${e.hora_evolucion || ""}  ·  ${e.autor?.nombre || ""}${e.tipo && e.tipo !== "libre" ? "  [" + e.tipo + "]" : ""}`, M, y); y += 4.6;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+      doc.splitTextToSize(e.texto || "", W - 2 * M).forEach(p => { if (y > 286) { doc.addPage(); y = 18; } doc.text(p, M, y); y += 4.6; });
+      y += 3;
+    });
+    doc.save(`evoluciones_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}.pdf`);
   };
 
   // ============================================================
@@ -6822,6 +6905,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const result = await eliminarEvolucion(evoId);
     if (!result.ok) return alert("Error: " + result.error);
     setEvoluciones(prev => prev.filter(e => e.id !== evoId));
+  };
+  const editarEvo = async (ev) => {
+    const nuevo = window.prompt("Editar evolución:", ev.texto || "");
+    if (nuevo === null) return;
+    const t = nuevo.trim(); if (!t || t === ev.texto) return;
+    const { error } = await supabase.from("evoluciones").update({ texto: t }).eq("id", ev.id);
+    if (error) return alert("No se pudo editar: " + error.message);
+    setEvoluciones(prev => prev.map(e => e.id === ev.id ? { ...e, texto: t } : e));
   };
 
   // ============================================================
@@ -7251,7 +7342,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (vista === "ficha" && seleccionado) {
     const esCreador = seleccionado.medico_id === currentUser.id;
     return (
-      <div style={{padding:"16px",overflowY:"auto"}}>
+      <div style={{padding:"16px",overflowY:"auto",display:"flex",flexDirection:"column"}}>
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
         {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setPlantillasAbierto(false)} />}
@@ -7493,7 +7584,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>📝 Evoluciones</div>
-            {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
+            <div style={{display:"flex",gap:6}}>
+              {evoluciones.length>0 && <button onClick={descargarEvolucionesPDF} title="Descargar en PDF" aria-label="Descargar evoluciones en PDF" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📄</button>}
+              {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
+            </div>
           </div>
           {evoluciones.length === 0 ? (
             <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay evoluciones registradas</div>
@@ -7507,7 +7601,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"var(--exito)":e.tipo==="examen"?"var(--alerta)":"var(--texto-sec)",fontWeight:e.tipo==="examen"?600:400}}>{e.tipo==="examen"?"🧪 examen":e.tipo}</span>
                     </div>
                     {e.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                      <div style={{display:"flex",gap:8,flexShrink:0}}>
+                        <button onClick={()=>editarEvo(e)} title="Editar" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:12,padding:0}}>✏️</button>
+                        <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                      </div>
                     )}
                   </div>
                   <div style={{fontSize:idx===0?13:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
@@ -7523,7 +7620,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* EXÁMENES agrupados por día + anteriores colapsados */}
-        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+        <div style={{order:2,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>🧪 Exámenes</div>
             {!soloLectura && <div style={{display:"flex",gap:6}}>
@@ -7709,11 +7806,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* NUEVA EVOLUCIÓN (formulario) */}
-        <div ref={formEvoRef} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormEvo?10:0}}>
+        <div ref={formEvoRef} style={abrirFormEvo?{order:1,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}:{order:1}}>
+          {abrirFormEvo && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nueva evolución</div>
-            {abrirFormEvo && <button onClick={()=>setAbrirFormEvo(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>}
-          </div>
+            <button onClick={()=>setAbrirFormEvo(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
+          </div>}
           {abrirFormEvo && (<>
           {/* Selector tipo */}
           <div style={{display:"flex",gap:8,marginBottom:10}}>
@@ -7876,11 +7973,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* NUEVO EXAMEN (formulario) */}
-        <div ref={formExamenRef} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormExamen?10:0}}>
+        <div ref={formExamenRef} style={abrirFormExamen?{order:3,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}:{order:3}}>
+          {abrirFormExamen && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
-            {abrirFormExamen && <button onClick={()=>setAbrirFormExamen(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>}
-          </div>
+            <button onClick={()=>setAbrirFormExamen(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
+          </div>}
           {abrirFormExamen && (<>
 
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
@@ -8172,10 +8269,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     <div style={{padding:"2px 10px 8px"}}>
                       {cargaPorMedico.length === 0 ? (
                         <div style={{fontSize:11,color:"var(--texto-ter)",padding:"4px 0"}}>Nadie tiene pacientes asignados.</div>
-                      ) : cargaPorMedico.map(({nombre,n}) => (
-                        <div key={nombre} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11.5,padding:"3px 0",color:"var(--texto-sec)"}}>
-                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>
-                          <b style={{color:"var(--primario)",flexShrink:0}}>{n}</b>
+                      ) : cargaPorMedico.map(({id,nombre,n}) => (
+                        <div key={id||nombre} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11.5,padding:"3px 0",color:"var(--texto-sec)"}}>
+                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}><span style={{width:9,height:9,borderRadius:"50%",background:colorMedico(id),flexShrink:0}}/>{nombre}</span>
+                          <b style={{color:colorMedico(id),flexShrink:0}}>{n}</b>
                         </div>
                       ))}
                     </div>
@@ -8232,9 +8329,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {cargaPorMedico.map((c,i)=>(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"var(--fondo-suave)",borderRadius:8}}>
-                    <span style={{fontSize:13,color:"var(--texto)"}}>{c.nombre}</span>
-                    <span style={{fontSize:13,fontWeight:700,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 10px",borderRadius:10}}>{c.n}</span>
+                  <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:`4px solid ${colorMedico(c.id)}`}}>
+                    <span style={{fontSize:13,color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}><span style={{width:11,height:11,borderRadius:"50%",background:colorMedico(c.id),flexShrink:0}}/>{c.nombre}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#fff",background:colorMedico(c.id),padding:"2px 10px",borderRadius:10}}>{c.n}</span>
                   </div>
                 ))}
                 <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4,textAlign:"right"}}>Un paciente con varios encargados se cuenta en cada uno.</div>
@@ -8683,7 +8780,8 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [subTabHospital, setSubTabHospital] = useState(() => {
     try { return localStorage.getItem("uro_subtab_hospital") || "pacientes"; } catch { return "pacientes"; }
   });
-  const [subTabLogbook, setSubTabLogbook] = useState("lista");
+  const [subTabLogbook, setSubTabLogbook] = useState(() => { try { return localStorage.getItem("uro_subtab_logbook") || "lista"; } catch { return "lista"; } });
+  useEffect(() => { try { localStorage.setItem("uro_subtab_logbook", subTabLogbook); } catch {} }, [subTabLogbook]);
   const [subTabBiblio, setSubTabBiblio] = useState("cirugias");
   const [contexto, setContexto] = useState(() => {
     try { return localStorage.getItem("uro_contexto") || "personal"; } catch { return "personal"; }
