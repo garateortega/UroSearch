@@ -291,36 +291,40 @@ Reglas:
   const content = imagenesBase64.map((b64) => ({
     type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 },
   }));
-  content.push({ type: "text", text: instrucciones });
 
-  const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-    body: JSON.stringify({
-      model: "claude-sonnet-5", max_tokens: 4096,
-      system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido.",
-      messages: [{ role: "user", content }],
-    }),
-  });
-  const data = await res.json();
-  const txt = data.content?.find((b) => b.type === "text")?.text || "";
-  let clean = txt.replace(/```json|```/g, "").trim();
-  if (!clean) return [];
-  const ini = clean.indexOf("{"), fin = clean.lastIndexOf("}");
-  if (ini >= 0 && fin > ini) clean = clean.slice(ini, fin + 1);
-  let parsed;
-  try { parsed = JSON.parse(clean); }
-  catch {
-    // Respuesta cortada: intenta reparar cerrando corchetes/llaves pendientes.
-    try {
-      let rep = clean.replace(/,\s*$/, "");
-      const faltaCorch = (rep.match(/\[/g) || []).length - (rep.match(/\]/g) || []).length;
-      const faltaLlave = (rep.match(/\{/g) || []).length - (rep.match(/\}/g) || []).length;
-      for (let k = 0; k < faltaCorch; k++) rep += "]";
-      for (let k = 0; k < faltaLlave; k++) rep += "}";
-      parsed = JSON.parse(rep);
-    } catch { return []; }
-  }
+  const intentar = async (extra) => {
+    const c = [...content, { type: "text", text: instrucciones + (extra || "") }];
+    const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        model: "claude-sonnet-5", max_tokens: 4096,
+        system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido y compacto, sin explicaciones.",
+        messages: [{ role: "user", content: c }],
+      }),
+    });
+    const data = await res.json();
+    const txt = data.content?.find((b) => b.type === "text")?.text || "";
+    let clean = txt.replace(/```json|```/g, "").trim();
+    if (!clean) return null;
+    const ini = clean.indexOf("{"), fin = clean.lastIndexOf("}");
+    if (ini >= 0 && fin > ini) clean = clean.slice(ini, fin + 1);
+    try { return JSON.parse(clean); }
+    catch {
+      try {
+        let rep = clean.replace(/,\s*$/, "");
+        const fc = (rep.match(/\[/g) || []).length - (rep.match(/\]/g) || []).length;
+        const fl = (rep.match(/\{/g) || []).length - (rep.match(/\}/g) || []).length;
+        for (let k = 0; k < fc; k++) rep += "]";
+        for (let k = 0; k < fl; k++) rep += "}";
+        return JSON.parse(rep);
+      } catch { return null; }
+    }
+  };
+
+  let parsed = null;
+  try { parsed = await intentar(""); } catch {}
+  if (!parsed) { try { parsed = await intentar("\n\nIMPORTANTE: responde SOLO el objeto JSON, compacto, sin texto antes ni después."); } catch {} }
   return Array.isArray(parsed?.examenes) ? parsed.examenes : [];
 }
 
@@ -6626,11 +6630,12 @@ const cargarMiembrosEquipo = async () => {
       .sort((a,b) => b.n - a.n);
   }, [pacientes, miembrosEquipo]);
 
-  // Color estable por médico (derivado de su id), para la vista de Distribución.
+  // Color por médico desde una paleta fija (estable por id), más legible que HSL crudo.
+  const PALETA_MEDICOS = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5", "#0d9488", "#b45309"];
   const colorMedico = (id) => {
     const s = String(id || "");
-    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-    return `hsl(${h}, 62%, 45%)`;
+    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
+    return PALETA_MEDICOS[h % PALETA_MEDICOS.length];
   };
 
   // Estilo de cada ítem del menú desplegable
@@ -6669,6 +6674,20 @@ const cargarMiembrosEquipo = async () => {
     return () => window.removeEventListener("uro-submenu-accion", h);
   }, []);
   const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
+  const [moverInfo, setMoverInfo] = useState(null); // { pacienteId, iniciales, servicio, prevServicio, prevCama } tras un movimiento
+  const [camaInput, setCamaInput] = useState("");
+  const guardarCamaMovido = async () => {
+    const nc = camaInput.trim(); const info = moverInfo; setMoverInfo(null); setCamaInput("");
+    if (!info || !nc) return;
+    await actualizarPaciente(info.pacienteId, { cama: nc });
+    setPacientes(prev => prev.map(x => x.id === info.pacienteId ? { ...x, cama: nc } : x));
+  };
+  const deshacerMovimiento = async () => {
+    const info = moverInfo; setMoverInfo(null); setCamaInput("");
+    if (!info) return;
+    await actualizarPaciente(info.pacienteId, { servicio: info.prevServicio, cama: info.prevCama });
+    setPacientes(prev => prev.map(x => x.id === info.pacienteId ? { ...x, servicio: info.prevServicio, cama: info.prevCama } : x));
+  };
   const longPressPacRef = useRef(false);
   const pressTimerPac = useRef(null);
   const pressPosPac = useRef(null);
@@ -6679,11 +6698,7 @@ const cargarMiembrosEquipo = async () => {
     const r = await actualizarPaciente(pac.id, { servicio: nuevoServicio });
     if (r.ok) {
       setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, servicio: nuevoServicio } : x));
-      const nc = window.prompt(`${pac.iniciales} pasó a "${nuevoServicio}". Nueva cama (deja vacío para mantener):`, "");
-      if (nc !== null && nc.trim() !== "") {
-        await actualizarPaciente(pac.id, { cama: nc.trim() });
-        setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, cama: nc.trim() } : x));
-      }
+      setCamaInput(""); setMoverInfo({ pacienteId: pac.id, iniciales: pac.iniciales, servicio: nuevoServicio, prevServicio: pac.servicio, prevCama: pac.cama });
     }
     else alert("No se pudo mover el paciente: " + r.error);
   };
@@ -6730,14 +6745,8 @@ const cargarMiembrosEquipo = async () => {
       const ord = {}; col.forEach((id, i) => { ord[id] = i; });
       setPacientes(prev => prev.map(x => x.id === dp.id ? { ...x, servicio: destServ, orden: ord[x.id] } : (ord[x.id] !== undefined ? { ...x, orden: ord[x.id] } : x)));
       await Promise.all(col.map((id, i) => actualizarPaciente(id, id === dp.id ? { servicio: destServ, orden: i } : { orden: i })));
-      // Al cambiar de servicio, sugerir actualizar la cama asignada.
-      if (destServ !== dp.servicio) {
-        const nc = window.prompt(`${dp.iniciales} pasó a "${destServ}". Nueva cama (deja vacío para mantener):`, "");
-        if (nc !== null && nc.trim() !== "") {
-          await actualizarPaciente(dp.id, { cama: nc.trim() });
-          setPacientes(prev => prev.map(x => x.id === dp.id ? { ...x, cama: nc.trim() } : x));
-        }
-      }
+      // Al cambiar de servicio: hoja para ajustar cama o deshacer (sin prompt nativo).
+      if (destServ !== dp.servicio) { setCamaInput(""); setMoverInfo({ pacienteId: dp.id, iniciales: dp.iniciales, servicio: destServ, prevServicio: dp.servicio, prevCama: dp.cama }); }
     };
     // Hay que MANTENER presionado el asa un instante antes de arrastrar,
     // para no activar el drag al hacer scroll con el dedo encima del ⠿.
@@ -7229,13 +7238,16 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (!result.ok) return alert("Error: " + result.error);
     setEvoluciones(prev => prev.filter(e => e.id !== evoId));
   };
-  const editarEvo = async (ev) => {
-    const nuevo = window.prompt("Editar evolución:", ev.texto || "");
-    if (nuevo === null) return;
-    const t = nuevo.trim(); if (!t || t === ev.texto) return;
+  const [editandoEvoId, setEditandoEvoId] = useState(null);
+  const [editTexto, setEditTexto] = useState("");
+  const abrirEdicionEvo = (ev) => { setEditandoEvoId(ev.id); setEditTexto(ev.texto || ""); };
+  const guardarEdicionEvo = async (ev) => {
+    const t = editTexto.trim();
+    if (!t || t === ev.texto) { setEditandoEvoId(null); return; }
     const { error } = await supabase.from("evoluciones").update({ texto: t }).eq("id", ev.id);
     if (error) return alert("No se pudo editar: " + error.message);
     setEvoluciones(prev => prev.map(e => e.id === ev.id ? { ...e, texto: t } : e));
+    setEditandoEvoId(null);
   };
 
   // ============================================================
@@ -7925,12 +7937,22 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     </div>
                     {e.autor_id === currentUser.id && (
                       <div style={{display:"flex",gap:8,flexShrink:0}}>
-                        <button onClick={()=>editarEvo(e)} title="Editar" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:12,padding:0}}>✏️</button>
+                        <button onClick={()=>abrirEdicionEvo(e)} title="Editar" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:12,padding:0}}>✏️</button>
                         <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
                       </div>
                     )}
                   </div>
+                  {editandoEvoId===e.id ? (
+                    <div>
+                      <textarea value={editTexto} onChange={ev=>setEditTexto(ev.target.value)} rows={4} style={{width:"100%",fontSize:13,padding:"8px 10px",border:"0.5px solid var(--primario)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.4,resize:"vertical"}} />
+                      <div style={{display:"flex",gap:8,marginTop:6}}>
+                        <button onClick={()=>guardarEdicionEvo(e)} style={{padding:"6px 14px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer"}}>Guardar</button>
+                        <button onClick={()=>setEditandoEvoId(null)} style={{padding:"6px 14px",fontSize:12.5,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
                   <div style={{fontSize:idx===0?13:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.4}}>{e.texto}</div>
+                  )}
                 </div>
               ))}
               {evoluciones.length > 1 && (
@@ -8639,6 +8661,19 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
       {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
       {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:12.5,fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
+      {moverInfo && (
+        <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:66,display:"flex",justifyContent:"center",padding:12,pointerEvents:"none"}}>
+          <div style={{pointerEvents:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,0.28)",padding:"12px 14px",width:"100%",maxWidth:420}}>
+            <div style={{fontSize:12.5,color:"var(--texto-sec)",marginBottom:8}}><b>{moverInfo.iniciales}</b> pasó a <b>{moverInfo.servicio}</b>. ¿Nueva cama?</div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <input value={camaInput} onChange={e=>setCamaInput(e.target.value)} placeholder="Cama" style={{flex:1,padding:"9px 11px",fontSize:13,border:"0.5px solid var(--borde)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)"}} onKeyDown={e=>{if(e.key==="Enter")guardarCamaMovido();}} />
+              <button onClick={guardarCamaMovido} style={{padding:"9px 14px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer"}}>Guardar</button>
+              <button onClick={()=>{setMoverInfo(null);setCamaInput("");}} style={{padding:"9px 12px",fontSize:13,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer"}}>Omitir</button>
+            </div>
+            <button onClick={deshacerMovimiento} style={{marginTop:8,background:"none",border:"none",color:"var(--peligro)",fontSize:12,cursor:"pointer",padding:0,fontWeight:600}}>↩ Deshacer movimiento</button>
+          </div>
+        </div>
+      )}
 
       {showDistribucion && (
         <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
