@@ -5491,10 +5491,12 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   };
   const [f, setF] = useState(() => ingresoExistente?.datos ? { ...DEFAULTS, ...ingresoExistente.datos } : DEFAULTS);
   const [carpeta, setCarpeta] = useState(ingresoExistente?.carpeta || "");
+  const [anexosAbierto, setAnexosAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
   const imc = (f.peso && f.talla) ? (parseFloat(f.peso) / Math.pow(parseFloat(f.talla) / 100, 2)).toFixed(1) : "";
+  const tieneAnticoag = /taco|warfarin|acenocumarol|sintrom|neosintrom|enoxaparin|clexane|heparin|rivaroxaban|xarelto|apixaban|eliquis|dabigatran|pradaxa|clopidogrel|plavix|aspirin|\baas\b|ticagrelor|prasugrel/i.test((f.farmacos || "") + " " + (f.morbidos || ""));
 
   const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
   const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
@@ -5597,6 +5599,203 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     else setMsg("⚠️ No se pudo crear el paciente: " + r.error);
   };
 
+  const generarConsentimientoPDF = async () => {
+    let jsPDF;
+    try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = doc.internal.pageSize.getWidth(), M = 14, R = W - M;
+    doc.setTextColor(0, 0, 0); doc.setLineWidth(0.3); doc.setDrawColor(0, 0, 0);
+    const wrap = (t, x, yy, w, lh = 4.4, font = "normal", size = 8.5) => { doc.setFont("helvetica", font); doc.setFontSize(size); doc.splitTextToSize(t, w).forEach(l => { doc.text(l, x, yy); yy += lh; }); return yy; };
+
+    // ── Encabezado (caja con 3 columnas) ──
+    let y = 12; const hT = 17; const c1 = M + 22, c2 = R - 42;
+    doc.rect(M, y, R - M, hT);
+    doc.line(c1, y, c1, y + hT); doc.line(c2, y, c2, y + hT);
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 3, y + 3, 15, 11); } catch {}
+    doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+    doc.text("DIRECCION HOSPITAL BASE VALDIVIA", (c1 + c2) / 2, y + 4, { align: "center" });
+    doc.setFont("helvetica", "italic"); doc.setFontSize(7);
+    doc.text("CONSENTIMIENTO INFORMADO DE PACIENTE PARA LA EJECUCIÓN", (c1 + c2) / 2, y + 9, { align: "center" });
+    doc.text("DE PROCEDIMIENTOS DE MAYOR RIESGO.", (c1 + c2) / 2, y + 12.5, { align: "center" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
+    doc.text("DP 2.1 Ed 3", c2 + 2, y + 4); doc.text("FECHA:    MAYO 2016", c2 + 2, y + 8);
+    doc.text("PÁGINA:   12 DE 13", c2 + 2, y + 11.5); doc.text("VIGENCIA: MAYO 2021", c2 + 2, y + 15);
+    y += hT + 6;
+
+    // ── Título ──
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text("ANEXO 1", W / 2, y, { align: "center" }); y += 5;
+    doc.text("DOCUMENTO CONSENTIMIENTO INFORMADO PARA INTERVENCIONES CLINICAS INVASIVAS", W / 2, y, { align: "center", maxWidth: R - M }); y += 7;
+
+    // ── Caja identificación ──
+    const box1 = y; doc.rect(M, y, R - M, 30); const px = M + 3; let yy = y + 5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    doc.text("Yo", px, yy); doc.line(px + 5, yy + 0.5, R - 42, yy + 0.5); if (f.nombre) doc.text(f.nombre, px + 7, yy - 0.3);
+    doc.text("RUN:", R - 40, yy); doc.line(R - 31, yy + 0.5, R - 3, yy + 0.5); if (f.rut) doc.text(f.rut, R - 30, yy - 0.3); yy += 4.5;
+    doc.setFont("helvetica", "italic"); doc.setFontSize(7);
+    doc.text("(1 nombre y 2 apellidos del paciente) Si hay incapacidad, identifique el sustituto que se responsabiliza de este documento", px, yy); yy += 5.5;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    doc.text("Sustituto:", px, yy); doc.line(px + 15, yy + 0.5, R - 42, yy + 0.5);
+    doc.text("RUN:", R - 40, yy); doc.line(R - 31, yy + 0.5, R - 3, yy + 0.5); yy += 6;
+    doc.text("Relación del sustituto con el paciente:", px, yy); doc.line(px + 60, yy + 0.5, R - 3, yy + 0.5);
+    y = box1 + 30 + 6;
+
+    // ── Cuerpo ──
+    doc.setFontSize(8.5);
+    doc.text("He sido informado por el médico Dr. (a):", M, y); doc.line(M + 62, y + 0.5, R - 12, y + 0.5); if (currentUser?.nombre) doc.text(currentUser.nombre, M + 64, y - 0.3); doc.text("que:", R - 10, y); y += 7;
+    y = wrap("1) Padezco de la condición o enfermedad llamada:", M, y, R - M); doc.line(M, y - 1, R, y - 1); if (f.hipotesis) { doc.setFont("helvetica", "normal"); doc.text(f.hipotesis, M, y - 2); } y += 4;
+    y = wrap("2) Para el estudio o manejo de esta condición, se requiere realizar la intervención o procedimiento de:", M, y, R - M); doc.line(M, y - 1, R, y - 1); if (f.plan) doc.text(f.plan, M, y - 2); y += 4;
+    y = wrap("3) El médico me ha explicado el objetivo de la intervención o procedimiento, en qué consiste y sus características, así como los eventuales riesgos en el lapso inmediato y mediato, como los beneficios de someterme a la intervención/procedimiento mencionado anteriormente.", M, y, R - M) + 1;
+    y = wrap("4) El médico me ha explicado que durante la cirugía y/o procedimiento, pueden ser necesarias otras acciones médicas no contempladas inicialmente, las cuales deberán ser resueltas en el mismo acto o bien resultaría razonable resolverla a fin de evitar una nueva hospitalización.", M, y, R - M) + 1;
+    doc.text("5) ¿Existen alternativas a esta intervención?", M, y);
+    doc.rect(M + 62, y - 3.2, 3.5, 3.5); doc.text("NO", M + 67, y); doc.rect(M + 78, y - 3.2, 3.5, 3.5); doc.text("SI", M + 83, y);
+    doc.text("Especifique cual.", M + 92, y); y += 4; doc.line(M, y - 1, R, y - 1); y += 5;
+
+    // ── Caja declaración ──
+    const b2 = y; doc.rect(M, y, R - M, 44); yy = y + 5;
+    yy = wrap("Habiendo tomado conocimiento de esta información, aclaradas mis dudas con el médico y sin mediar presión alguna, declaro que:", px, yy, R - M - 6) + 1;
+    doc.rect(px, yy - 3.2, 3.6, 3.6); doc.setFont("helvetica", "bold"); doc.text("CONSIENTO", px + 6, yy); doc.setFont("helvetica", "normal"); doc.text("la realización de la intervención ofrecida por el médico", px + 27, yy); yy += 6;
+    doc.rect(px, yy - 3.2, 3.6, 3.6); doc.setFont("helvetica", "bold"); doc.text("NO CONSIENTO", px + 6, yy); doc.setFont("helvetica", "normal"); yy = wrap("la realización de la intervención, declaro que estoy en conocimiento de los riesgos que esto significa, y asumo la responsabilidad.", px + 33, yy, R - M - px - 33) + 1;
+    doc.rect(px + 40, yy - 3.2, 3.6, 3.6); doc.text("Decido la realización del tratamiento alternativo existente", px + 46, yy); yy += 6;
+    yy = wrap("Conozco mi derecho a cambiar de opinión, y por lo tanto anular este consentimiento, dando aviso en forma oportuna al médico. La firma de este documento no implica la renuncia a mis derechos legales.", px, yy, R - M - 6) + 4;
+    doc.line(R - 78, yy, R - 6, yy); doc.setFontSize(7.5); doc.text("Firma del paciente o sustituto", R - 60, yy + 3.5); doc.setFontSize(8.5);
+    y = b2 + 44 + 3;
+    y = wrap("El médico que suscribe declara haber informado y explicado al paciente o su sustituto lo pertinente a su condición de salud, intervención y/o procedimiento a realizar y haber respondido a las consultas surgidas.", M, y, R - M) + 6;
+    doc.line(M, y, M + 62, y); doc.line(R - 78, y, R - 6, y);
+    doc.setFontSize(7.5); doc.text("Fecha de aplicación de Consentimiento", M, y + 3.5); doc.text("Firma del profesional", R - 55, y + 3.5);
+    doc.setFontSize(8.5); if (f.fingreso) doc.text(f.fingreso, M + 4, y - 1); y += 9;
+
+    // ── Caja revocación ──
+    const b3 = y; doc.rect(M, y, R - M, 26); yy = y + 5;
+    yy = wrap("Después de haber consentido, declaro haber cambiado de opinión, y actualmente deseo dejar constancia de este cambio, rechazando el procedimiento antes descrito, estando en conocimiento de los riesgos que esto significa.", px, yy, R - M - 6) + 7;
+    doc.line(px, yy, px + 78, yy); doc.line(R - 84, yy, R - 6, yy);
+    doc.setFontSize(7.5); doc.text("Nombre y Firma del paciente o sustituto", px, yy + 3.5); doc.text("Nombre y Firma del profesional", R - 72, yy + 3.5); yy += 8;
+    doc.setFontSize(8.5); doc.text("Fecha:", px, yy); doc.line(px + 12, yy + 0.5, px + 70, yy + 0.5);
+    y = b3 + 26 + 6;
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+    doc.text("Este documento se debe firmar por paciente y por el médico responsable, luego dejar inserto en ficha clínica del paciente.", M, y, { maxWidth: R - M });
+    doc.save(`consentimiento_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
+  };
+
+  const generarPreanestesiaPDF = async () => {
+    let jsPDF;
+    try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = doc.internal.pageSize.getWidth(), M = 8, R = W - M;
+    doc.setLineWidth(0.2); doc.setDrawColor(0, 0, 0); doc.setTextColor(0, 0, 0);
+    const T = (t, x, yy, b = false, s = 6.8) => { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s); doc.text(t, x, yy); };
+    const chk = (x, yy) => doc.rect(x, yy - 2.6, 3, 3);
+    // Encabezado
+    let y = 8; doc.rect(M, y, R - M, 15); doc.line(R - 70, y, R - 70, y + 15);
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 2, y + 2.5, 11, 9); } catch {}
+    T("MINISTERIO DE SALUD", M + 16, y + 3.5, true, 7); T("REGION DE LOS RIOS", M + 16, y + 6.5, true, 7);
+    T("SERVICIO SALUD VALDIVIA", M + 16, y + 9.5, true, 7); T("HOSPITAL BASE VALDIVIA", M + 16, y + 12.5, true, 7);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("EVALUACION PREANESTESIA ANEXO II", R - 35, y + 8.5, { align: "center", maxWidth: 66 });
+    y += 15;
+    // Fila NOMBRE / RUT
+    const row = (h) => { doc.rect(M, y, R - M, h); };
+    row(6); doc.line(R - 55, y, R - 55, y + 6); T("NOMBRE", M + 1, y + 2.5, true); if (f.nombre) T(f.nombre, M + 18, y + 4, false, 8); T("RUT:", R - 54, y + 2.5, true); if (f.rut) T(f.rut, R - 45, y + 4, false, 8); y += 6;
+    // Edad/Peso/Talla | Ex Fisico
+    const colD = R - 68; row(30); doc.line(colD, y, colD, y + 30);
+    doc.line(M, y + 5, colD, y + 5); doc.line(M, y + 10, colD, y + 10);
+    T("Edad", M + 1, y + 3.5); if (f.edad) T(f.edad, M + 12, y + 3.5); doc.line(M + 22, y, M + 22, y + 5); T("Peso", M + 23, y + 3.5); if (f.peso) T(f.peso, M + 33, y + 3.5); doc.line(M + 44, y, M + 44, y + 5); T("Talla", M + 45, y + 3.5); if (f.talla) T(f.talla, M + 56, y + 3.5);
+    T("P.Art", M + 1, y + 8.5); doc.line(M + 22, y + 5, M + 22, y + 10); T("FC", M + 23, y + 8.5); doc.line(M + 44, y + 5, M + 44, y + 10); T("FR", M + 45, y + 8.5); doc.line(M + 62, y + 5, M + 62, y + 10); T("Tº", M + 63, y + 8.5);
+    T("Diagnósticos", M + 1, y + 14); if (f.hipotesis) T(f.hipotesis.slice(0, 60), M + 1, y + 18, false, 7);
+    T("Procedimiento y/o Intervención Propuesta", M + 1, y + 23, true); if (f.plan) T(f.plan.slice(0, 55), M + 1, y + 27, false, 7);
+    T("Ex. Fisico", colD + 1, y + 3.5, true);
+    ["Cardíaco", "Pulmonar", "Neurológico", "Sitios de Punción", "Otros", "Dolor        Sí       No"].forEach((t, i) => T(t + " ...............", colD + 1, y + 8 + i * 4));
+    y += 30;
+    // RIESGO
+    row(5); T("RIESGO:", M + 1, y + 3.3, true); chk(M + 22, y + 3.3); T("BAJO", M + 26, y + 3.3); chk(M + 42, y + 3.3); T("MEDIANO", M + 46, y + 3.3); chk(M + 68, y + 3.3); T("ALTO", M + 72, y + 3.3);
+    T("CIRUJANO - DR. (A)", colD + 1, y + 3.3, true); y += 5;
+    // 3 columnas: antecedentes | estado/medic | via aerea/lab
+    const gY = y, gH = 118, cA = M, cB = M + 62, cC = M + 130;
+    doc.rect(M, y, R - M, gH); doc.line(cB, y, cB, y + gH); doc.line(cC, y, cC, y + gH);
+    // Col A: antecedentes por sistema con *Negativo
+    let ya = y + 4; T("ANTECEDENTES MORBIDOS", cA + 1, ya, true, 6.5); ya += 4;
+    const sis = [["Cardiovascular", "HTA · Angor · C.Coronaria · IAM · Valvulopatías"], ["Respiratorio", "Asma · EPOC · SAHOS · TBC · Tos"], ["Neurológico", "Convulsiones · AVC/TIA · Cefalea · Glasgow"], ["Hepático", "Hepatitis · Cirrosis · Ictericia"], ["Renal", "IRC etapa · Falla renal · HD/PD"], ["Gastrointestinal", "RGE · úlcera · gastritis · vómitos"], ["Hematología", "Anemia · coagulopatía · trombocitopenia"], ["Endocrino", "Hipo/Hipertiroidismo · DM"], ["Musculoesquelético", "Dolor lumbar · artritis"]];
+    sis.forEach(([n, d]) => { chk(cA + 1, ya); T(n, cA + 5, ya, true); T("*Neg", cB - 10, ya); ya += 3.6; T(d, cA + 5, ya, false, 5.8); ya += 5; });
+    // Col B: estado actual / medicamentos / alergias / ASA
+    let yb = y + 4; T("ESTADO ACTUAL", cB + 1, yb, true, 6.5); yb += 4;
+    T("Embarazo:  Sí / No    Edad gest: ___ sem", cB + 1, yb); yb += 4; T("Hábitos: OH ___ / Tabaco ___ /día / Drogas ___", cB + 1, yb, false, 6); yb += 6;
+    T("MEDICAMENTOS ACTUALES", cB + 1, yb, true, 6.5); yb += 4; (f.farmacos || "").split(/[,\n]/).slice(0, 5).forEach(m => { if (m.trim()) { T("• " + m.trim().slice(0, 42), cB + 1, yb, false, 6); yb += 3.6; } }); yb += 3;
+    T("ALERGIAS - REACCIONES", cB + 1, yb, true, 6.5); yb += 4; T(f.alergias || "NO", cB + 1, yb, false, 6.5); yb += 6;
+    T("OTROS ESTUDIOS", cB + 1, yb, true, 6.5); yb += 5;
+    T("CLASIFICACION ASA", cB + 1, yb, true, 6.5); yb += 4;
+    ["ASA I", "ASA II", "ASA III", "ASA IV"].forEach((a, i) => { chk(cB + 1 + i * 16, yb); T(a, cB + 5 + i * 16, yb, false, 6); }); yb += 6;
+    T("Accesos venosos (tipo, ubicación):", cB + 1, yb, false, 6); yb += 4;
+    T("VVP ___  VVC ___  Arterial ___", cB + 1, yb, false, 6);
+    // Col C: via aerea / laboratorio
+    let yc = y + 4; T("EVALUACION VIA AEREA", cC + 1, yc, true, 6.5); yc += 4;
+    T("Intubación difícil:  Sí / No", cC + 1, yc, false, 6); yc += 4; T("Mallampati:  I   II   III   IV", cC + 1, yc, false, 6); yc += 4; T("Dist. TM ___ cm    Mov. cervical ___", cC + 1, yc, false, 6); yc += 4; T("Dentición / estado ___", cC + 1, yc, false, 6); yc += 7;
+    T("EXAMENES DE LABORATORIO", cC + 1, yc, true, 6.5); yc += 5;
+    [["Hcto:", "Protrom:"], ["Hb:", "TTPK:"], ["Leuc:", "ECG:"], ["Plaq:", "Otro:"], ["Glicemia:", ""], ["Creatininemia:", ""], ["N.U.:", ""]].forEach(([a, b]) => { T(a, cC + 1, yc); if (b) T(b, cC + 34, yc); yc += 5; });
+    yc += 2; T("Necesidad post-op UCI/UTI:  SI / NO", cC + 1, yc, false, 6); yc += 5;
+    T("Plan anestésico / observaciones:", cC + 1, yc, true, 6); 
+    y += gH;
+    // Firmas + nota
+    row(10); doc.line(W / 2, y, W / 2, y + 10);
+    T("Nombre y Firma Médico Equipo Tratante", M + 2, y + 4, true); if (currentUser?.nombre) T(currentUser.nombre, M + 2, y + 8, false, 7); T("Fecha: " + f.fingreso, M + 2, y + 8.5 + 0, false, 6);
+    T("Firma Médico Anestesiologo", W / 2 + 2, y + 4, true); y += 10;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(5.8);
+    doc.text("NOTA: LA RESPONSABILIDAD DEL REGISTRO DE LOS ANTECEDENTES ES DEL MEDICO DEL EQUIPO TRATANTE, EXCEPTO LOS CAMPOS QUE CORRESPONDEN AL MEDICO ANESTESIOLOGO. LOS PACIENTES ASA III O MÁS DEBEN SER VISTOS POR ANESTESIOLOGO ANTES DE PROGRAMAR EN TABLA QUIRURGICA.", M, y + 3, { maxWidth: R - M });
+    doc.save(`preanestesia_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
+  };
+
+  const generarETEPDF = async () => {
+    let jsPDF;
+    try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = doc.internal.pageSize.getWidth(), M = 14, R = W - M;
+    doc.setLineWidth(0.2); doc.setTextColor(0, 0, 0);
+    const T = (t, x, yy, b = false, s = 8.5) => { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s); doc.text(t, x, yy); };
+    const chk = (x, yy) => { doc.setDrawColor(0, 0, 0); doc.rect(x, yy - 2.8, 3.2, 3.2); };
+    let y = 12;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M, y, 13, 10); } catch {}
+    T("HOSPITAL BASE VALDIVIA", M + 16, y + 6, true, 9); y += 14;
+    T("ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)", W / 2, y, true, 9.5); doc.setFontSize(9.5); 
+    { const t = "ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)"; doc.text(t, W / 2, y, { align: "center", maxWidth: R - M }); } y += 8;
+    const line = (x, yy, w) => { doc.setDrawColor(0, 0, 0); doc.line(x, yy, x + w, yy); };
+    T("Nombre del paciente:", M, y, true); line(M + 33, y + 0.5, R - 40 - M - 33); T("RUN:", R - 40, y, true); line(R - 30, y + 0.5, 28); if (f.nombre) T(f.nombre, M + 35, y - 0.5); if (f.rut) T(f.rut, R - 29, y - 0.5); y += 6;
+    T("Edad:", M, y, true); if (f.edad) T(f.edad, M + 11, y); T("Sexo:", M + 40, y, true); T("Masculino", M + 52, y); chk(M + 71, y); T("Femenino", M + 78, y); chk(M + 96, y);
+    if (f.sexo === "M") T("X", M + 71.7, y); if (f.sexo === "F") T("X", M + 96.7, y); y += 6;
+    T("Peso:", M, y, true); if (f.peso) T(f.peso, M + 11, y); T("Kg.  Talla:", M + 30, y, true); if (f.talla) T(f.talla, M + 52, y); T("cm.  IMC:", M + 62, y, true); if (imc) T(imc, M + 84, y); y += 6;
+    T("Diagnóstico:", M, y, true); if (f.hipotesis) T(f.hipotesis.slice(0, 40), M + 22, y); T("Intervención:", M + 105, y, true); if (f.plan) T(f.plan.slice(0, 22), M + 130, y); y += 8;
+    // Alto riesgo box
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.text("ALTO RIESGO DE ETE:", M, y); doc.setFont("helvetica", "normal"); doc.text(" si el paciente presenta alguna de estas condiciones (marque con una x)", M + 34, y); y += 3;
+    const altoY = y; const alto = ["Antecedente de ETE previa ó sospecha de trombofilia", "Cáncer activo", "Será sometido a cirugía oncológica (cualquier especialidad)", "Ingreso para cirugía bariátrica", "Obesidad mórbida", "Politraumatizado", "Tiene fractura pelvis, fémur, pierna.", "Se realizará artroplastia de cadera o rodilla", "Tiene AVE reciente o lesión medular aguda"];
+    doc.rect(M, altoY, R - M, alto.length * 5 + 3); let ay = altoY + 5;
+    alto.forEach(t => { chk(M + 2, ay); T(t, M + 7, ay, false, 8); ay += 5; }); y = altoY + alto.length * 5 + 3 + 5;
+    T("De no ser así, debe CALCULAR EL NIVEL DE RIESGO según ESCALA DE CAPRINI MODIFICADA:", M, y, true, 8.5); y += 4;
+    T("Presenta una o más de las siguientes condiciones. (marque con una x)", M, y, false, 8); y += 3;
+    // Tabla Caprini 3 columnas (encabezado verde)
+    const cw = (R - M) / 3, tY = y;
+    doc.setFillColor(220, 235, 215); doc.rect(M, y, R - M, 6, "F"); doc.rect(M, y, cw, 6); doc.rect(M + cw, y, cw, 6); doc.rect(M + 2 * cw, y, cw, 6);
+    T("1 punto c/u", M + cw / 2, y + 4, true, 8); T("2 Puntos c/u", M + cw + cw / 2, y + 4, true, 8); T("3 Puntos", M + 2 * cw + cw / 2, y + 4, true, 8);
+    ["1 punto c/u", "2 Puntos c/u", "3 Puntos"].forEach((t, i) => doc.text(t, M + i * cw + cw / 2, y + 4, { align: "center" }));
+    y += 6; const bodyH = 34; doc.rect(M, y, cw, bodyH); doc.rect(M + cw, y, cw, bodyH); doc.rect(M + 2 * cw, y, cw, bodyH);
+    const c1i = ["Edad de 41 a 60 años", "Varices", "Embarazo ó puerperio", "IMC > 25", "Uso de ACO o TRH", "Postrado"];
+    const c2i = ["Edad de 61 a 74 años", "Cirugía mayor a 60 min.", "Reposo absoluto >72 hrs.", "Artroscopia"];
+    const c3i = ["Edad >74 años"];
+    let cy = y + 5; c1i.forEach(t => { chk(M + 2, cy); T(t, M + 6, cy, false, 7.5); cy += 5; });
+    cy = y + 5; c2i.forEach(t => { chk(M + cw + 2, cy); T(t, M + cw + 6, cy, false, 7.5); cy += 5; });
+    cy = y + 5; c3i.forEach(t => { chk(M + 2 * cw + 2, cy); T(t, M + 2 * cw + 6, cy, false, 7.5); cy += 5; });
+    y += bodyH + 4;
+    // Nivel de riesgo
+    doc.setFillColor(220, 235, 215); doc.rect(M, y, R - M, 5, "F"); doc.rect(M, y, R - M, 5); doc.line((M + R) / 2, y, (M + R) / 2, y + 25);
+    T("NIVEL DE RIESGO", M + (R - M) / 4 - 15, y + 3.5, true); T("Puntos", (M + R) / 2 + (R - M) / 4 - 8, y + 3.5, true);
+    doc.text("NIVEL DE RIESGO", M + (R - M) / 4, y + 3.5, { align: "center" }); doc.text("Puntos", (M + R) / 2 + (R - M) / 4, y + 3.5, { align: "center" }); y += 5;
+    [["MUY BAJO", "0"], ["BAJO", "1-2"], ["MODERADO", "3-4"], ["ALTO", ">4"]].forEach(([n, p]) => { doc.rect(M, y, R - M, 5); doc.line((M + R) / 2, y, (M + R) / 2, y + 5); doc.text(n, M + (R - M) / 4, y + 3.5, { align: "center" }); doc.text(p, (M + R) / 2 + (R - M) / 4, y + 3.5, { align: "center" }); y += 5; });
+    y += 5;
+    T("TOTAL PUNTAJE OBTENIDO:", M, y, false, 9); line(M + 45, y + 0.5, 20); T("pts.   RIESGO ETE:", M + 68, y, false, 9); doc.rect(M + 100, y - 4, 40, 6); y += 8;
+    T("*Indicaciones:", M, y, false); line(M + 24, y + 0.5, R - M - 24); y += 6; line(M, y + 0.5, R - M); y += 6;
+    T("Justificar excepciones:", M, y, false); line(M + 38, y + 0.5, R - M - 38); y += 9;
+    T("NOMBRE MEDICO:", M, y, true); line(M + 32, y + 0.5, 55); if (currentUser?.nombre) T(currentUser.nombre, M + 34, y - 0.5); T("FIRMA:", R - 55, y, true); line(R - 42, y + 0.5, 40); y += 6;
+    T("Fecha:", M, y, true); line(M + 13, y + 0.5, 40); if (f.fingreso) T(f.fingreso, M + 15, y - 0.5);
+    doc.save(`ete_caprini_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
+  };
+
   const generarAnexos = async () => {
     let jsPDF;
     try { jsPDF = (await import("jspdf")).jsPDF; } catch { setMsg("No se pudo cargar el PDF."); return; }
@@ -5673,6 +5872,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Anamnesis remota</div>
         {campo("Antecedentes mórbidos", "morbidos", true)}
         {campo("Fármacos", "farmacos", true)}
+        {tieneAnticoag && <div style={{ background: "var(--peligro-bg,#fdecec)", border: "0.5px solid var(--peligro)", color: "var(--peligro)", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 8, lineHeight: 1.4 }}>⚠️ Anticoagulante/antiagregante detectado. Define y registra la <b>fecha y hora de suspensión</b> antes de pabellón (p. ej. HBPM 12 h antes; TACO según INR; AAS/clopidogrel según riesgo).</div>}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Quirúrgicos", "quirurgicos")}{campo("Alergias", "alergias")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{campo("Tabaco", "tabaco")}{campo("OH", "oh")}{campo("Familiares", "familiares")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Acepta transfusiones", "transfusiones")}{campo("Urocultivo", "urocultivo")}</div>
@@ -5695,9 +5895,24 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
           <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Ingreso</button>
-          <button onClick={generarAnexos} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📎 Anexos</button>
+          <button onClick={() => setAnexosAbierto(v => !v)} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: anexosAbierto ? "var(--primario)" : "var(--superficie)", color: anexosAbierto ? "var(--texto-inv)" : "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📎 Anexos {anexosAbierto ? "−" : "+"}</button>
           <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1.2, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "…" : "➕ Hospitalizar"}</button>
         </div>
+        {anexosAbierto && (
+          <div style={{ marginTop: 12, background: "var(--fondo-suave)", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primario)", marginBottom: 8 }}>Anexos prellenados (revisa antes de imprimir)</div>
+            <div style={{ fontSize: 12, color: "var(--texto-sec)", lineHeight: 1.6 }}>
+              <div><b>ETE / Caprini:</b> {f.nombre || "—"} · {f.edad || "—"} años · {f.sexo || "—"} · IMC {imc || "—"} · Dx: {f.hipotesis || "—"}</div>
+              <div><b>Consentimiento:</b> {f.nombre || "—"} · RUN {f.rut || "—"} · condición: {f.hipotesis || "—"}</div>
+              <div><b>Preanestesia:</b> {f.nombre || "—"} · Peso {f.peso || "—"} kg · Talla {f.talla || "—"} cm · PA {f.pa || "—"} · Alergias: {f.alergias || "—"}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+              <button onClick={generarConsentimientoPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: 12, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 Consentimiento</button>
+              <button onClick={generarPreanestesiaPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: 12, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 Preanestesia</button>
+              <button onClick={generarETEPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: 12, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 ETE / Caprini</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6494,10 +6709,14 @@ const cargarMiembrosEquipo = async () => {
     const move = (ev) => {
       if (ev.cancelable) ev.preventDefault();
       setDragPos({ x: ev.clientX, y: ev.clientY });
-      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-pac-id]");
-      const id = el?.getAttribute("data-pac-id");
-      if (id && id !== p.id) { overRef.current = { id, serv: el.getAttribute("data-serv") }; setGapId(id); }
-      else { overRef.current = null; setGapId(null); }
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-serv]");
+      if (el) {
+        const serv = el.getAttribute("data-serv");
+        const id = el.getAttribute("data-pac-id");
+        if (id && id !== p.id) { overRef.current = { id, serv }; setGapId(id); }
+        else if (!id && serv) { overRef.current = { id: null, serv }; setGapId("__" + serv); }
+        else { overRef.current = null; setGapId(null); }
+      } else { overRef.current = null; setGapId(null); }
     };
     const up = async () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
@@ -6558,6 +6777,8 @@ const cargarMiembrosEquipo = async () => {
   }, [claveOrden]);
 
   const nombresServicioOrdenados = aplicarOrdenNombres(Object.keys(porServicio), ordenServiciosKanban);
+  const serviciosConfig = Array.from(new Set([...(esEquipo ? serviciosEquipo : misServiciosLista).map(s => s.nombre), ...Object.keys(porServicio)])).filter(Boolean);
+  const serviciosVacios = serviciosConfig.filter(s => !porServicio[s] || porServicio[s].length === 0);
 
   const iniciarDragColumna = (e, nombre, idx) => {
     if (soloLectura) return;
@@ -8474,7 +8695,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 transform = dragCol.vertical ? `translateY(${corr * paso}px)` : `translateX(${corr * paso}px)`;
               }
               return (
-                <div key={servicio} style={{
+                <div key={servicio} data-serv={servicio} style={{
                   background:"var(--superficie)",
                   border: arrastrando ? "1px solid var(--primario)" : "0.5px solid var(--borde)",
                   borderRadius:10, padding:"12px",
@@ -8535,6 +8756,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 </div>
               );
             })}
+            {dragPos && serviciosVacios.map(servicio => (
+              <div key={"vacio-"+servicio} data-serv={servicio} data-empty="1" style={{border:"1.5px dashed var(--primario)",borderRadius:10,padding:"20px 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,color:"var(--primario)",minHeight:64,opacity:gapId===("__"+servicio)?1:0.5,background:gapId===("__"+servicio)?"var(--chip-azul-bg)":"transparent",transition:"opacity .1s"}}>Soltar en {servicio}</div>
+            ))}
           </div>
         </>
       )}
