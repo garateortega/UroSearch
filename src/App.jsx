@@ -4035,6 +4035,27 @@ function NotasPanel({ currentUser, contexto, equipos }) {
   const [cargando, setCargando] = useState(false);
   const [formAbierto, setFormAbierto] = useState(false); // el formulario aparece solo con el botón "+ Agregar nota"
   const [nueva, setNueva] = useState({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
+  const [editId, setEditId] = useState(null); const [editT, setEditT] = useState("");
+  const abrirEdit = (n) => { setEditId(n.id); setEditT(n.texto || ""); };
+  const guardarEdit = async (n) => {
+    const t = editT.trim(); if (!t || t === n.texto) { setEditId(null); return; }
+    const { error } = await supabase.from("notas").update({ texto: t }).eq("id", n.id);
+    if (error) return alert("No se pudo editar: " + error.message);
+    setNotas(prev => prev.map(x => x.id === n.id ? { ...x, texto: t } : x)); setEditId(null);
+  };
+  const imprimirNotaPDF = async (n) => {
+    let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 20; let y = 22;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) { doc.addImage(wm, "PNG", W - M - 20, 14, 18, 18); if (doc.GState) { doc.saveGraphicsState(); doc.setGState(new doc.GState({ opacity: 0.06 })); doc.addImage(wm, "PNG", W / 2 - 45, 120, 90, 90); doc.restoreGraphicsState(); } } } catch {}
+    doc.setFont("times", "bold"); doc.setFontSize(15); doc.setTextColor(20, 20, 20);
+    doc.text(n.titulo || "Nota", M, y); y += 8;
+    doc.setFont("times", "normal"); doc.setFontSize(9); doc.setTextColor(110, 110, 110);
+    doc.text(`${n.autor?.nombre || ""} · ${new Date(n.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}`, M, y);
+    doc.setDrawColor(150); doc.line(M, y + 3, W - M, y + 3); y += 12;
+    doc.setFontSize(11.5); doc.setTextColor(20, 20, 20);
+    doc.splitTextToSize(n.texto || "", W - 2 * M).forEach(l => { if (y > 285) { doc.addPage(); y = 22; } doc.text(l, M, y); y += 6; });
+    doc.save(`nota_${(n.titulo || "nota").replace(/\s+/g, "_").slice(0, 40)}.pdf`);
+  };
 
   const cargar = async () => {
     setCargando(true);
@@ -4127,14 +4148,28 @@ function NotasPanel({ currentUser, contexto, equipos }) {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
               <div style={{flex:1,minWidth:0}}>
                 {n.titulo && <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:3}}>{n.titulo}</div>}
+                {editId===n.id ? (
+                  <div>
+                    <textarea value={editT} onChange={e=>setEditT(e.target.value)} rows={4} style={{width:"100%",fontSize:"var(--fs-2)",padding:"8px 10px",border:"0.5px solid var(--primario)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.4,resize:"vertical"}}/>
+                    <div style={{display:"flex",gap:8,marginTop:6}}>
+                      <button onClick={()=>guardarEdit(n)} style={{padding:"6px 14px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer"}}>Guardar</button>
+                      <button onClick={()=>setEditId(null)} style={{padding:"6px 14px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
                 <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.45}}>{n.texto}</div>
+                )}
                 <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:5}}>
                   {n.visibilidad==="personal"?"🔒 Solo yo":"👥 Equipo"} · {n.autor?.nombre || "—"} · {new Date(n.created_at).toLocaleDateString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
                 </div>
               </div>
-              {n.autor_id === currentUser.id && (
-                <button onClick={()=>eliminar(n)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
-              )}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+                <button onClick={()=>imprimirNotaPDF(n)} title="Imprimir / PDF" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🖨️</button>
+                {n.autor_id === currentUser.id && (<>
+                  <button onClick={()=>abrirEdit(n)} title="Editar" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>✏️</button>
+                  <button onClick={()=>eliminar(n)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
+                </>)}
+              </div>
             </div>
           </div>
         ))}
