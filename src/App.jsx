@@ -387,8 +387,8 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
     setGuardando(false);
   };
 
-  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 10 };
+  const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 10 };
   const campo = (etiqueta, key, placeholder = "") => (
     <div><label style={lbl}>{etiqueta}</label><input value={form[key]} onChange={e => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} style={inp} /></div>
   );
@@ -400,9 +400,9 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)" }}>👤 Mi perfil</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
-        <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 14 }}>Estos datos se usan para generar tus recetas y prescripciones.</div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 14 }}>Estos datos se usan para generar tus recetas y prescripciones.</div>
         {cargando ? (
-          <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div>
+          <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div>
         ) : (<>
           {campo("Nombre completo", "nombre_completo", "Dr. Sebastián Gárate Ortega")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -418,7 +418,7 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
             {campo("RCM (RUT Colegio Médico)", "rcm", "")}
           </div>
           {campo("Correo de contacto", "correo", "contacto@ejemplo.cl")}
-          <div style={{ fontSize: 10.5, color: "var(--texto-ter)", marginTop: -6, marginBottom: 10, lineHeight: 1.4 }}>
+          <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: -6, marginBottom: 10, lineHeight: 1.4 }}>
             Es el que aparece en tus recetas. Puede ser distinto al correo con que inicias sesión{currentUser?.correo ? ` (${currentUser.correo})` : ""}, que no cambia.
           </div>
           {campo("Centro / Hospital", "centro", "Hospital Base Valdivia")}
@@ -427,8 +427,8 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
             {campo("Ciudad", "ciudad", "Valdivia")}
             {campo("Región", "region", "Los Ríos")}
           </div>
-          {msg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
-          <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: "11px", fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 4 }}>{guardando ? "Guardando…" : "Guardar perfil"}</button>
+          {msg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
+          <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 4 }}>{guardando ? "Guardando…" : "Guardar perfil"}</button>
         </>)}
       </div>
     </div>
@@ -558,13 +558,109 @@ function OnboardingPushModal({ currentUser, onClose }) {
       <div style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 16, padding: 22, width: "100%", maxWidth: 340, textAlign: "center" }}>
         <div style={{ fontSize: 34, marginBottom: 8 }}>🔔</div>
         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>Activa las notificaciones</div>
-        <div style={{ fontSize: 13, color: "var(--texto-sec)", lineHeight: 1.5, marginBottom: 16 }}>
+        <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", lineHeight: 1.5, marginBottom: 16 }}>
           Recibe avisos de cirugías, pendientes e interconsultas aunque tengas UroSearch cerrada.
         </div>
-        {msg && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 10 }}>{msg}</div>}
-        <button onClick={activar} disabled={cargando} style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.6 : 1, marginBottom: 8 }}>{cargando ? "Activando…" : "Activar notificaciones"}</button>
-        <button onClick={ahoraNo} disabled={cargando} style={{ width: "100%", padding: 10, fontSize: 13, background: "none", color: "var(--texto-ter)", border: "none", cursor: "pointer" }}>Ahora no</button>
+        {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 10 }}>{msg}</div>}
+        <button onClick={activar} disabled={cargando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.6 : 1, marginBottom: 8 }}>{cargando ? "Activando…" : "Activar notificaciones"}</button>
+        <button onClick={ahoraNo} disabled={cargando} style={{ width: "100%", padding: 10, fontSize: "var(--fs-2)", background: "none", color: "var(--texto-ter)", border: "none", cursor: "pointer" }}>Ahora no</button>
       </div>
+    </div>
+  );
+}
+
+// ─── Bloqueo de la app (PIN / biometría) ───
+const LOCK_KEY = "uro_lock";
+function leerLock() { try { return JSON.parse(localStorage.getItem(LOCK_KEY) || "null") || { enabled: false, pinHash: "", bio: false, credId: "" }; } catch { return { enabled: false, pinHash: "", bio: false, credId: "" }; } }
+function guardarLock(v) { try { localStorage.setItem(LOCK_KEY, JSON.stringify(v)); } catch {} }
+function hashPin(pin) { let h = 5381; for (let i = 0; i < pin.length; i++) h = ((h << 5) + h + pin.charCodeAt(i)) >>> 0; return "h" + h; }
+async function registrarBiometria() {
+  if (!window.PublicKeyCredential || !navigator.credentials) return null;
+  try {
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: "UroSearch" },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: "urosearch", displayName: "UroSearch" },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+      timeout: 60000,
+    } });
+    if (!cred) return null;
+    return btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+  } catch { return null; }
+}
+async function verificarBiometria(credIdB64) {
+  if (!window.PublicKeyCredential || !navigator.credentials) return false;
+  try {
+    const raw = credIdB64 ? Uint8Array.from(atob(credIdB64), c => c.charCodeAt(0)) : null;
+    const assertion = await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: raw ? [{ type: "public-key", id: raw }] : [],
+      userVerification: "required", timeout: 60000,
+    } });
+    return !!assertion;
+  } catch { return false; }
+}
+
+function LockScreen({ onUnlock }) {
+  const cfg = leerLock();
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState("");
+  const intentarPin = () => { if (cfg.pinHash && hashPin(pin) === cfg.pinHash) { setErr(""); onUnlock(); } else { setErr("Clave incorrecta"); setPin(""); } };
+  const intentarBio = async () => { setErr(""); const ok = await verificarBiometria(cfg.credId); if (ok) onUnlock(); else setErr("No se pudo verificar la biometría"); };
+  useEffect(() => { if (cfg.bio && cfg.credId) intentarBio(); }, []);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "var(--fondo)", zIndex: 2000, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+      <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)", marginBottom: 4 }}>UroSearch bloqueada</div>
+      <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-ter)", marginBottom: 18 }}>Ingresa tu clave para continuar</div>
+      <input type="password" inputMode="numeric" autoFocus value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} onKeyDown={e => { if (e.key === "Enter") intentarPin(); }} placeholder="••••" style={{ width: 180, textAlign: "center", letterSpacing: 6, fontSize: 20, padding: "10px 12px", border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)", color: "var(--texto)", marginBottom: 12 }} />
+      {err && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 10 }}>{err}</div>}
+      <button onClick={intentarPin} style={{ width: 180, padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 10, cursor: "pointer" }}>Desbloquear</button>
+      {cfg.bio && cfg.credId && <button onClick={intentarBio} style={{ marginTop: 12, background: "none", border: "none", color: "var(--primario)", fontSize: "var(--fs-2)", fontWeight: 600, cursor: "pointer" }}>👆 Usar biometría</button>}
+    </div>
+  );
+}
+
+function SeguridadLock() {
+  const [cfg, setCfg] = useState(leerLock);
+  const [pin1, setPin1] = useState(""); const [pin2, setPin2] = useState("");
+  const [msg, setMsg] = useState("");
+  const aplicar = (v) => { guardarLock(v); setCfg(v); };
+  const activar = () => {
+    if (pin1.length < 4) { setMsg("La clave debe tener al menos 4 dígitos."); return; }
+    if (pin1 !== pin2) { setMsg("Las claves no coinciden."); return; }
+    aplicar({ ...cfg, enabled: true, pinHash: hashPin(pin1) }); setPin1(""); setPin2(""); setMsg("✓ Bloqueo activado.");
+  };
+  const desactivar = () => { aplicar({ enabled: false, pinHash: "", bio: false, credId: "" }); setMsg(""); };
+  const toggleBio = async () => {
+    if (cfg.bio) { aplicar({ ...cfg, bio: false, credId: "" }); setMsg(""); return; }
+    setMsg("Registrando biometría…");
+    const id = await registrarBiometria();
+    if (id) { aplicar({ ...cfg, bio: true, credId: id }); setMsg("✓ Biometría activada."); }
+    else setMsg("Tu dispositivo no permitió registrar la biometría.");
+  };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8, textAlign: "center", letterSpacing: 4 };
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 4 }}>🔒 Bloqueo de la app</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8 }}>Protege los datos de pacientes guardados en este dispositivo. Pide clave al abrir y tras 2 min en segundo plano.</div>
+      {!cfg.enabled ? (
+        <>
+          <input type="password" inputMode="numeric" value={pin1} onChange={e => setPin1(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="Nueva clave (mín. 4 dígitos)" style={inp} />
+          <input type="password" inputMode="numeric" value={pin2} onChange={e => setPin2(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="Repite la clave" style={inp} />
+          <button onClick={activar} style={{ width: "100%", padding: 10, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Activar bloqueo</button>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: "var(--fs-1)", color: "var(--exito)", marginBottom: 8 }}>✓ Bloqueo activo</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--fs-2)", color: "var(--texto)", marginBottom: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={cfg.bio} onChange={toggleBio} /> Usar biometría (huella / Face ID) si el dispositivo lo permite
+          </label>
+          <button onClick={desactivar} style={{ width: "100%", padding: 9, fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--peligro)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Desactivar bloqueo</button>
+        </>
+      )}
+      {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginTop: 8 }}>{msg}</div>}
     </div>
   );
 }
@@ -615,21 +711,23 @@ function ConfigModal({ onClose, currentUser }) {
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)" }}>⚙️ Configuración</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
         </div>
-        <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 16 }}>Personaliza qué funciones ves y cómo responde el chat.</div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 16 }}>Personaliza qué funciones ves y cómo responde el chat.</div>
+
+        <SeguridadLock/>
 
         {/* Notificaciones en el celular */}
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🔔 Notificaciones en este dispositivo</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🔔 Notificaciones en este dispositivo</div>
         <div style={{ marginBottom: 16 }}>
           {!soportado ? (
-            <div style={{ fontSize: 11.5, color: "var(--texto-ter)", padding: "10px 12px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, lineHeight: 1.45 }}>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", padding: "10px 12px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, lineHeight: 1.45 }}>
               Este navegador no permite notificaciones. Prueba desde Chrome en Android, o instalando UroSearch en la pantalla de inicio del iPhone.
             </div>
           ) : (
             <>
               <div onClick={pushCargando ? undefined : alternarPush} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, cursor: pushCargando ? "default" : "pointer", background: "var(--superficie)", border: "0.5px solid " + (push ? "var(--exito)" : "var(--borde)"), opacity: pushCargando ? 0.6 : 1 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>Avisarme en el celular</div>
-                  <div style={{ fontSize: 11, color: "var(--texto-sec)", lineHeight: 1.4, marginTop: 2 }}>
+                  <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>Avisarme en el celular</div>
+                  <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.4, marginTop: 2 }}>
                     {pushCargando ? "Activando…" : "Las notificaciones de la campana llegan también con la app cerrada."}
                   </div>
                 </div>
@@ -638,22 +736,22 @@ function ConfigModal({ onClose, currentUser }) {
                 </span>
               </div>
               {iosSinInstalar && (
-                <div style={{ fontSize: 11, color: "var(--texto-sec)", marginTop: 6, lineHeight: 1.45, padding: "8px 10px", background: "var(--fondo-suave)", borderRadius: 8 }}>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 6, lineHeight: 1.45, padding: "8px 10px", background: "var(--fondo-suave)", borderRadius: 8 }}>
                   📱 En iPhone, primero agrega UroSearch a la pantalla de inicio (Compartir → Agregar a inicio) y ábrela desde ahí; Safari no permite notificaciones desde una pestaña.
                 </div>
               )}
               {push && (
-                <button onClick={async () => { const r = await probarPush(); if (!r.ok) setPushMsg("⚠️ " + r.error); }} style={{ marginTop: 6, padding: "7px 12px", fontSize: 11.5, background: "none", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>
+                <button onClick={async () => { const r = await probarPush(); if (!r.ok) setPushMsg("⚠️ " + r.error); }} style={{ marginTop: 6, padding: "7px 12px", fontSize: "var(--fs-0)", background: "none", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>
                   Enviar una de prueba
                 </button>
               )}
-              {pushMsg && <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.45, color: pushMsg.startsWith("✓") ? "var(--exito)" : pushMsg.startsWith("⚠️") ? "var(--peligro)" : "var(--texto-ter)" }}>{pushMsg}</div>}
+              {pushMsg && <div style={{ fontSize: "var(--fs-0)", marginTop: 6, lineHeight: 1.45, color: pushMsg.startsWith("✓") ? "var(--exito)" : pushMsg.startsWith("⚠️") ? "var(--peligro)" : "var(--texto-ter)" }}>{pushMsg}</div>}
             </>
           )}
         </div>
 
         {/* Modo del chat */}
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🤖 Fuente de respuestas del chat</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🤖 Fuente de respuestas del chat</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
           {[["verificada", "📚 Solo base de datos verificada", "Uros responde únicamente con documentos de UroSearch. Si no encuentra nada, te ofrece usar su conocimiento y tú decides."],
             ["general", "🧠 Base + conocimiento general de la IA", "Si no hay documentos en la base, Uros responde directo con su conocimiento clínico (marcado como fuera de la base)."]].map(([id, label, desc]) => {
@@ -662,8 +760,8 @@ function ConfigModal({ onClose, currentUser }) {
               <div key={id} onClick={() => aplicar({ ...cfg, chatModo: id })} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)" }}>
                 <span style={{ width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 2, border: "2px solid " + (on ? "var(--primario)" : "var(--borde)"), background: on ? "var(--primario)" : "transparent", boxShadow: on ? "inset 0 0 0 3px var(--superficie)" : "none" }} />
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{label}</div>
-                  <div style={{ fontSize: 11, color: "var(--texto-sec)", lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+                  <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>{label}</div>
+                  <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
                 </div>
               </div>
             );
@@ -671,17 +769,17 @@ function ConfigModal({ onClose, currentUser }) {
         </div>
 
         {/* Funciones */}
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
-        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginBottom: 10, lineHeight: 1.45 }}>Desmarca lo que no uses para simplificar la interfaz. Puedes reactivarlo cuando quieras.<br/>Si apagas una pestaña principal pero dejas activa alguna de sus secciones, esa sección aparecerá como pestaña propia.</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 10, lineHeight: 1.45 }}>Desmarca lo que no uses para simplificar la interfaz. Puedes reactivarlo cuando quieras.<br/>Si apagas una pestaña principal pero dejas activa alguna de sus secciones, esa sección aparecerá como pestaña propia.</div>
         {FUNCIONES_CONFIGURABLES.map(g => (
           <div key={g.grupo} style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--texto-sec)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>{g.grupo}</div>
+            <div style={{ fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--texto-sec)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 5 }}>{g.grupo}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {g.items.map(([id, label]) => {
                 const activa = !fnOculta(cfg, id);
                 return (
                   <div key={id} onClick={() => toggleFn(id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, cursor: "pointer", background: "var(--superficie)", border: "0.5px solid var(--borde)", opacity: activa ? 1 : 0.65 }}>
-                    <span style={{ fontSize: 13, color: "var(--texto)" }}>{label}</span>
+                    <span style={{ fontSize: "var(--fs-2)", color: "var(--texto)" }}>{label}</span>
                     <span style={{ width: 40, height: 22, borderRadius: 11, background: activa ? "var(--exito)" : "var(--borde-suave)", position: "relative", transition: "background .2s", flexShrink: 0 }}>
                       <span style={{ position: "absolute", top: 2.5, left: activa ? 20 : 3, width: 17, height: 17, borderRadius: "50%", background: "var(--superficie)", transition: "left .2s", boxShadow: "0 1px 2px rgba(0,0,0,0.25)" }} />
                     </span>
@@ -924,15 +1022,15 @@ function PrescripcionesPanel({ currentUser }) {
     setGenerando(false);
   };
 
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
-  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
+  const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px" }}>
       {/* Submenú de categorías */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {RX_CATS.map(([id, label]) => (
-          <button key={id} onClick={() => { setCat(id); setMsg(""); }} style={{ padding: "7px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 20, cursor: "pointer", border: cat === id ? "none" : "0.5px solid var(--borde)", background: cat === id ? "var(--primario)" : "var(--superficie)", color: cat === id ? "var(--texto-inv)" : "var(--primario)" }}>
+          <button key={id} onClick={() => { setCat(id); setMsg(""); }} style={{ padding: "7px 12px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 20, cursor: "pointer", border: cat === id ? "none" : "0.5px solid var(--borde)", background: cat === id ? "var(--primario)" : "var(--superficie)", color: cat === id ? "var(--texto-inv)" : "var(--primario)" }}>
             {label}{(seleccionados[id]?.length || 0) > 0 ? ` (${seleccionados[id].length})` : ""}
           </button>
         ))}
@@ -940,7 +1038,7 @@ function PrescripcionesPanel({ currentUser }) {
 
       {/* Datos del paciente */}
       <div style={{ background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "12px", marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 8 }}>Datos del paciente (opcional)</div>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 8 }}>Datos del paciente (opcional)</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>Nombre</label><input value={paciente.nombre} onChange={e => setPaciente({ ...paciente, nombre: e.target.value })} style={inp} /></div>
           <div><label style={lbl}>Edad</label><input value={paciente.edad} onChange={e => setPaciente({ ...paciente, edad: e.target.value })} style={inp} /></div>
@@ -951,7 +1049,7 @@ function PrescripcionesPanel({ currentUser }) {
       </div>
 
       {/* Botón que despliega las sugerencias (checklist colapsado por defecto) */}
-      <button onClick={() => setSugerenciasOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", fontSize: 13, fontWeight: 600, background: sugerenciasOpen ? "var(--est-prog-bg)" : "var(--superficie)", color: "var(--primario)", border: "0.5px solid " + (sugerenciasOpen ? "var(--primario)" : "var(--borde)"), borderRadius: 10, cursor: "pointer", marginBottom: 10 }}>
+      <button onClick={() => setSugerenciasOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: sugerenciasOpen ? "var(--est-prog-bg)" : "var(--superficie)", color: "var(--primario)", border: "0.5px solid " + (sugerenciasOpen ? "var(--primario)" : "var(--borde)"), borderRadius: 10, cursor: "pointer", marginBottom: 10 }}>
         <span>💡 Sugerencias{(marcados.length > 0) ? ` (${marcados.length} seleccionadas)` : ""}</span>
         <span>{sugerenciasOpen ? "▴" : "▾"}</span>
       </button>
@@ -962,8 +1060,8 @@ function PrescripcionesPanel({ currentUser }) {
             const on = marcados.includes(idx);
             return (
               <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
-                <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 1, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
-                <span style={{ fontSize: 13, color: "var(--texto)", lineHeight: 1.4 }}>{it}</span>
+                <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, marginTop: 1, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: "var(--fs-1)", display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
+                <span style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.4 }}>{it}</span>
               </div>
             );
           })}
@@ -974,10 +1072,10 @@ function PrescripcionesPanel({ currentUser }) {
       <label style={lbl}>Escribir de forma libre (una línea por ítem)</label>
       <textarea value={extra} onChange={e => setExtra(e.target.value)} rows={3} placeholder={cat === "medicamentos" ? "Ej: Omeprazol 20 mg — 1 comp en ayunas por 14 días" : "Ej: control con nefrología en 15 días"} style={{ ...inp, resize: "vertical", marginBottom: 12 }} />
 
-      {msg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
+      {msg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
 
-      <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: "12px", fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1 }}>{generando ? "Generando…" : "📄 Generar receta en PDF"}</button>
-      <div style={{ fontSize: 10.5, color: "var(--texto-ter)", textAlign: "center", marginTop: 8, lineHeight: 1.4 }}>Los datos del médico salen de tu perfil. La receta lleva la marca de agua de UroSearch.</div>
+      <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1 }}>{generando ? "Generando…" : "📄 Generar receta en PDF"}</button>
+      <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", textAlign: "center", marginTop: 8, lineHeight: 1.4 }}>Los datos del médico salen de tu perfil. La receta lleva la marca de agua de UroSearch.</div>
     </div>
   );
 }
@@ -1033,14 +1131,14 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
     .slice()
     .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es", { sensitivity: "base" })); // orden alfabético
 
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 8 };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none", marginBottom: 8 };
 
   return (
     <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
-      <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 10 }}>{lista.length} medicamentos frecuentes en urología</div>
+      <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", marginBottom: 10 }}>{lista.length} medicamentos frecuentes en urología</div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔎 Buscar por nombre, categoría o indicación…" style={{ ...inp, flex: "1 1 200px", marginBottom: 0 }} />
-        {isAdmin && <button onClick={() => { setAgregando(!agregando); setErr(""); }} style={{ padding: "8px 14px", fontSize: 12, fontWeight: 500, background: agregando ? "var(--superficie)" : "var(--primario)", color: agregando ? "var(--primario)" : "var(--texto-inv)", border: agregando ? "0.5px solid var(--primario)" : "none", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
+        {isAdmin && <button onClick={() => { setAgregando(!agregando); setErr(""); }} style={{ padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 500, background: agregando ? "var(--superficie)" : "var(--primario)", color: agregando ? "var(--primario)" : "var(--texto-inv)", border: agregando ? "0.5px solid var(--primario)" : "none", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
       </div>
 
       {isAdmin && agregando && (
@@ -1053,15 +1151,15 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
           <input value={form.posologia} onChange={e => setForm({ ...form, posologia: e.target.value })} placeholder="Posología (1 comp c/12 h VO por 7 días)" style={inp} />
           <input value={form.indicacion} onChange={e => setForm({ ...form, indicacion: e.target.value })} placeholder="Indicación (ITU, prostatitis)" style={inp} />
           <input value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Notas (opcional)" style={inp} />
-          {err && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 8 }}>{err}</div>}
-          <button onClick={guardar} style={{ padding: "9px 16px", fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar</button>
+          {err && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{err}</div>}
+          <button onClick={guardar} style={{ padding: "9px 16px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar</button>
         </div>
       )}
 
       {cargando ? (
-        <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div>
+        <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div>
       ) : filtrados.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: 13 }}>{lista.length === 0 ? "No hay medicamentos cargados aún." : "Sin resultados para tu búsqueda."}</div>
+        <div style={{ textAlign: "center", padding: 30, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>{lista.length === 0 ? "No hay medicamentos cargados aún." : "Sin resultados para tu búsqueda."}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {filtrados.map(m => {
@@ -1069,20 +1167,20 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
             return (
               <div key={m.id} onClick={() => setAbiertoId(expandido ? null : m.id)} style={{ background: "var(--superficie)", border: "0.5px solid " + (expandido ? "var(--primario)" : "var(--borde)"), borderRadius: 10, padding: expandido ? "12px 14px" : "10px 13px", cursor: "pointer", transition: "border .15s" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>{m.nombre}</div>
+                  <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>{m.nombre}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {isAdmin && expandido && <button onClick={(e) => { e.stopPropagation(); eliminar(m.id); }} style={{ background: "none", border: "none", color: "var(--peligro)", fontSize: 13, cursor: "pointer", padding: 0 }}>🗑</button>}
-                    <span style={{ fontSize: 12, color: "var(--texto-ter)" }}>{expandido ? "▴" : "▾"}</span>
+                    {isAdmin && expandido && <button onClick={(e) => { e.stopPropagation(); eliminar(m.id); }} style={{ background: "none", border: "none", color: "var(--peligro)", fontSize: "var(--fs-2)", cursor: "pointer", padding: 0 }}>🗑</button>}
+                    <span style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>{expandido ? "▴" : "▾"}</span>
                   </div>
                 </div>
                 {expandido && (
                   <div style={{ marginTop: 6 }}>
-                    {m.presentacion && <div style={{ fontSize: 12.5, color: "var(--texto-sec)" }}>Presentación: {m.presentacion}</div>}
-                    {m.posologia && <div style={{ fontSize: 13, color: "var(--texto)", marginTop: 3 }}>💊 {m.posologia}</div>}
-                    {m.indicacion && <div style={{ fontSize: 12, color: "var(--texto-sec)", marginTop: 2 }}>Indicación: {m.indicacion}</div>}
+                    {m.presentacion && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)" }}>Presentación: {m.presentacion}</div>}
+                    {m.posologia && <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", marginTop: 3 }}>💊 {m.posologia}</div>}
+                    {m.indicacion && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginTop: 2 }}>Indicación: {m.indicacion}</div>}
                     <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
-                      {m.categoria && <span style={{ fontSize: 10.5, background: "var(--fondo-suave)", color: "var(--texto-sec)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{m.categoria}</span>}
-                      {m.notas && <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>{m.notas}</span>}
+                      {m.categoria && <span style={{ fontSize: "var(--fs-xs)", background: "var(--fondo-suave)", color: "var(--texto-sec)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>{m.categoria}</span>}
+                      {m.notas && <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{m.notas}</span>}
                     </div>
                   </div>
                 )}
@@ -1139,9 +1237,9 @@ function ScoresPanel() {
   if (score) {
     return (
       <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
-        <button onClick={() => setAbierto(null)} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver a scores</button>
+        <button onClick={() => setAbierto(null)} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: "var(--fs-2)", cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver a scores</button>
         <div style={{ fontSize: 18, fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>{score.nombre}</div>
-        <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 14 }}>{score.desc}</div>
+        <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", marginBottom: 14 }}>{score.desc}</div>
         {score.tipo === "suma" && <ScoreSuma score={score} />}
         {score.tipo === "checks" && <ScoreChecks score={score} />}
         {score.id === "damico" && <ScoreDAmico />}
@@ -1153,26 +1251,26 @@ function ScoresPanel() {
 
   return (
     <div style={{ padding: "16px", flex: 1, overflowY: "auto" }}>
-      <div style={{ fontSize: 13, color: "var(--texto-sec)", marginBottom: 12 }}>Calculadoras de los principales scores urológicos</div>
+      <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", marginBottom: 12 }}>Calculadoras de los principales scores urológicos</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {[...SCORES].sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })).map(s => (
           <div key={s.id} onClick={() => setAbierto(s.id)} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "13px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--texto)" }}>{s.nombre}</div>
-              <div style={{ fontSize: 12, color: "var(--texto-sec)" }}>{s.desc}</div>
+              <div style={{ fontSize: "var(--fs-3)", fontWeight: 600, color: "var(--texto)" }}>{s.nombre}</div>
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)" }}>{s.desc}</div>
             </div>
             <span style={{ color: "var(--primario)", fontSize: 18 }}>›</span>
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 14, lineHeight: 1.5 }}>Falta el nomograma de Briganti (invasión ganglionar en cáncer de próstata): requiere los coeficientes de una versión específica (2012/2019). Si me dices cuál usas, lo agrego.</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 14, lineHeight: 1.5 }}>Falta el nomograma de Briganti (invasión ganglionar en cáncer de próstata): requiere los coeficientes de una versión específica (2012/2019). Si me dices cuál usas, lo agrego.</div>
     </div>
   );
 }
 
 const scoreBox = { background: "var(--exito-bg)", border: "0.5px solid var(--exito-borde)", borderRadius: 10, padding: "14px", textAlign: "center", marginTop: 14 };
-const selScore = { padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", cursor: "pointer", width: "100%" };
-const lblScore = { fontSize: 12, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4, display: "block" };
+const selScore = { padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", cursor: "pointer", width: "100%" };
+const lblScore = { fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4, display: "block" };
 
 function ScoreSuma({ score }) {
   const [vals, setVals] = useState(score.preguntas.map(() => 0));
@@ -1189,7 +1287,7 @@ function ScoreSuma({ score }) {
       ))}
       <div style={scoreBox}>
         <div style={{ fontSize: 28, fontWeight: 700, color: "var(--exito)" }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 35</span></div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
       </div>
     </div>
   );
@@ -1202,13 +1300,13 @@ function ScoreChecks({ score }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {score.factores.map((f, i) => (
         <div key={i} onClick={() => { const v = [...on]; v[i] = !v[i]; setOn(v); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 11px", borderRadius: 8, cursor: "pointer", background: on[i] ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on[i] ? "var(--exito-borde)" : "var(--borde)") }}>
-          <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on[i] ? "var(--exito)" : "var(--borde)"), background: on[i] ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on[i] ? "✓" : ""}</span>
-          <span style={{ fontSize: 13, color: "var(--texto)" }}>{f}</span>
+          <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on[i] ? "var(--exito)" : "var(--borde)"), background: on[i] ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: "var(--fs-1)", display: "flex", alignItems: "center", justifyContent: "center" }}>{on[i] ? "✓" : ""}</span>
+          <span style={{ fontSize: "var(--fs-2)", color: "var(--texto)" }}>{f}</span>
         </div>
       ))}
       <div style={scoreBox}>
         <div style={{ fontSize: 28, fontWeight: 700, color: "var(--exito)" }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> factores</span></div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
       </div>
     </div>
   );
@@ -1238,7 +1336,7 @@ function ScoreDAmico() {
         </select></div>
       <div style={{ ...scoreBox, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)" }}>
         <div style={{ fontSize: 20, fontWeight: 700, color }}>{grupo}</div>
-        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 4 }}>Clasificación de D'Amico. El grupo lo determina el factor de mayor riesgo.</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 4 }}>Clasificación de D'Amico. El grupo lo determina el factor de mayor riesgo.</div>
       </div>
     </div>
   );
@@ -1265,7 +1363,7 @@ function ScoreRENAL() {
         <select value={ap} onChange={ev => setAp(ev.target.value)} style={selScore}><option value="x">x (indeterminado)</option><option value="a">a (anterior)</option><option value="p">p (posterior)</option></select></div>
       <div style={{ ...scoreBox }}>
         <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}{ap}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 12</span></div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{compl}</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{compl}</div>
       </div>
     </div>
   );
@@ -1290,7 +1388,7 @@ function ScoreBriganti() {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", gap: 6 }}>
         {["2012", "2019"].map(v => (
-          <button key={v} onClick={() => setVer(v)} style={{ flex: 1, padding: "8px", fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: ver === v ? "none" : "0.5px solid var(--borde)", background: ver === v ? "var(--primario)" : "var(--superficie)", color: ver === v ? "var(--texto-inv)" : "var(--primario)" }}>Briganti {v}</button>
+          <button key={v} onClick={() => setVer(v)} style={{ flex: 1, padding: "8px", fontSize: "var(--fs-2)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: ver === v ? "none" : "0.5px solid var(--borde)", background: ver === v ? "var(--primario)" : "var(--superficie)", color: ver === v ? "var(--texto-inv)" : "var(--primario)" }}>Briganti {v}</button>
         ))}
       </div>
 
@@ -1309,13 +1407,13 @@ function ScoreBriganti() {
         <div style={scoreBox}>{/* Aquí iría el % calculado cuando se carguen los coeficientes */}</div>
       ) : (
         <div style={{ background: "var(--alerta-bg)", border: "0.5px solid var(--alerta)", borderRadius: 10, padding: "12px 13px" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--alerta)", marginBottom: 4 }}>⚠️ Falta cargar los coeficientes de Briganti {ver}</div>
-          <div style={{ fontSize: 12, color: "var(--texto-sec)", lineHeight: 1.5 }}>
+          <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--alerta)", marginBottom: 4 }}>⚠️ Falta cargar los coeficientes de Briganti {ver}</div>
+          <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", lineHeight: 1.5 }}>
             Para no arriesgar un % incorrecto en una decisión de linfadenectomía, la probabilidad exacta requiere los coeficientes de la publicación oficial. Punto de corte validado sugerido para omitir ePLND: <strong>&lt; {cutoff}</strong>.
           </div>
         </div>
       )}
-      <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>Pásame los coeficientes de la versión que uses y activo el cálculo del % exacto aquí mismo.</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.5 }}>Pásame los coeficientes de la versión que uses y activo el cálculo del % exacto aquí mismo.</div>
     </div>
   );
 }
@@ -1729,15 +1827,15 @@ function tourIrSubtab(subtab) {
 function DemoTutorial({ tipo }) {
   const caja = { border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px", background: "var(--fondo-suave)", marginTop: 4 };
   const btn = (label, primary) => (
-    <span style={{ fontSize: 11, fontWeight: 500, padding: "5px 10px", borderRadius: 6, whiteSpace: "nowrap", border: "0.5px solid var(--borde)", background: primary ? "var(--primario)" : "var(--superficie)", color: primary ? "var(--texto-inv)" : "var(--primario)" }}>{label}</span>
+    <span style={{ fontSize: "var(--fs-0)", fontWeight: 500, padding: "5px 10px", borderRadius: 6, whiteSpace: "nowrap", border: "0.5px solid var(--borde)", background: primary ? "var(--primario)" : "var(--superficie)", color: primary ? "var(--texto-inv)" : "var(--primario)" }}>{label}</span>
   );
   const sel = (label) => (
-    <span style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }}>{label} ▾</span>
+    <span style={{ fontSize: "var(--fs-0)", padding: "5px 10px", borderRadius: 6, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }}>{label} ▾</span>
   );
   const fila = (et, val, nota) => (
     <div style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: "0.5px solid var(--borde)" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", minWidth: 92, flexShrink: 0 }}>{et}</div>
-      <div style={{ fontSize: 11, color: "var(--texto)", flex: 1 }}>{val}{nota && <span style={{ color: "var(--texto-ter)" }}> — {nota}</span>}</div>
+      <div style={{ fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", minWidth: 92, flexShrink: 0 }}>{et}</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto)", flex: 1 }}>{val}{nota && <span style={{ color: "var(--texto-ter)" }}> — {nota}</span>}</div>
     </div>
   );
 
@@ -1747,7 +1845,7 @@ function DemoTutorial({ tipo }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           {btn("⚙️ Servicios")}{btn("+ Nuevo", true)}{sel("Todos los servicios")}{sel("Solo activos")}
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.6 }}>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.6 }}>
           <b>⚙️ Servicios:</b> crea y gestiona tus servicios (Uro-A, UCI, etc.).<br />
           <b>+ Nuevo:</b> agrega un paciente.<br />
           <b>Todos los servicios:</b> filtra la lista por servicio.<br />
@@ -1761,10 +1859,10 @@ function DemoTutorial({ tipo }) {
     return (
       <div style={caja}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>J.P.G.</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--primario)" }}>♂</span>
+          <span style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>J.P.G.</span>
+          <span style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--primario)" }}>♂</span>
           <span title="Estable">🟢</span><span title="Operado">🔪</span>
-          <span style={{ fontSize: 11, color: "var(--texto-sec)", marginLeft: "auto" }}>Cama 12 · Uro-A · Hospitalizado</span>
+          <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginLeft: "auto" }}>Cama 12 · Uro-A · Hospitalizado</span>
         </div>
         {fila("Ingreso", "12-05-2026", "día 3 post-op")}
         {fila("Diagnóstico", "Litiasis ureteral izq. obstructiva")}
@@ -1772,7 +1870,7 @@ function DemoTutorial({ tipo }) {
         {fila("Alergias", "Penicilina")}
         {fila("Estado clínico", "🟢 Estable")}
         {fila("Operado", "🔪 URS + láser Holmium")}
-        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.5 }}>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.5 }}>
           Más abajo en la ficha: <b>Evoluciones SOAP</b> (con Diuresis/Drenaje) y <b>Exámenes</b> (labs, imágenes) con constructores estructurados.
         </div>
       </div>
@@ -1783,12 +1881,12 @@ function DemoTutorial({ tipo }) {
     return (
       <div style={caja}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8, marginBottom: 10 }}>
-          <span style={{ fontWeight: 700, color: "var(--texto)", fontSize: 13 }}>J.P.G.</span>
+          <span style={{ fontWeight: 700, color: "var(--texto)", fontSize: "var(--fs-2)" }}>J.P.G.</span>
           <span style={{ color: "var(--primario)", fontWeight: 700 }}>♂</span>
           <span>🟢</span><span>🔪</span>
-          <span style={{ fontSize: 11, color: "var(--texto-sec)", marginLeft: "auto" }}>Cama 12</span>
+          <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginLeft: "auto" }}>Cama 12</span>
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.7 }}>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.7 }}>
           🟢 <b>Estable</b> &nbsp; 🟡 <b>Regular</b> &nbsp; 🔴 <b>De cuidado</b><br />
           🔪 <b>Operado</b> &nbsp;·&nbsp; ♂ / ♀ <b>sexo</b>
         </div>
@@ -1802,7 +1900,7 @@ function DemoTutorial({ tipo }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           {btn("📊 Importar Excel")}{btn("+ Nueva", true)}{sel("🗓️ Vista")}
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.6 }}>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.6 }}>
           <b>📊 Importar Excel:</b> carga varias cirugías de una planilla.<br />
           <b>+ Nueva:</b> agrega una cirugía (fecha, hora, paciente, procedimiento, cirujano, pabellón).<br />
           <b>🗓️ Mensual / 📅 Semanal / ☰ Lista:</b> tres modos de ver la tabla (usa ‹ › para cambiar de mes o semana).<br />
@@ -1817,12 +1915,12 @@ function DemoTutorial({ tipo }) {
       <div style={caja}>
         <div style={{ padding: "8px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--texto)" }}>UROTAC de control</span>
-            <span style={{ fontSize: 10, padding: "1px 8px", borderRadius: 20, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--exito)", marginLeft: "auto" }}>👥 Equipo</span>
+            <span style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>UROTAC de control</span>
+            <span style={{ fontSize: "var(--fs-xs)", padding: "1px 8px", borderRadius: 20, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--exito)", marginLeft: "auto" }}>👥 Equipo</span>
           </div>
-          <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.5 }}>Solicitar UROTAC de control en 3 meses para el paciente de cama 12 tras retiro de catéter JJ.</div>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.5 }}>Solicitar UROTAC de control en 3 meses para el paciente de cama 12 tras retiro de catéter JJ.</div>
         </div>
-        <div style={{ fontSize: 11, color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.5 }}>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.5 }}>
           Cada nota puede ser <b>👥 Equipo</b> (la ve todo el equipo) o <b>👤 Personal</b> (solo tú). Título opcional.
         </div>
       </div>
@@ -1833,11 +1931,11 @@ function DemoTutorial({ tipo }) {
     const secs = ["Descripción", "Indicaciones", "Contraindicaciones", "Preparación", "Técnica (pasos)", "Postoperatorio", "Complicaciones", "Duración y anestesia"];
     return (
       <div style={caja}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>🔪 Prostatectomía Radical</div>
-        <div style={{ fontSize: 10.5, color: "var(--texto-ter)", marginBottom: 8 }}>Categoría: Oncología</div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>🔪 Prostatectomía Radical</div>
+        <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginBottom: 8 }}>Categoría: Oncología</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
           {secs.map(s => (
-            <span key={s} style={{ fontSize: 10.5, padding: "3px 9px", borderRadius: 20, background: "var(--superficie)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)" }}>{s}</span>
+            <span key={s} style={{ fontSize: "var(--fs-xs)", padding: "3px 9px", borderRadius: 20, background: "var(--superficie)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)" }}>{s}</span>
           ))}
         </div>
       </div>
@@ -1848,10 +1946,10 @@ function DemoTutorial({ tipo }) {
     return (
       <div style={caja}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
-          <div style={{ width: 46, height: 30, borderRadius: 6, background: "var(--fondo-suave)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>▶️</div>
+          <div style={{ width: 46, height: 30, borderRadius: 6, background: "var(--fondo-suave)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--fs-2)" }}>▶️</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--texto)" }}>URS flexible con láser Holmium</div>
-            <div style={{ fontSize: 10.5, color: "var(--texto-ter)" }}>Litiasis · 8 min</div>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>URS flexible con láser Holmium</div>
+            <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)" }}>Litiasis · 8 min</div>
           </div>
         </div>
       </div>
@@ -1864,22 +1962,22 @@ function DemoTutorial({ tipo }) {
       if (tipo === "ok") { bg = "var(--exito-bg)"; bd = "1px solid var(--exito)"; col = "var(--exito)"; }
       if (tipo === "bad") { bg = "var(--peligro-bg)"; bd = "1px solid var(--peligro)"; col = "var(--peligro)"; }
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: bg, border: bd, color: col, fontSize: 11.5, fontWeight: tipo === "ok" ? 600 : 400 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: bg, border: bd, color: col, fontSize: "var(--fs-0)", fontWeight: tipo === "ok" ? 600 : 400 }}>
           <b>{letra}.</b><span style={{ flex: 1 }}>{texto}</span>{tipo === "ok" && <span>✓</span>}{tipo === "bad" && <span>✗</span>}
         </div>
       );
     };
     return (
       <div style={caja}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--texto)", marginBottom: 8, lineHeight: 1.4 }}>¿Tratamiento de elección en litiasis renal &gt; 2 cm?</div>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", marginBottom: 8, lineHeight: 1.4 }}>¿Tratamiento de elección en litiasis renal &gt; 2 cm?</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {alt("A", "LEOC", "bad")}
           {alt("B", "NLP (nefrolitotomía percutánea)", "ok")}
           {alt("C", "Manejo expectante")}
         </div>
         <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 8, background: "var(--fondo-suave)", borderLeft: "3px solid var(--primario)" }}>
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--primario)", marginBottom: 2 }}>💡 Explicación</div>
-          <div style={{ fontSize: 11, color: "var(--texto)", lineHeight: 1.4 }}>Verde = correcta · Rojo = tu elección si fue incorrecta, con la explicación debajo.</div>
+          <div style={{ fontSize: "var(--fs-xs)", fontWeight: 600, color: "var(--primario)", marginBottom: 2 }}>💡 Explicación</div>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto)", lineHeight: 1.4 }}>Verde = correcta · Rojo = tu elección si fue incorrecta, con la explicación debajo.</div>
         </div>
       </div>
     );
@@ -2008,14 +2106,14 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
         {/* Banner con la imagen de Uros a cuerpo completo */}
         {paso.uros && (
           <div style={{ position: "relative", background: "linear-gradient(180deg, #052A40 0%, #0A3D57 55%, #0E4E6E 100%)", borderRadius: "17px 17px 0 0", padding: rect || paso.demo ? "14px 12px 10px" : "22px 12px 14px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-            <button onClick={onClose} aria-label="Cerrar tutorial" style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.22)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            <button onClick={onClose} aria-label="Cerrar tutorial" style={{ position: "absolute", top: 10, right: 10, width: 30, height: 30, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.22)", color: "#fff", fontSize: "var(--fs-3)", fontWeight: 700, cursor: "pointer", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             <Uros expresion={paso.uros} size={rect || paso.demo ? 110 : 180} style={{ maxHeight: rect || paso.demo ? 120 : 200, width: "auto", filter: "drop-shadow(0 6px 14px rgba(0,0,0,0.35))" }} />
           </div>
         )}
 
         <div style={{ padding: "16px 18px 14px" }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: "var(--texto)", marginBottom: 6, lineHeight: 1.25 }}>{paso.titulo}</div>
-          <div style={{ fontSize: 14, lineHeight: 1.55, color: "var(--texto-sec)" }}>{paso.texto}</div>
+          <div style={{ fontSize: "var(--fs-2)", lineHeight: 1.55, color: "var(--texto-sec)" }}>{paso.texto}</div>
           {paso.demo && <DemoTutorial tipo={paso.demo} />}
 
           {/* Puntos de progreso */}
@@ -2025,12 +2123,12 @@ function TutorialTour({ rol, onGoToTab, onClose }) {
             ))}
           </div>
 
-          <button onClick={siguiente} style={{ width: "100%", padding: "12px", fontSize: 15, fontWeight: 700, borderRadius: 12, border: "none", background: "var(--primario)", color: "var(--texto-inv)", cursor: "pointer" }}>
+          <button onClick={siguiente} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-3)", fontWeight: 700, borderRadius: 12, border: "none", background: "var(--primario)", color: "var(--texto-inv)", cursor: "pointer" }}>
             {esUltimo ? "Entendido" : "Siguiente"}
           </button>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
-            <button onClick={onClose} style={{ padding: "7px 4px", fontSize: 12, background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Saltar tutorial</button>
-            {i > 0 && <button onClick={anterior} style={{ padding: "7px 4px", fontSize: 12, background: "none", border: "none", color: "var(--texto-sec)", cursor: "pointer", fontWeight: 600 }}>← Atrás</button>}
+            <button onClick={onClose} style={{ padding: "7px 4px", fontSize: "var(--fs-1)", background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Saltar tutorial</button>
+            {i > 0 && <button onClick={anterior} style={{ padding: "7px 4px", fontSize: "var(--fs-1)", background: "none", border: "none", color: "var(--texto-sec)", cursor: "pointer", fontWeight: 600 }}>← Atrás</button>}
           </div>
         </div>
       </div>
@@ -2122,7 +2220,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
         alignItems: "center",
         background: "var(--fondo-suave)",
       }}>
-        <div style={{fontSize:14, fontWeight:600, color:"var(--texto)"}}>Mis conversaciones</div>
+        <div style={{fontSize:"var(--fs-2)", fontWeight:600, color:"var(--texto)"}}>Mis conversaciones</div>
         <button onClick={onCerrar} style={{
           background: "none",
           border: "none",
@@ -2139,7 +2237,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
         <button onClick={onNueva} style={{
           width: "100%",
           padding: "9px",
-          fontSize: 13,
+          fontSize: "var(--fs-2)",
           fontWeight: 500,
           background: "var(--primario)",
           color:"var(--texto-inv)",
@@ -2152,7 +2250,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
       {/* Lista de conversaciones */}
       <div style={{flex: 1, overflowY: "auto", padding: "8px 6px"}}>
         {conversaciones.length === 0 ? (
-          <div style={{textAlign:"center", padding:"24px 16px", color:"var(--texto-ter)", fontSize:12, lineHeight:1.5}}>
+          <div style={{textAlign:"center", padding:"24px 16px", color:"var(--texto-ter)", fontSize:"var(--fs-1)", lineHeight:1.5}}>
             <Uros expresion="guinando" size={84} style={{margin:"0 auto 10px"}}/>
             No tienes conversaciones aún.<br/>Empieza una con el botón de arriba.
           </div>
@@ -2185,7 +2283,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                 }}
               >
                 <div style={{
-                  fontSize: 12.5,
+                  fontSize: "var(--fs-1)",
                   fontWeight: esActual ? 500 : 400,
                   color: "var(--texto)",
                   marginBottom: 3,
@@ -2196,7 +2294,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: "vertical",
                 }}>{conv.titulo || "Sin título"}</div>
-                <div style={{fontSize: 10, color: "var(--texto-ter)"}}>
+                <div style={{fontSize: "var(--fs-xs)", color: "var(--texto-ter)"}}>
                   {formatearFecha(conv.fecha_actualizacion)}
                 </div>
                 <button
@@ -2209,7 +2307,7 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
                     background: "none",
                     border: "none",
                     color: "var(--peligro)",
-                    fontSize: 14,
+                    fontSize: "var(--fs-2)",
                     cursor: "pointer",
                     padding: 2,
                     opacity: 0,
@@ -2254,7 +2352,7 @@ function renderMarkdown(texto) {
 function ChatBubble({ msg, userInitials, onPlayVideo }) {
   const isUser = msg.role === "user";
   const [fuentesExpandidas, setFuentesExpandidas] = useState(false);
-  const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "var(--primario)" : "var(--superficie)", color: isUser ?"var(--texto-inv)":"var(--texto)", fontSize:14, lineHeight:1.6, border: isUser ? "none" : "0.5px solid var(--borde)", whiteSpace:"pre-wrap" };
+  const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "var(--primario)" : "var(--superficie)", color: isUser ?"var(--texto-inv)":"var(--texto)", fontSize:"var(--fs-2)", lineHeight:1.6, border: isUser ? "none" : "0.5px solid var(--borde)", whiteSpace:"pre-wrap" };
   return (
     <div style={{display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:"12px"}}>
       {!isUser && <div style={{marginRight:8,marginTop:2}}><UrosAvatar size={30}/></div>}
@@ -2265,22 +2363,22 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
         }
         {msg.cirugiasConsulta && (
           <div style={{marginTop:6,padding:"7px 10px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:8}}>
-            <div style={{fontSize:10,fontWeight:500,color:"var(--primario-osc)"}}>📅 Información de tu tabla quirúrgica · {msg.cirugiasConsulta.cantidad} {msg.cirugiasConsulta.cantidad === 1 ? "cirugía" : "cirugías"} en {msg.cirugiasConsulta.rango}</div>
+            <div style={{fontSize:"var(--fs-xs)",fontWeight:500,color:"var(--primario-osc)"}}>📅 Información de tu tabla quirúrgica · {msg.cirugiasConsulta.cantidad} {msg.cirugiasConsulta.cantidad === 1 ? "cirugía" : "cirugías"} en {msg.cirugiasConsulta.rango}</div>
           </div>
         )}
         {msg.pacientesConsulta && (
           <div style={{marginTop:6,padding:"7px 10px",background:"var(--chip-rosa-bg)",border:"0.5px solid var(--chip-rosa-borde)",borderRadius:8}}>
-            <div style={{fontSize:10,fontWeight:500,color:"var(--chip-rosa)"}}>🏥 Información de tus pacientes · {msg.pacientesConsulta.cantidad} {msg.pacientesConsulta.cantidad === 1 ? "paciente" : "pacientes"}</div>
+            <div style={{fontSize:"var(--fs-xs)",fontWeight:500,color:"var(--chip-rosa)"}}>🏥 Información de tus pacientes · {msg.pacientesConsulta.cantidad} {msg.pacientesConsulta.cantidad === 1 ? "paciente" : "pacientes"}</div>
           </div>
         )}
         {msg.fuentes && msg.fuentes.length > 0 && (
           <div style={{marginTop:6,padding:"7px 10px",background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",borderRadius:8}}>
-            <div style={{fontSize:10,fontWeight:500,color:"var(--exito)",marginBottom:4}}>📚 Basado en tu base de conocimiento:</div>
+            <div style={{fontSize:"var(--fs-xs)",fontWeight:500,color:"var(--exito)",marginBottom:4}}>📚 Basado en tu base de conocimiento:</div>
             <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {(fuentesExpandidas ? msg.fuentes : msg.fuentes.slice(0,2)).map(f => <div key={f.id} style={{fontSize:11,color:"var(--exito)",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"var(--texto-ter)"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"var(--texto-ter)"}}> ({f.categoria})</span> : null)}</div>)}
+              {(fuentesExpandidas ? msg.fuentes : msg.fuentes.slice(0,2)).map(f => <div key={f.id} style={{fontSize:"var(--fs-0)",color:"var(--exito)",lineHeight:1.4}}>• <strong>{f.titulo}</strong>{f.fuente ? <span style={{color:"var(--texto-ter)"}}> — {f.fuente}</span> : (f.categoria ? <span style={{color:"var(--texto-ter)"}}> ({f.categoria})</span> : null)}</div>)}
             </div>
             {msg.fuentes.length > 2 && (
-              <button onClick={()=>setFuentesExpandidas(v=>!v)} style={{marginTop:5,padding:0,background:"none",border:"none",color:"var(--exito)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+              <button onClick={()=>setFuentesExpandidas(v=>!v)} style={{marginTop:5,padding:0,background:"none",border:"none",color:"var(--exito)",fontSize:"var(--fs-0)",fontWeight:600,cursor:"pointer"}}>
                 {fuentesExpandidas ? "▴ Ver menos" : `▾ Ver ${msg.fuentes.length - 2} fuente${msg.fuentes.length - 2 === 1 ? "" : "s"} más`}
               </button>
             )}
@@ -2288,7 +2386,7 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
         )}
         {msg.videos && msg.videos.length > 0 && (
           <div style={{marginTop:8,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-            <div style={{fontSize:11,fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>🎬 Videos sugeridos de la biblioteca</div>
+            <div style={{fontSize:"var(--fs-0)",fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>🎬 Videos sugeridos de la biblioteca</div>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {msg.videos.map(v => {
                 const ytId = getYouTubeId(v.url);
@@ -2297,10 +2395,10 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
                   <div key={v.id} onClick={()=>onPlayVideo(v)} style={{display:"flex",alignItems:"center",gap:10,padding:"6px",background:"var(--superficie)",borderRadius:8,cursor:"pointer",border:"0.5px solid var(--header-bg)"}}>
                     {thumb && <img src={thumb} alt="" style={{width:60,height:45,objectFit:"cover",borderRadius:4,flexShrink:0}}/>}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:500,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.titulo}</div>
-                      <div style={{fontSize:10,color:"var(--texto-ter)"}}>{v.categoria} · {v.autor}</div>
+                      <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.titulo}</div>
+                      <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>{v.categoria} · {v.autor}</div>
                     </div>
-                    <div style={{fontSize:13,color:"var(--primario)"}}>▶</div>
+                    <div style={{fontSize:"var(--fs-2)",color:"var(--primario)"}}>▶</div>
                   </div>
                 );
               })}
@@ -2308,14 +2406,14 @@ function ChatBubble({ msg, userInitials, onPlayVideo }) {
           </div>
         )}
       </div>
-      {isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario-claro)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:500,color:"var(--texto-inv)",marginLeft:8,flexShrink:0,marginTop:2}}>{userInitials}</div>}
+      {isUser && <div style={{width:30,height:30,borderRadius:"50%",background:"var(--primario-claro)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto-inv)",marginLeft:8,flexShrink:0,marginTop:2}}>{userInitials}</div>}
     </div>
   );
 }
 
-const inputStyle = { width:"100%", padding:"10px 12px", fontSize:14, borderRadius:8, border:"1px solid var(--borde)", background:"var(--superficie)", color:"var(--texto)", outline:"none", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" };
-const labelStyle = { fontSize:12, fontWeight:500, color:"var(--texto-sec)", marginBottom:4, display:"block" };
-const btnPrimary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"var(--primario)", color:"var(--texto-inv)", border:"none", borderRadius:8, cursor:"pointer", marginTop:6 };
+const inputStyle = { width:"100%", padding:"10px 12px", fontSize:"var(--fs-2)", borderRadius:8, border:"1px solid var(--borde)", background:"var(--superficie)", color:"var(--texto)", outline:"none", boxSizing:"border-box", marginBottom:10, fontFamily:"inherit" };
+const labelStyle = { fontSize:"var(--fs-1)", fontWeight:500, color:"var(--texto-sec)", marginBottom:4, display:"block" };
+const btnPrimary = { width:"100%", padding:"11px", fontSize:"var(--fs-2)", fontWeight:500, background:"var(--primario)", color:"var(--texto-inv)", border:"none", borderRadius:8, cursor:"pointer", marginTop:6 };
 
 // ============================================================
 // TEMAS (modo claro / oscuro) — variables CSS
@@ -2323,6 +2421,15 @@ const btnPrimary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, 
 const THEME_CSS = `
 :root, [data-theme="light"] {
   color-scheme: light;
+  /* Tamaños unificados (tipografía e íconos) — usar var(--fs-*) / var(--icon-*) */
+  --fs-xs: 10.5px;  /* etiquetas diminutas */
+  --fs-0: 11.5px;   /* metadatos, chips */
+  --fs-1: 12.5px;   /* texto secundario */
+  --fs-2: 13.5px;   /* cuerpo base */
+  --fs-3: 15px;     /* título de sección */
+  --fs-4: 17px;     /* título grande */
+  --icon-sm: 28px;  /* botón de ícono chico (lado) */
+  --icon-fs: 15px;  /* ícono dentro del botón */
   --fondo: #e8f3fb;
   --header-bg: #d0e9f8;
   --fondo-suave: #f0f8fd;
@@ -2405,7 +2512,7 @@ if (typeof document !== "undefined" && !document.getElementById("uro-theme-css")
   document.head.appendChild(st);
   try { document.documentElement.setAttribute("data-theme", localStorage.getItem("uro_tema") || "light"); } catch {}
 }
-const btnSecondary = { width:"100%", padding:"11px", fontSize:14, fontWeight:500, background:"var(--superficie)", color:"var(--primario)", border:"1px solid var(--primario)", borderRadius:8, cursor:"pointer", marginTop:8 };
+const btnSecondary = { width:"100%", padding:"11px", fontSize:"var(--fs-2)", fontWeight:500, background:"var(--superficie)", color:"var(--primario)", border:"1px solid var(--primario)", borderRadius:8, cursor:"pointer", marginTop:8 };
 
 function AuthScreen({ onLogin }) {
   const [view, setView] = useState("welcome");
@@ -2476,13 +2583,13 @@ function AuthScreen({ onLogin }) {
       <div style={{padding:"40px 32px", textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:18}}><LogoUroSearch size={78}/></div>
         <div style={{fontSize:32, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
-        <div style={{fontSize:15, color:"var(--texto-sec)", marginBottom:34, lineHeight:1.5}}>Asistente Clínico de Urología</div>
+        <div style={{fontSize:"var(--fs-3)", color:"var(--texto-sec)", marginBottom:34, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
           <button onClick={()=>{setView("login"); setError(""); setInfo("");}} style={{...btnPrimary, padding:"14px", fontSize:16}}>Iniciar sesión</button>
           <button onClick={()=>{setView("register"); setError(""); setInfo("");}} style={{...btnSecondary, padding:"14px", fontSize:16}}>Solicitar cuenta</button>
         </div>
-        <div style={{fontSize:12, color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
-        <div style={{fontSize:12, fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
+        <div style={{fontSize:"var(--fs-1)", color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
+        <div style={{fontSize:"var(--fs-1)", fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
     );
@@ -2491,7 +2598,7 @@ function AuthScreen({ onLogin }) {
   if (view === "login") {
     return (
       <div style={{padding:"24px 24px 32px"}}>
-        <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
+        <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24}}>
           <LogoUroSearch size={36}/>
           <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Iniciar sesión</div>
@@ -2500,23 +2607,23 @@ function AuthScreen({ onLogin }) {
         <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Contraseña</label>
         <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" style={inputStyle} disabled={loading}/>
-        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
+        {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
         <button onClick={handleLogin} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
-        <div style={{textAlign:"center",fontSize:12,color:"var(--texto-sec)",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Solicítala aquí</button></div>
+        <div style={{textAlign:"center",fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:"var(--fs-1)"}}>Solicítala aquí</button></div>
       </div>
     );
   }
 
   return (
     <div style={{padding:"24px 24px 32px"}}>
-      <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
+      <button onClick={()=>setView("welcome")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
         <LogoUroSearch size={36}/>
         <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Solicitar cuenta</div>
       </div>
-      <div style={{fontSize:12,color:"var(--texto-sec)",marginBottom:18,lineHeight:1.5}}>Tu cuenta será revisada por el administrador antes de ser activada.</div>
+      <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginBottom:18,lineHeight:1.5}}>Tu cuenta será revisada por el administrador antes de ser activada.</div>
       <label style={labelStyle}>Nombre completo</label>
       <input value={form.nombre} onChange={e=>setForm({...form,nombre:e.target.value})} placeholder="Dr. Juan Pérez" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Correo electrónico</label>
@@ -2526,19 +2633,19 @@ function AuthScreen({ onLogin }) {
         {ESPECIALIDADES.map(e=><option key={e}>{e}</option>)}
       </select>
       <label style={labelStyle}>Documento de respaldo</label>
-      <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>Adjunta título de especialidad o carta de residencia (PDF/JPG/PNG, máx. 5 MB)</div>
+      <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:6}}>Adjunta título de especialidad o carta de residencia (PDF/JPG/PNG, máx. 5 MB)</div>
       <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} style={{display:"none"}} disabled={loading}/>
-      <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
+      <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
       <label style={labelStyle}>Contraseña</label>
       <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 6 caracteres" style={inputStyle} disabled={loading}/>
       <label style={labelStyle}>Confirmar contraseña</label>
       <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle} disabled={loading}/>
-      {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
-      {info && <div style={{fontSize:12,color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
+      {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
+      {info && <div style={{fontSize:"var(--fs-1)",color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
       <button onClick={handleRegister} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
         {loading ? "Enviando solicitud..." : "Enviar solicitud"}
       </button>
-      <div style={{textAlign:"center",fontSize:12,color:"var(--texto-sec)",marginTop:14}}>¿Ya tienes cuenta? <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:12}}>Inicia sesión</button></div>
+      <div style={{textAlign:"center",fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginTop:14}}>¿Ya tienes cuenta? <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:"var(--fs-1)"}}>Inicia sesión</button></div>
     </div>
   );
 }
@@ -2601,14 +2708,14 @@ function AdminPanel() {
   };
 
   const badge = (e) => ({
-    fontSize:10, fontWeight:500, padding:"2px 8px", borderRadius:10,
+    fontSize:"var(--fs-xs)", fontWeight:500, padding:"2px 8px", borderRadius:10,
     background: e==="aprobado"?"var(--exito-bg)":e==="rechazado"?"var(--peligro-bg)":"var(--alerta-bg)",
     color: e==="aprobado"?"var(--exito)":e==="rechazado"?"var(--peligro)":"var(--alerta)"
   });
 
   if (loading) {
     return (
-      <div style={{padding:"40px 16px", textAlign:"center", color:"var(--texto-ter)", fontSize:13}}>
+      <div style={{padding:"40px 16px", textAlign:"center", color:"var(--texto-ter)", fontSize:"var(--fs-2)"}}>
         Cargando usuarios...
       </div>
     );
@@ -2618,22 +2725,22 @@ function AdminPanel() {
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
         <div>
-          <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:4}}>Panel de administración</div>
-          <div style={{fontSize:12,color:"var(--texto-sec)"}}>Gestión de cuentas del equipo clínico</div>
+          <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:4}}>Panel de administración</div>
+          <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)"}}>Gestión de cuentas del equipo clínico</div>
         </div>
-        <button onClick={cargarPerfiles} style={{padding:"6px 12px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--primario)",borderRadius:6,cursor:"pointer"}}>↻ Actualizar</button>
+        <button onClick={cargarPerfiles} style={{padding:"6px 12px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--primario)",borderRadius:6,cursor:"pointer"}}>↻ Actualizar</button>
       </div>
 
-      {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:10}}>{error}</div>}
+      {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:10}}>{error}</div>}
 
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
         {[["pendiente",`Pendientes (${counts.pendiente})`],["aprobado",`Aprobados (${counts.aprobado})`],["rechazado",`Rechazados (${counts.rechazado})`],["todos","Todos"]].map(([id,label]) => (
-          <button key={id} onClick={()=>setFiltro(id)} style={{padding:"6px 12px",fontSize:12,fontWeight:filtro===id?500:400,borderRadius:6,cursor:"pointer",border:filtro===id?"none":"0.5px solid var(--borde)",background:filtro===id?"var(--primario)":"var(--superficie)",color:filtro===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>
+          <button key={id} onClick={()=>setFiltro(id)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:filtro===id?500:400,borderRadius:6,cursor:"pointer",border:filtro===id?"none":"0.5px solid var(--borde)",background:filtro===id?"var(--primario)":"var(--superficie)",color:filtro===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>
         ))}
       </div>
 
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:13}}>
+        <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>
           {perfiles.length === 0 ? "No hay usuarios registrados" : "No hay usuarios en esta categoría"}
         </div>
       ) : (
@@ -2641,33 +2748,33 @@ function AdminPanel() {
           {filtrados.map(u => (
             <div key={u.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                <div style={{fontSize:14,fontWeight:500,color:"var(--texto)"}}>{u.nombre || "Sin nombre"}</div>
+                <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)"}}>{u.nombre || "Sin nombre"}</div>
                 <span style={badge(u.estado)}>{u.estado}</span>
                 {u.rol === "admin" && <span style={{fontSize:9,padding:"1px 6px",background:"var(--navy-fijo)",color:"var(--texto-inv)",borderRadius:4,fontWeight:500}}>ADMIN</span>}
               </div>
-              <div style={{fontSize:12,color:"var(--texto-sec)"}}>{u.correo} · {u.especialidad || "Sin especialidad"}</div>
-              {u.fecha_registro && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
+              <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)"}}>{u.correo} · {u.especialidad || "Sin especialidad"}</div>
+              {u.fecha_registro && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
               {u.documento_nombre && (
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6,fontSize:11,color:"var(--texto-sec)",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6,fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
               )}
               {u.rol !== "admin" && (
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
-                  <span style={{fontSize:11,color:"var(--texto-ter)"}}>Perfil:</span>
-                  <select value={ROLES_ASIGNABLES.some(([v])=>v===u.rol) ? u.rol : ""} onChange={e=>{ if(e.target.value) cambiarRol(u.id, e.target.value); }} style={{padding:"4px 8px",fontSize:12,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+                  <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>Perfil:</span>
+                  <select value={ROLES_ASIGNABLES.some(([v])=>v===u.rol) ? u.rol : ""} onChange={e=>{ if(e.target.value) cambiarRol(u.id, e.target.value); }} style={{padding:"4px 8px",fontSize:"var(--fs-1)",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
                     <option value="" disabled>— Asignar rol —</option>
                     {ROLES_ASIGNABLES.map(([v,l])=><option key={v} value={v}>{l}</option>)}
                   </select>
-                  {!ROLES_ASIGNABLES.some(([v])=>v===u.rol) && u.rol!=="admin" && <span style={{fontSize:10,color:"var(--alerta)",fontWeight:600}}>sin asignar</span>}
+                  {!ROLES_ASIGNABLES.some(([v])=>v===u.rol) && u.rol!=="admin" && <span style={{fontSize:"var(--fs-xs)",color:"var(--alerta)",fontWeight:600}}>sin asignar</span>}
                 </div>
               )}
               <div style={{display:"flex",gap:6,marginTop:8}}>
                 {u.estado === "pendiente" && (<>
-                  <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aprobar</button>
-                  <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--peligro)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✗ Rechazar</button>
+                  <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aprobar</button>
+                  <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:"var(--fs-1)",background:"var(--peligro)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✗ Rechazar</button>
                 </>)}
-                {u.estado === "aprobado" && u.rol !== "admin" && <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
-                {u.estado === "rechazado" && <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:12,background:"var(--superficie)",color:"var(--exito)",border:"0.5px solid var(--exito)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
-                {u.rol !== "admin" && <button onClick={()=>eliminar(u.id)} style={{padding:"7px 10px",fontSize:12,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
+                {u.estado === "aprobado" && u.rol !== "admin" && <button onClick={()=>cambiar(u.id,"rechazado")} style={{flex:1,padding:"7px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Suspender</button>}
+                {u.estado === "rechazado" && <button onClick={()=>cambiar(u.id,"aprobado")} style={{flex:1,padding:"7px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--exito)",border:"0.5px solid var(--exito)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Reactivar</button>}
+                {u.rol !== "admin" && <button onClick={()=>eliminar(u.id)} style={{padding:"7px 10px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
               </div>
             </div>
           ))}
@@ -2792,14 +2899,14 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   if (vista === "nueva" && isAdmin) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nueva pregunta</div>
+        <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nueva pregunta</div>
         <label style={labelStyle}>Enunciado</label>
         <textarea value={form.enunciado} onChange={e=>setForm({...form,enunciado:e.target.value})} placeholder="Escribe la pregunta..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
         <label style={labelStyle}>Alternativas (marca la correcta)</label>
         {form.alternativas.map((alt, i) => (
           <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-            <button onClick={()=>setForm({...form,correcta:i})} style={{width:24,height:24,borderRadius:"50%",border:form.correcta===i?"none":"1px solid var(--borde)",background:form.correcta===i?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{form.correcta===i?"✓":""}</button>
+            <button onClick={()=>setForm({...form,correcta:i})} style={{width:24,height:24,borderRadius:"50%",border:form.correcta===i?"none":"1px solid var(--borde)",background:form.correcta===i?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:"var(--fs-1)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{form.correcta===i?"✓":""}</button>
             <input value={alt} onChange={e=>{const nuevas=[...form.alternativas];nuevas[i]=e.target.value;setForm({...form,alternativas:nuevas});}} placeholder={`Alternativa ${String.fromCharCode(65+i)}`} style={{...inputStyle,marginBottom:0,flex:1}}/>
           </div>
         ))}
@@ -2807,7 +2914,7 @@ function PreguntasPanel({ currentUser, isAdmin }) {
         <textarea value={form.feedback} onChange={e=>setForm({...form,feedback:e.target.value})} placeholder="Explicación que se muestra al responder..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
         <label style={labelStyle}>Categoría</label>
         <input value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})} placeholder="Ej: Litiasis, Oncología, NMIBC..." style={inputStyle}/>
-        {errorForm && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
+        {errorForm && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
         <button onClick={guardar} style={{...btnPrimary,marginTop:0}}>Guardar pregunta</button>
       </div>
     );
@@ -2818,20 +2925,20 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",padding:0}}>← Volver al quiz</button>
-          <span style={{fontSize:12,color:"var(--texto-ter)"}}>{preguntas.length} preguntas</span>
+          <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",padding:0}}>← Volver al quiz</button>
+          <span style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)"}}>{preguntas.length} preguntas</span>
         </div>
         {preguntas.length === 0 ? (
-          <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>No hay preguntas aún.</div>
+          <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>No hay preguntas aún.</div>
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {preguntas.map(p => (
               <div key={p.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 12px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
-                  <span style={{fontSize:10,color:"var(--primario)",fontWeight:600}}>{p.categoria||"General"}</span>
-                  {isAdmin && <button onClick={()=>eliminar(p.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>}
+                  <span style={{fontSize:"var(--fs-xs)",color:"var(--primario)",fontWeight:600}}>{p.categoria||"General"}</span>
+                  {isAdmin && <button onClick={()=>eliminar(p.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>}
                 </div>
-                <div style={{fontSize:13,color:"var(--texto)",marginTop:3}}>{p.enunciado}</div>
+                <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",marginTop:3}}>{p.enunciado}</div>
               </div>
             ))}
           </div>
@@ -2846,12 +2953,12 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     const colorPct = (p) => p >= 80 ? "var(--exito)" : p >= 60 ? "var(--alerta)" : "var(--peligro)";
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver al quiz</button>
+        <button onClick={()=>setVista("quiz")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver al quiz</button>
         <div style={{fontSize:16,fontWeight:700,color:"var(--texto)",marginBottom:2}}>📊 Mi progreso</div>
-        <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:14}}>Se calcula con tus respuestas en este dispositivo.</div>
+        <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:14}}>Se calcula con tus respuestas en este dispositivo.</div>
 
         {m.total === 0 ? (
-          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
             Todavía no has respondido preguntas.<br/>Responde algunas y aquí verás en qué temas estás más débil.
           </div>
         ) : (
@@ -2859,27 +2966,27 @@ function PreguntasPanel({ currentUser, isAdmin }) {
             <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
               <div style={{flex:"1 1 110px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
                 <div style={{fontSize:24,fontWeight:700,color:colorPct(m.pct)}}>{m.pct}%</div>
-                <div style={{fontSize:11,color:"var(--texto-sec)"}}>Correctas ({m.aciertos}/{m.total})</div>
+                <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)"}}>Correctas ({m.aciertos}/{m.total})</div>
               </div>
               <div style={{flex:"1 1 110px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
                 <div style={{fontSize:24,fontWeight:700,color:m.pctUlt!=null?colorPct(m.pctUlt):"var(--texto-ter)"}}>{m.pctUlt!=null?`${m.pctUlt}%`:"—"}</div>
-                <div style={{fontSize:11,color:"var(--texto-sec)"}}>Últimas 20</div>
+                <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)"}}>Últimas 20</div>
               </div>
               <div style={{flex:"1 1 110px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px"}}>
                 <div style={{fontSize:24,fontWeight:700,color:"var(--primario)"}}>{m.cats.length}</div>
-                <div style={{fontSize:11,color:"var(--texto-sec)"}}>Temas practicados</div>
+                <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)"}}>Temas practicados</div>
               </div>
             </div>
 
             {m.debiles.length > 0 && (
               <div style={{background:"var(--peligro-bg)",border:"0.5px solid var(--peligro)",borderRadius:10,padding:"11px 13px",marginBottom:14}}>
-                <div style={{fontSize:13,fontWeight:700,color:"var(--peligro)",marginBottom:4}}>🎯 Dónde estás más débil</div>
-                <div style={{fontSize:12,color:"var(--texto)",lineHeight:1.5}}>
+                <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--peligro)",marginBottom:4}}>🎯 Dónde estás más débil</div>
+                <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",lineHeight:1.5}}>
                   {m.debiles.map(c => `${c.cat} (${c.pct}%)`).join(" · ")}
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
                   {m.debiles.slice(0,3).map(c => (
-                    <button key={c.cat} onClick={()=>{ setFiltroCat(c.cat); setVista("quiz"); }} style={{padding:"6px 10px",fontSize:11.5,fontWeight:600,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:14,cursor:"pointer"}}>
+                    <button key={c.cat} onClick={()=>{ setFiltroCat(c.cat); setVista("quiz"); }} style={{padding:"6px 10px",fontSize:"var(--fs-0)",fontWeight:600,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:14,cursor:"pointer"}}>
                       Practicar {c.cat}
                     </button>
                   ))}
@@ -2887,13 +2994,13 @@ function PreguntasPanel({ currentUser, isAdmin }) {
               </div>
             )}
 
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:8}}>Rendimiento por tema</div>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:8}}>Rendimiento por tema</div>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
               {m.cats.map(c => (
                 <div key={c.cat} onClick={()=>{ setFiltroCat(c.cat); setVista("quiz"); }} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"10px 12px",cursor:"pointer"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:5,gap:8}}>
-                    <span style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>{c.cat}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:colorPct(c.pct),flexShrink:0}}>{c.pct}% <span style={{fontWeight:400,color:"var(--texto-ter)"}}>({c.ok}/{c.n})</span></span>
+                    <span style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>{c.cat}</span>
+                    <span style={{fontSize:"var(--fs-1)",fontWeight:700,color:colorPct(c.pct),flexShrink:0}}>{c.pct}% <span style={{fontWeight:400,color:"var(--texto-ter)"}}>({c.ok}/{c.n})</span></span>
                   </div>
                   <div style={{height:6,background:"var(--fondo-suave)",borderRadius:3,overflow:"hidden"}}>
                     <div style={{width:`${c.pct}%`,height:"100%",background:colorPct(c.pct),borderRadius:3,transition:"width .3s"}}/>
@@ -2902,7 +3009,7 @@ function PreguntasPanel({ currentUser, isAdmin }) {
               ))}
             </div>
 
-            <button onClick={()=>{ if(confirm("¿Borrar tu historial de respuestas? Las métricas volverán a cero.")){ borrarHistorialQuiz(currentUser.id); setHistorial([]); } }} style={{padding:"8px 12px",fontSize:12,background:"none",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>
+            <button onClick={()=>{ if(confirm("¿Borrar tu historial de respuestas? Las métricas volverán a cero.")){ borrarHistorialQuiz(currentUser.id); setHistorial([]); } }} style={{padding:"8px 12px",fontSize:"var(--fs-1)",background:"none",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>
               Reiniciar mi progreso
             </button>
           </>
@@ -2915,14 +3022,14 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
-        <div><div style={{fontSize:13,color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
-          {metricasQuiz.total > 0 && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>Llevas {metricasQuiz.total} respondidas · {metricasQuiz.pct}% correctas</div>}
+        <div><div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>{preguntas.length} preguntas para estudiar</div>
+          {metricasQuiz.total > 0 && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>Llevas {metricasQuiz.total} respondidas · {metricasQuiz.pct}% correctas</div>}
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          <button onClick={()=>setVista("metricas")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>📊 Mi progreso</button>
+          <button onClick={()=>setVista("metricas")} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>📊 Mi progreso</button>
           {isAdmin && (<>
-            <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
-            <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
+            <button onClick={()=>setVista("nueva")} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+            <button onClick={()=>setVista("lista")} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Gestionar</button>
           </>)}
         </div>
       </div>
@@ -2930,22 +3037,22 @@ function PreguntasPanel({ currentUser, isAdmin }) {
       {categorias.length > 1 && (
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
           {categorias.map(c => (
-            <button key={c} onClick={()=>{setFiltroCat(c);setIdx(0);setSeleccion(null);setMostrarResp(false);}} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid var(--borde)",background:filtroCat===c?"var(--primario)":"var(--superficie)",color:filtroCat===c?"var(--texto-inv)":"var(--texto-sec)",fontWeight:filtroCat===c?600:400}}>{c}</button>
+            <button key={c} onClick={()=>{setFiltroCat(c);setIdx(0);setSeleccion(null);setMostrarResp(false);}} style={{padding:"4px 11px",fontSize:"var(--fs-0)",borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid var(--borde)",background:filtroCat===c?"var(--primario)":"var(--superficie)",color:filtroCat===c?"var(--texto-inv)":"var(--texto-sec)",fontWeight:filtroCat===c?600:400}}>{c}</button>
           ))}
         </div>
       )}
 
       {loading ? (
-        <div style={{textAlign:"center",padding:"40px",color:"var(--texto-ter)",fontSize:13}}>Cargando...</div>
+        <div style={{textAlign:"center",padding:"40px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Cargando...</div>
       ) : !actual ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
           {preguntas.length === 0 ? (isAdmin ? "Aún no has creado preguntas. Usa el botón \"+ Nueva\"." : "El administrador aún no ha creado preguntas.") : "No hay preguntas en esta categoría."}
         </div>
       ) : (
         <div>
-          <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8,textAlign:"center"}}>Pregunta {idx+1} de {filtradas.length}</div>
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8,textAlign:"center"}}>Pregunta {idx+1} de {filtradas.length}</div>
           <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px",marginBottom:12}}>
-            <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",lineHeight:1.5,marginBottom:14}}>{actual.enunciado}</div>
+            <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",lineHeight:1.5,marginBottom:14}}>{actual.enunciado}</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {(actual.alternativas||[]).map((alt, i) => {
                 let bg = "var(--superficie)", border = "0.5px solid var(--borde)", color = "var(--texto)";
@@ -2954,7 +3061,7 @@ function PreguntasPanel({ currentUser, isAdmin }) {
                   else if (i === seleccion) { bg = "var(--peligro-bg)"; border = "1px solid var(--peligro)"; color = "var(--peligro)"; }
                 }
                 return (
-                  <button key={i} onClick={()=>responder(i)} disabled={mostrarResp} style={{textAlign:"left",padding:"11px 14px",fontSize:14,background:bg,border,borderRadius:8,cursor:mostrarResp?"default":"pointer",color,display:"flex",alignItems:"center",gap:10,fontWeight:mostrarResp&&i===actual.correcta?600:400}}>
+                  <button key={i} onClick={()=>responder(i)} disabled={mostrarResp} style={{textAlign:"left",padding:"11px 14px",fontSize:"var(--fs-2)",background:bg,border,borderRadius:8,cursor:mostrarResp?"default":"pointer",color,display:"flex",alignItems:"center",gap:10,fontWeight:mostrarResp&&i===actual.correcta?600:400}}>
                     <span style={{fontWeight:600,flexShrink:0}}>{String.fromCharCode(65+i)}.</span>
                     <span style={{flex:1}}>{alt}</span>
                     {mostrarResp && i === actual.correcta && <span>✓</span>}
@@ -2966,21 +3073,21 @@ function PreguntasPanel({ currentUser, isAdmin }) {
             {mostrarResp && (
               <div style={{marginTop:14,display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,background:seleccion===actual.correcta?"var(--exito-bg)":"var(--fondo-suave)"}}>
                 <Uros expresion={seleccion===actual.correcta?"bienhecho":"explicando"} size={44}/>
-                <div style={{fontSize:13,fontWeight:600,color:seleccion===actual.correcta?"var(--exito)":"var(--texto-sec)"}}>
+                <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:seleccion===actual.correcta?"var(--exito)":"var(--texto-sec)"}}>
                   {seleccion===actual.correcta ? "¡Bien hecho!" : "Revisa la explicación 👇"}
                 </div>
               </div>
             )}
             {mostrarResp && actual.feedback && (
               <div style={{marginTop:10,padding:"12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:"3px solid var(--primario)"}}>
-                <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:4}}>💡 Explicación</div>
-                <div style={{fontSize:13,color:"var(--texto)",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{actual.feedback}</div>
+                <div style={{fontSize:"var(--fs-0)",fontWeight:600,color:"var(--primario)",marginBottom:4}}>💡 Explicación</div>
+                <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",lineHeight:1.5,whiteSpace:"pre-wrap"}}>{actual.feedback}</div>
               </div>
             )}
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"space-between"}}>
-            <button onClick={anterior} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1}}>← Anterior</button>
-            <button onClick={siguiente} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:13,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1,fontWeight:500}}>Siguiente →</button>
+            <button onClick={anterior} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1}}>← Anterior</button>
+            <button onClick={siguiente} disabled={filtradas.length<=1} style={{padding:"10px 16px",fontSize:"var(--fs-2)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:filtradas.length<=1?"default":"pointer",opacity:filtradas.length<=1?0.5:1,fontWeight:500}}>Siguiente →</button>
           </div>
         </div>
       )}
@@ -3141,9 +3248,9 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   if (vista === "nuevo") {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
-        <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Agregar a base de conocimiento</div>
-        <div style={{background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:11,color:"var(--exito)",lineHeight:1.5}}>📚 Lo que subas será la fuente prioritaria que UroSearch use para responder.</div>
+        <button onClick={()=>{setVista("lista");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:14}}>Agregar a base de conocimiento</div>
+        <div style={{background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:"var(--fs-0)",color:"var(--exito)",lineHeight:1.5}}>📚 Lo que subas será la fuente prioritaria que UroSearch use para responder.</div>
         <label style={labelStyle}>Título del documento</label>
         <input value={nuevoForm.titulo} onChange={e=>setNuevoForm({...nuevoForm,titulo:e.target.value})} placeholder="Ej: Guía EAU 2024 - Litiasis ureteral" style={inputStyle}/>
         <label style={labelStyle}>Categoría</label>
@@ -3153,14 +3260,14 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
         <label style={labelStyle}>Libro / Fuente (opcional)</label>
         <input value={nuevoForm.fuente||""} onChange={e=>setNuevoForm({...nuevoForm,fuente:e.target.value})} placeholder="Ej: Campbell-Walsh Urology — para agrupar capítulos" style={inputStyle}/>
         <label style={labelStyle}>Contenido del documento</label>
-        <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>Sube un archivo (PDF, Word .docx, .txt, .md, máx 10 MB) o pega el texto</div>
+        <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:6}}>Sube un archivo (PDF, Word .docx, .txt, .md, máx 10 MB) o pega el texto</div>
         <input ref={fileRef} type="file" accept=".txt,.md,.pdf,.docx" onChange={handleFile} style={{display:"none"}}/>
-        <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:"pointer",marginBottom:8,textAlign:"left"}}>📎 Subir archivo (PDF · Word · TXT)</button>
+        <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:"10px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:"pointer",marginBottom:8,textAlign:"left"}}>📎 Subir archivo (PDF · Word · TXT)</button>
         <textarea value={nuevoForm.contenido} onChange={e=>setNuevoForm({...nuevoForm,contenido:e.target.value})} placeholder="Pega aquí el contenido..." rows={10} style={{...inputStyle,resize:"vertical"}}/>
-        <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:-6,marginBottom:10,textAlign:"right"}}>{nuevoForm.contenido.length.toLocaleString()} caracteres</div>
+        <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:-6,marginBottom:10,textAlign:"right"}}>{nuevoForm.contenido.length.toLocaleString()} caracteres</div>
         <label style={labelStyle}>Palabras clave / tags (opcional)</label>
         <input value={nuevoForm.tags} onChange={e=>setNuevoForm({...nuevoForm,tags:e.target.value})} placeholder="Separadas por coma" style={inputStyle}/>
-        {errorForm && <div style={{fontSize:12,color: errorForm.includes("Procesando")?"var(--exito)":"var(--peligro)",background: errorForm.includes("Procesando")?"var(--exito-bg)":"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
+        {errorForm && <div style={{fontSize:"var(--fs-1)",color: errorForm.includes("Procesando")?"var(--exito)":"var(--peligro)",background: errorForm.includes("Procesando")?"var(--exito-bg)":"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorForm}</div>}
         <button onClick={guardar} style={{...btnPrimary, marginTop:0}}>Guardar documento</button>
       </div>
     );
@@ -3169,14 +3276,14 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   if (vista === "ver" && seleccionado) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:4}}>{seleccionado.categoria}</div>
+          <div style={{fontSize:"var(--fs-0)",fontWeight:500,color:"var(--primario)",marginBottom:4}}>{seleccionado.categoria}</div>
           <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>{seleccionado.titulo}</div>
-          <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {(seleccionado.caracteres ?? seleccionado.contenido?.length ?? 0).toLocaleString()} caracteres</div>
-          {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8}}>Agregado: {seleccionado.fecha_creacion} · {(seleccionado.caracteres ?? seleccionado.contenido?.length ?? 0).toLocaleString()} caracteres</div>
+          {isAdmin && <button onClick={()=>eliminar(seleccionado.id)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Eliminar</button>}
         </div>
-        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",fontSize:13,color:"var(--texto)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{cargandoDoc ? "Cargando contenido…" : (seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{!cargandoDoc && (seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
+        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",fontSize:"var(--fs-2)",color:"var(--texto)",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{cargandoDoc ? "Cargando contenido…" : (seleccionado.contenido || "(Sin contenido)").slice(0,20000)}{!cargandoDoc && (seleccionado.contenido||"").length>20000 ? `\n\n[...] Mostrando los primeros 20.000 de ${(seleccionado.contenido||"").length.toLocaleString()} caracteres. El texto completo está guardado y disponible para el chat.` : ""}</div>
       </div>
     );
   }
@@ -3185,27 +3292,27 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:10}}>
         <div>
-          <div style={{fontSize:15,fontWeight:600,color:"var(--texto)",marginBottom:2}}>📚 Base de conocimiento</div>
-          <div style={{fontSize:11,color:"var(--texto-sec)"}}>{cargandoLista ? "Cargando…" : `${conocimiento.length} documentos`}</div>
+          <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:2}}>📚 Base de conocimiento</div>
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)"}}>{cargandoLista ? "Cargando…" : `${conocimiento.length} documentos`}</div>
         </div>
-        {isAdmin && <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Agregar</button>}
+        {isAdmin && <button onClick={()=>setVista("nuevo")} style={{padding:"7px 12px",fontSize:"var(--fs-1)",fontWeight:500,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}>+ Agregar</button>}
       </div>
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
         {["Todas",...CATEGORIAS_KB].map(c => (
-          <button key={c} onClick={()=>setFiltroCat(c)} style={{padding:"4px 10px",fontSize:11,fontWeight:filtroCat===c?500:400,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid var(--borde)",background:filtroCat===c?"var(--primario)":"var(--superficie)",color:filtroCat===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>
+          <button key={c} onClick={()=>setFiltroCat(c)} style={{padding:"4px 10px",fontSize:"var(--fs-0)",fontWeight:filtroCat===c?500:400,borderRadius:14,cursor:"pointer",border:filtroCat===c?"none":"0.5px solid var(--borde)",background:filtroCat===c?"var(--primario)":"var(--superficie)",color:filtroCat===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>
         ))}
       </div>
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>{conocimiento.length === 0 ? (isAdmin ? "Aún no has agregado documentos." : "El administrador aún no ha cargado documentos.") : "Ningún documento coincide"}</div>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>{conocimiento.length === 0 ? (isAdmin ? "Aún no has agregado documentos." : "El administrador aún no ha cargado documentos.") : "Ningún documento coincide"}</div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {filtrados.map(d => (
             <div key={d.id} onClick={()=>abrirDoc(d)} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
-              <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:3}}>{d.categoria}{d.fuente ? <span style={{marginLeft:6,fontSize:10,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📖 {d.fuente}</span> : null}</div>
-              <div style={{fontSize:14,fontWeight:500,color:"var(--texto)",marginBottom:4}}>{d.titulo}</div>
-              <div style={{fontSize:11,color:"var(--texto-ter)"}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")}{(d.caracteres ?? d.contenido?.length) ? ` · ${Number(d.caracteres ?? d.contenido.length).toLocaleString()} caracteres` : ""}</div>
-              {d.tags ? <div style={{fontSize:11,color:"var(--texto-sec)",marginTop:5}}>{d.tags}</div> : null}
+              <div style={{fontSize:"var(--fs-0)",fontWeight:500,color:"var(--primario)",marginBottom:3}}>{d.categoria}{d.fuente ? <span style={{marginLeft:6,fontSize:"var(--fs-xs)",background:"var(--ccv-bg)",color:"var(--ccv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>📖 {d.fuente}</span> : null}</div>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)",marginBottom:4}}>{d.titulo}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>{new Date(d.fecha_creacion).toLocaleDateString("es-CL")}{(d.caracteres ?? d.contenido?.length) ? ` · ${Number(d.caracteres ?? d.contenido.length).toLocaleString()} caracteres` : ""}</div>
+              {d.tags ? <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginTop:5}}>{d.tags}</div> : null}
             </div>
           ))}
         </div>
@@ -3323,20 +3430,20 @@ function CirugiasBiblioteca() {
   if (seleccionado) {
     const Section = ({ titulo, items, color = "var(--primario)" }) => (
       <div style={{marginBottom:14}}>
-        <div style={{fontSize:12,fontWeight:600,color,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.3px"}}>{titulo}</div>
-        <ul style={{margin:0,paddingLeft:18,fontSize:13,color:"var(--texto)",lineHeight:1.6}}>
+        <div style={{fontSize:"var(--fs-1)",fontWeight:600,color,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.3px"}}>{titulo}</div>
+        <ul style={{margin:0,paddingLeft:18,fontSize:"var(--fs-2)",color:"var(--texto)",lineHeight:1.6}}>
           {items.map((it,i) => <li key={i} style={{marginBottom:3}}>{it}</li>)}
         </ul>
       </div>
     );
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-        <button onClick={()=>setSeleccionado(null)} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a cirugías</button>
+        <button onClick={()=>setSeleccionado(null)} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver a cirugías</button>
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"16px",marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:500,color:"var(--primario)",marginBottom:4}}>{seleccionado.categoria}</div>
+          <div style={{fontSize:"var(--fs-0)",fontWeight:500,color:"var(--primario)",marginBottom:4}}>{seleccionado.categoria}</div>
           <div style={{fontSize:18,fontWeight:600,color:"var(--texto)",marginBottom:8}}>{seleccionado.titulo}</div>
-          <div style={{fontSize:13,color:"var(--texto-sec)",lineHeight:1.5,marginBottom:10}}>{seleccionado.descripcion}</div>
-          <div style={{display:"flex",gap:14,fontSize:11,color:"var(--texto-ter)",paddingTop:8,borderTop:"0.5px solid var(--fondo)"}}>
+          <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)",lineHeight:1.5,marginBottom:10}}>{seleccionado.descripcion}</div>
+          <div style={{display:"flex",gap:14,fontSize:"var(--fs-0)",color:"var(--texto-ter)",paddingTop:8,borderTop:"0.5px solid var(--fondo)"}}>
             <span>⏱ Duración: <strong style={{color:"var(--texto)"}}>{seleccionado.duracion}</strong></span>
             <span>💉 Anestesia: <strong style={{color:"var(--texto)"}}>{seleccionado.anestesia}</strong></span>
           </div>
@@ -3359,24 +3466,24 @@ function CirugiasBiblioteca() {
 
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
-      <div style={{marginBottom:14}}>        <div style={{fontSize:13,color:"var(--texto-sec)"}}>{PROTOCOLOS_CIRUGIAS.length} procedimientos urológicos estándar</div>
+      <div style={{marginBottom:14}}>        <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>{PROTOCOLOS_CIRUGIAS.length} procedimientos urológicos estándar</div>
       </div>
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar cirugía..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
         {CATEGORIAS_CIRUGIAS.map(c => (
-          <button key={c} onClick={()=>setFiltro(c)} style={{padding:"4px 10px",fontSize:11,fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid var(--borde)",background:filtro===c?"var(--primario)":"var(--superficie)",color:filtro===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>
+          <button key={c} onClick={()=>setFiltro(c)} style={{padding:"4px 10px",fontSize:"var(--fs-0)",fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid var(--borde)",background:filtro===c?"var(--primario)":"var(--superficie)",color:filtro===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>
         ))}
       </div>
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13}}>Ningún procedimiento coincide</div>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Ningún procedimiento coincide</div>
       ) : (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
           {filtrados.map(p => (
             <div key={p.id} onClick={()=>setSeleccionado(p)} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer",borderLeft:"3px solid var(--primario)"}}>
-              <div style={{fontSize:10,fontWeight:500,color:"var(--primario)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{p.categoria}</div>
-              <div style={{fontSize:14,fontWeight:500,color:"var(--texto)",marginBottom:6}}>{p.titulo}</div>
-              <div style={{fontSize:11,color:"var(--texto-sec)",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.descripcion}</div>
-              <div style={{display:"flex",gap:8,fontSize:10,color:"var(--texto-ter)"}}>
+              <div style={{fontSize:"var(--fs-xs)",fontWeight:500,color:"var(--primario)",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{p.categoria}</div>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)",marginBottom:6}}>{p.titulo}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",lineHeight:1.4,marginBottom:8,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.descripcion}</div>
+              <div style={{display:"flex",gap:8,fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>
                 <span>⏱ {p.duracion}</span>
                 <span>💉 {p.anestesia}</span>
               </div>
@@ -3396,14 +3503,14 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
   <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
     {/* MAPAS PRECARGADOS */}
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:10}}>Mapas precargados</div>
+      <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto-sec)",marginBottom:10}}>Mapas precargados</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8}}>
         {TOPICS.map(t => (
           <div key={t.id}>
-            <button onClick={() => setTopicOpen(topicOpen===t.id ? null : t.id)} style={{width:"100%",padding:"8px 10px",fontSize:12,fontWeight:500,textAlign:"left",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,color:"var(--texto)",cursor:"pointer",borderBottomLeftRadius:topicOpen===t.id ? 0 : 8,borderBottomRightRadius:topicOpen===t.id ? 0 : 8}}>{t.label} {topicOpen===t.id ? "▲" : "▼"}</button>
+            <button onClick={() => setTopicOpen(topicOpen===t.id ? null : t.id)} style={{width:"100%",padding:"8px 10px",fontSize:"var(--fs-1)",fontWeight:500,textAlign:"left",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,color:"var(--texto)",cursor:"pointer",borderBottomLeftRadius:topicOpen===t.id ? 0 : 8,borderBottomRightRadius:topicOpen===t.id ? 0 : 8}}>{t.label} {topicOpen===t.id ? "▲" : "▼"}</button>
             {topicOpen===t.id && (
               <div style={{border:"0.5px solid var(--borde)",borderTop:"none",borderRadius:"0 0 8px 8px",overflow:"hidden",background:"var(--superficie)"}}>
-                {t.subtopics.map(s => <button key={s} onClick={() => { generarMapa(s); setTopicOpen(null); }} style={{display:"block",width:"100%",padding:"7px 12px",fontSize:12,textAlign:"left",background:"var(--superficie)",border:"none",borderTop:"0.5px solid var(--fondo)",color:"var(--texto-sec)",cursor:"pointer"}}>{s}</button>)}
+                {t.subtopics.map(s => <button key={s} onClick={() => { generarMapa(s); setTopicOpen(null); }} style={{display:"block",width:"100%",padding:"7px 12px",fontSize:"var(--fs-1)",textAlign:"left",background:"var(--superficie)",border:"none",borderTop:"0.5px solid var(--fondo)",color:"var(--texto-sec)",cursor:"pointer"}}>{s}</button>)}
               </div>
             )}
           </div>
@@ -3413,26 +3520,26 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
 
     {/* GENERAR MAPA CON IA */}
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>Generar mapa con IA</div>
+      <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>Generar mapa con IA</div>
       <div style={{display:"flex",gap:8}}>
-        <input value={mapaTema} onChange={e=>setMapaTema(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")generarMapa(mapaTema);}} placeholder="Ej: Hematuria macroscópica..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none"}}/>
-        <button onClick={()=>generarMapa(mapaTema)} disabled={mapaLoading||!mapaTema.trim()} style={{padding:"9px 14px",borderRadius:8,border:"none",background:mapaLoading||!mapaTema.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:13,cursor:mapaLoading||!mapaTema.trim()?"default":"pointer",fontWeight:500}}>{mapaLoading ? "Generando..." : "Generar ↗"}</button>
+        <input value={mapaTema} onChange={e=>setMapaTema(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")generarMapa(mapaTema);}} placeholder="Ej: Hematuria macroscópica..." style={{flex:1,padding:"9px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",outline:"none"}}/>
+        <button onClick={()=>generarMapa(mapaTema)} disabled={mapaLoading||!mapaTema.trim()} style={{padding:"9px 14px",borderRadius:8,border:"none",background:mapaLoading||!mapaTema.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:"var(--fs-2)",cursor:mapaLoading||!mapaTema.trim()?"default":"pointer",fontWeight:500}}>{mapaLoading ? "Generando..." : "Generar ↗"}</button>
       </div>
     </div>
 
-    {mapaLoading && <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:13}}>Generando mapa...</div>}
+    {mapaLoading && <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Generando mapa...</div>}
 
     {/* MAPA ACTUAL CON BOTÓN DE GUARDAR */}
     {mapaActual && !mapaLoading && (
       <div style={{border:"0.5px solid var(--borde)",borderRadius:12,overflow:"hidden",background:"var(--superficie)",marginBottom:16}}>
         <div style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--fondo-suave)",gap:10}}>
-          <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{mapaActual.titulo}</div>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)"}}>{mapaActual.titulo}</div>
           <button 
             onClick={onGuardarMapa} 
             disabled={guardandoMapa}
             style={{
               padding:"5px 12px",
-              fontSize:11,
+              fontSize:"var(--fs-0)",
               fontWeight:500,
               background: guardandoMapa ? "var(--borde)" : "var(--primario)",
               color:"var(--texto-inv)",
@@ -3449,12 +3556,12 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
       </div>
     )}
 
-    {!mapaActual && !mapaLoading && <div style={{textAlign:"center",padding:"32px 0",color:"var(--texto-ter)",fontSize:13}}>Selecciona un tema o escribe uno</div>}
+    {!mapaActual && !mapaLoading && <div style={{textAlign:"center",padding:"32px 0",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Selecciona un tema o escribe uno</div>}
 
     {/* MIS MAPAS GUARDADOS */}
     {mapasGuardados && mapasGuardados.length > 0 && (
       <div style={{marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>
-        <div style={{fontSize:13,fontWeight:500,color:"var(--texto-sec)",marginBottom:10}}>
+        <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto-sec)",marginBottom:10}}>
           Mis mapas guardados ({mapasGuardados.length})
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}>
@@ -3481,10 +3588,10 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
                   paddingRight:24,
                 }}
               >
-                <div style={{fontSize:12,fontWeight:500,color:"var(--texto)",marginBottom:3, lineHeight:1.3}}>
+                <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto)",marginBottom:3, lineHeight:1.3}}>
                   {mapa.titulo}
                 </div>
-                <div style={{fontSize:10,color:"var(--texto-ter)"}}>
+                <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>
                   {new Date(mapa.fecha_creacion).toLocaleDateString("es-CL")}
                 </div>
               </button>
@@ -3497,7 +3604,7 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
                   background:"none",
                   border:"none",
                   color:"var(--peligro)",
-                  fontSize:13,
+                  fontSize:"var(--fs-2)",
                   cursor:"pointer",
                   padding:2,
                 }}
@@ -3530,7 +3637,7 @@ function CampoAlt({ label, opciones, value, onChange }) {
       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
         {opciones.map(op => {
           const sel = value === op;
-          return <button key={op} onClick={()=>onChange(sel ? "" : op)} style={{padding:"5px 10px",fontSize:11,fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)"}}>{op}</button>;
+          return <button key={op} onClick={()=>onChange(sel ? "" : op)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)"}}>{op}</button>;
         })}
       </div>
     </div>
@@ -3664,13 +3771,13 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px"}}>
-        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Crear nuevo equipo</div>
         <label style={labelStyle}>Nombre del equipo</label>
         <input value={nuevoNombre} onChange={e=>setNuevoNombre(e.target.value)} placeholder="Ej: Equipo Urología HBV" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Descripción (opcional)</label>
         <textarea value={nuevoDescripcion} onChange={e=>setNuevoDescripcion(e.target.value)} placeholder="Para qué se usará este equipo" rows={3} style={{...inputStyle,resize:"none"}} disabled={loading}/>
-        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+        {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
         <button onClick={crearEquipoHandler} disabled={loading} style={{...btnPrimary, marginTop:0, opacity: loading ? 0.6 : 1}}>{loading ? "Creando..." : "Crear equipo"}</button>
       </div>
     );
@@ -3681,29 +3788,29 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
     const esDueño = seleccionado.dueno_id === currentUser.id;
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setSeleccionado(null);setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver a equipos</button>
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver a equipos</button>
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
           <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:4}}>{seleccionado.nombre}</div>
-          {seleccionado.descripcion && <div style={{fontSize:12,color:"var(--texto-sec)",marginBottom:6}}>{seleccionado.descripcion}</div>}
-          <div style={{fontSize:11,color:"var(--texto-ter)"}}>{miembros.length} miembros</div>
+          {seleccionado.descripcion && <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginBottom:6}}>{seleccionado.descripcion}</div>}
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>{miembros.length} miembros</div>
         </div>
 
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>👥 Miembros</div>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:10}}>👥 Miembros</div>
           {miembros.map(m => {
             const perfil = m.perfiles;
             return (
               <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"var(--fondo-suave)",borderRadius:6,marginBottom:5}}>
                 <div>
-                  <div style={{fontSize:12,fontWeight:500,color:"var(--texto)"}}>
+                  <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto)"}}>
                     {perfil?.nombre || "Sin nombre"}
                     {m.user_id === seleccionado.dueno_id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>DUEÑO</span>}
                     {m.user_id === currentUser.id && <span style={{fontSize:9,marginLeft:6,padding:"1px 6px",background:"var(--exito)",color:"var(--texto-inv)",borderRadius:4}}>TÚ</span>}
                   </div>
-                  <div style={{fontSize:10,color:"var(--texto-ter)"}}>{perfil?.correo}</div>
+                  <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>{perfil?.correo}</div>
                 </div>
                 {esDueño && m.user_id !== currentUser.id && (
-                  <button onClick={()=>expulsar(m.user_id)} style={{padding:"4px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Expulsar</button>
+                  <button onClick={()=>expulsar(m.user_id)} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>Expulsar</button>
                 )}
               </div>
             );
@@ -3712,19 +3819,19 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
 
         {esDueño && (
           <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:10}}>+ Invitar miembro</div>
-            <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6}}>Solo puedes invitar usuarios ya aprobados en UroSearch</div>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:10}}>+ Invitar miembro</div>
+            <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:6}}>Solo puedes invitar usuarios ya aprobados en UroSearch</div>
             <div style={{display:"flex",gap:6}}>
-              <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}} disabled={loading}/>
-              <button onClick={invitar} disabled={!invitarCorreo.trim() || loading} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:invitarCorreo.trim() && !loading ?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>{loading ? "..." : "Invitar"}</button>
+              <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}} disabled={loading}/>
+              <button onClick={invitar} disabled={!invitarCorreo.trim() || loading} style={{padding:"9px 14px",fontSize:"var(--fs-2)",fontWeight:500,background:invitarCorreo.trim() && !loading ?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>{loading ? "..." : "Invitar"}</button>
             </div>
-            {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginTop:8}}>{error}</div>}
+            {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginTop:8}}>{error}</div>}
 
             {invitacionesEquipo.length > 0 && (
               <div style={{marginTop:12}}>
-                <div style={{fontSize:11,fontWeight:500,color:"var(--texto-ter)",marginBottom:4}}>Invitaciones pendientes</div>
+                <div style={{fontSize:"var(--fs-0)",fontWeight:500,color:"var(--texto-ter)",marginBottom:4}}>Invitaciones pendientes</div>
                 {invitacionesEquipo.map(i => (
-                  <div key={i.id} style={{padding:"6px 10px",background:"var(--alerta-bg)",borderRadius:6,fontSize:11,color:"var(--alerta)",marginBottom:4}}>
+                  <div key={i.id} style={{padding:"6px 10px",background:"var(--alerta-bg)",borderRadius:6,fontSize:"var(--fs-0)",color:"var(--alerta)",marginBottom:4}}>
                     📨 {i.perfiles?.nombre} ({i.perfiles?.correo})
                   </div>
                 ))}
@@ -3735,9 +3842,9 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
 
         <div style={{display:"flex",gap:6}}>
           {esDueño ? (
-            <button onClick={()=>eliminarEquipoHandler(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar equipo</button>
+            <button onClick={()=>eliminarEquipoHandler(seleccionado)} style={{flex:1,padding:"10px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar equipo</button>
           ) : (
-            <button onClick={()=>salir(seleccionado)} style={{flex:1,padding:"10px",fontSize:13,background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>Salir del equipo</button>
+            <button onClick={()=>salir(seleccionado)} style={{flex:1,padding:"10px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>Salir del equipo</button>
           )}
         </div>
       </div>
@@ -3754,14 +3861,14 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
 
       {invitacionesPendientes.length > 0 && (
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:500,color:"var(--alerta)",marginBottom:6}}>📨 Invitaciones pendientes ({invitacionesPendientes.length})</div>
+          <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--alerta)",marginBottom:6}}>📨 Invitaciones pendientes ({invitacionesPendientes.length})</div>
           {invitacionesPendientes.map(inv => (
             <div key={inv.id} style={{background:"var(--alerta-bg)",border:"0.5px solid var(--alerta-borde)",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
-              <div style={{fontSize:13,fontWeight:500,color:"var(--alerta)",marginBottom:2}}>{inv.equipos?.nombre}</div>
-              <div style={{fontSize:11,color:"var(--alerta)",marginBottom:8}}>Invitado por {inv.invitador?.nombre}</div>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--alerta)",marginBottom:2}}>{inv.equipos?.nombre}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--alerta)",marginBottom:8}}>Invitado por {inv.invitador?.nombre}</div>
               <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>aceptar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aceptar</button>
-                <button onClick={()=>rechazar(inv)} style={{flex:1,padding:"6px",fontSize:12,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Rechazar</button>
+                <button onClick={()=>aceptar(inv)} style={{flex:1,padding:"6px",fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Aceptar</button>
+                <button onClick={()=>rechazar(inv)} style={{flex:1,padding:"6px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Rechazar</button>
               </div>
             </div>
           ))}
@@ -3771,17 +3878,17 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
       <button onClick={()=>setVista("nuevo")} style={{...btnPrimary, marginTop:0, marginBottom:14}}>+ Crear nuevo equipo</button>
 
       {equipos.length === 0 ? (
-        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>No perteneces a ningún equipo.<br/>Crea uno o espera invitación.</div>
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>No perteneces a ningún equipo.<br/>Crea uno o espera invitación.</div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {equipos.map(eq => (
             <div key={eq.id} onClick={()=>abrirDetalle(eq)} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:10}}>
-                <div style={{fontSize:14,fontWeight:500,color:"var(--texto)"}}>{eq.nombre}</div>
+                <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)"}}>{eq.nombre}</div>
                 {eq.dueno_id === currentUser.id && <span style={{fontSize:9,padding:"1px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,fontWeight:500}}>DUEÑO</span>}
               </div>
-              {eq.descripcion && <div style={{fontSize:11,color:"var(--texto-sec)",marginBottom:4}}>{eq.descripcion}</div>}
-              <div style={{fontSize:10,color:"var(--texto-ter)"}}>{eq.miembros_equipo?.length || 0} miembros</div>
+              {eq.descripcion && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginBottom:4}}>{eq.descripcion}</div>}
+              <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>{eq.miembros_equipo?.length || 0} miembros</div>
             </div>
           ))}
         </div>
@@ -3816,15 +3923,15 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
         <>
           <div onClick={()=>setAbierto(false)} style={{position:"fixed",inset:0,zIndex:20}}/>
           <div style={{position:"absolute",top:"115%",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"4px",minWidth:210,zIndex:30,boxShadow:"0 2px 8px rgba(0,0,0,0.12)"}}>
-            <div onClick={()=>elegir("personal")} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto==="personal"?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
+            <div onClick={()=>elegir("personal")} style={{padding:"8px 10px",fontSize:"var(--fs-2)",cursor:"pointer",borderRadius:6,background:contexto==="personal"?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
               <span>👤</span> Mis Pacientes {contexto==="personal" && <span style={{marginLeft:"auto",color:"var(--primario)"}}>✓</span>}
             </div>
             {misEquipos.map(eq => (
-              <div key={eq.id} onClick={()=>elegir(eq.id)} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,background:contexto===eq.id?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
+              <div key={eq.id} onClick={()=>elegir(eq.id)} style={{padding:"8px 10px",fontSize:"var(--fs-2)",cursor:"pointer",borderRadius:6,background:contexto===eq.id?"var(--fondo-suave)":"transparent",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}>
                 <span>👥</span> {eq.nombre} {contexto===eq.id && <span style={{marginLeft:"auto",color:"var(--exito)"}}>✓</span>}
               </div>
             ))}
-            <div onClick={()=>{ setAbierto(false); onAbrirEquipos(); }} style={{padding:"8px 10px",fontSize:13,cursor:"pointer",borderRadius:6,color:"var(--primario)",borderTop:"0.5px solid var(--fondo)",marginTop:4,display:"flex",alignItems:"center",gap:8}}>
+            <div onClick={()=>{ setAbierto(false); onAbrirEquipos(); }} style={{padding:"8px 10px",fontSize:"var(--fs-2)",cursor:"pointer",borderRadius:6,color:"var(--primario)",borderTop:"0.5px solid var(--fondo)",marginTop:4,display:"flex",alignItems:"center",gap:8}}>
               <span>⚙️</span> Gestionar / crear equipo
             </div>
           </div>
@@ -3893,10 +4000,10 @@ function EncargadosPendiente({ pendiente, miembros, onToggle, nombreMiembro }) {
       <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
         {encargados.map(id => (
           nombreMiembro(id) && (
-            <span key={id} style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"3px 9px",borderRadius:10,fontWeight:600}}>👤 {nombreMiembro(id)}</span>
+            <span key={id} style={{fontSize:"var(--fs-0)",background:"var(--exito-bg)",color:"var(--exito)",padding:"3px 9px",borderRadius:10,fontWeight:600}}>👤 {nombreMiembro(id)}</span>
           )
         ))}
-        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:14,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
+        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:"var(--fs-2)",background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
           {abierto ? "×" : "+"}
         </button>
       </div>
@@ -3906,8 +4013,8 @@ function EncargadosPendiente({ pendiente, miembros, onToggle, nombreMiembro }) {
             const id = m.perfiles?.id;
             const asignado = encargados.includes(id);
             return (
-              <div key={id} onClick={()=>onToggle(pendiente, id)} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 5px",cursor:"pointer",fontSize:12,color:"var(--texto)"}}>
-                <span style={{width:15,height:15,borderRadius:3,border:"1px solid var(--borde)",background:asignado?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
+              <div key={id} onClick={()=>onToggle(pendiente, id)} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 5px",cursor:"pointer",fontSize:"var(--fs-1)",color:"var(--texto)"}}>
+                <span style={{width:15,height:15,borderRadius:3,border:"1px solid var(--borde)",background:asignado?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",fontSize:"var(--fs-0)",display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
                 {m.perfiles?.nombre}
               </div>
             );
@@ -3993,40 +4100,40 @@ function NotasPanel({ currentUser, contexto, equipos }) {
     <div style={{padding:"16px",overflowY:"auto"}}>
       {/* El formulario aparece solo al tocar "+ Agregar nota" (submenú de la pestaña) */}
       {!formAbierto ? (
-        <button onClick={()=>setFormAbierto(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 16px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",marginBottom:14}}>+ Agregar nota</button>
+        <button onClick={()=>setFormAbierto(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 16px",fontSize:"var(--fs-2)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",marginBottom:14}}>+ Agregar nota</button>
       ) : (
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"12px",marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>Nueva nota</div>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>Nueva nota</div>
             <button onClick={()=>setFormAbierto(false)} style={{background:"none",border:"none",fontSize:16,color:"var(--texto-ter)",cursor:"pointer",lineHeight:1,padding:0}}>✕</button>
           </div>
           <input value={nueva.titulo} onChange={e=>setNueva({...nueva,titulo:e.target.value})} placeholder="Título (opcional)" style={{...inputStyle,marginBottom:6}}/>
           <textarea value={nueva.texto} onChange={e=>setNueva({...nueva,texto:e.target.value})} placeholder="Escribe una nota libre..." rows={3} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
           {esEquipo && (
             <div style={{display:"flex",gap:6,marginBottom:8}}>
-              <button onClick={()=>setNueva({...nueva,visibilidad:"equipo"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="equipo"?600:400,background:nueva.visibilidad==="equipo"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="equipo"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="equipo"?"none":"0.5px solid var(--borde)"}}>👥 La ve el equipo</button>
-              <button onClick={()=>setNueva({...nueva,visibilidad:"personal"})} style={{flex:1,padding:"7px",fontSize:12,borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="personal"?600:400,background:nueva.visibilidad==="personal"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="personal"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="personal"?"none":"0.5px solid var(--borde)"}}>🔒 Solo yo</button>
+              <button onClick={()=>setNueva({...nueva,visibilidad:"equipo"})} style={{flex:1,padding:"7px",fontSize:"var(--fs-1)",borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="equipo"?600:400,background:nueva.visibilidad==="equipo"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="equipo"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="equipo"?"none":"0.5px solid var(--borde)"}}>👥 La ve el equipo</button>
+              <button onClick={()=>setNueva({...nueva,visibilidad:"personal"})} style={{flex:1,padding:"7px",fontSize:"var(--fs-1)",borderRadius:8,cursor:"pointer",fontWeight:nueva.visibilidad==="personal"?600:400,background:nueva.visibilidad==="personal"?"var(--primario)":"var(--superficie)",color:nueva.visibilidad==="personal"?"var(--texto-inv)":"var(--texto-sec)",border:nueva.visibilidad==="personal"?"none":"0.5px solid var(--borde)"}}>🔒 Solo yo</button>
             </div>
           )}
           <button onClick={guardar} disabled={!nueva.texto.trim()} style={{...btnPrimary,marginTop:0,opacity:nueva.texto.trim()?1:0.6}}>+ Guardar nota</button>
         </div>
       )}
 
-      {cargando && <div style={{fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Cargando...</div>}
-      {!cargando && notas.length === 0 && <div style={{fontSize:12,color:"var(--texto-ter)",fontStyle:"italic",padding:"14px 0"}}>No hay notas aún.</div>}
+      {cargando && <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic"}}>Cargando...</div>}
+      {!cargando && notas.length === 0 && <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic",padding:"14px 0"}}>No hay notas aún.</div>}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {notas.map(n => (
           <div key={n.id} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:"11px 13px",borderLeft:n.visibilidad==="personal"?"3px solid var(--alerta)":"3px solid var(--primario)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
               <div style={{flex:1,minWidth:0}}>
-                {n.titulo && <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:3}}>{n.titulo}</div>}
-                <div style={{fontSize:12,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.45}}>{n.texto}</div>
-                <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:5}}>
+                {n.titulo && <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:3}}>{n.titulo}</div>}
+                <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.45}}>{n.texto}</div>
+                <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:5}}>
                   {n.visibilidad==="personal"?"🔒 Solo yo":"👥 Equipo"} · {n.autor?.nombre || "—"} · {new Date(n.created_at).toLocaleDateString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
                 </div>
               </div>
               {n.autor_id === currentUser.id && (
-                <button onClick={()=>eliminar(n)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                <button onClick={()=>eliminar(n)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
               )}
             </div>
           </div>
@@ -4074,7 +4181,7 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
     if (!result.ok) return alert("Error: " + result.error);
     setPendientes(prev => prev.map(x => x.id === pendiente.id ? result.pendiente : x));
     if (agregando && userId !== currentUser.id) {
-      crearNotificacion(userId, `Te asignaron un pendiente: "${pendiente.texto.slice(0,80)}"${pendiente.fecha_objetivo ? ` (para el ${pendiente.fecha_objetivo})` : ""}`, "pendiente");
+      crearNotificacion(userId, `Te asignaron un pendiente: "${pendiente.texto.slice(0,80)}"${pendiente.fecha_objetivo ? ` (para el ${pendiente.fecha_objetivo})` : ""} — por ${currentUser.nombre}`, "pendiente");
     }
   };
 
@@ -4154,10 +4261,10 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
 
         {/* Sugerencias */}
         <div style={{marginTop:10}}>
-          <div style={{fontSize:10,color:"var(--texto-ter)",marginBottom:4}}>Sugerencias rápidas:</div>
+          <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginBottom:4}}>Sugerencias rápidas:</div>
           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
             {sugerencias.map(s => (
-              <button key={s} onClick={()=>usarSugerencia(s)} style={{padding:"3px 8px",fontSize:10,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:12,cursor:"pointer"}}>{s}</button>
+              <button key={s} onClick={()=>usarSugerencia(s)} style={{padding:"3px 8px",fontSize:"var(--fs-xs)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:12,cursor:"pointer"}}>{s}</button>
             ))}
           </div>
         </div>
@@ -4165,27 +4272,27 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
 
       {/* Filtros */}
       <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:11,color:"var(--texto-ter)"}}>Filtrar:</span>
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+        <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>Filtrar:</span>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="pendiente">Pendientes</option>
           <option value="completado">Completados</option>
           <option value="todos">Todos</option>
         </select>
-        <select value={filtroPrioridad} onChange={e=>setFiltroPrioridad(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+        <select value={filtroPrioridad} onChange={e=>setFiltroPrioridad(e.target.value)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="todas">Todas las prioridades</option>
           <option value="alta">🔴 Alta</option>
           <option value="normal">🟡 Normal</option>
           <option value="baja">🟢 Baja</option>
         </select>
-        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{filtrados.length}</span>
+        <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:"auto"}}>{filtrados.length}</span>
       </div>
 
       {loadingPendientes && (
-        <div style={{textAlign:"center",padding:"20px",color:"var(--texto-ter)",fontSize:13}}>Cargando...</div>
+        <div style={{textAlign:"center",padding:"20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Cargando...</div>
       )}
 
       {!loadingPendientes && filtrados.length === 0 && (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13}}>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>
           No hay pendientes en este filtro
         </div>
       )}
@@ -4201,8 +4308,8 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
                 <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                   <input type="checkbox" checked={completado} onChange={()=>toggleCompletar(p)} style={{marginTop:2,cursor:"pointer"}}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,color:"var(--texto)",textDecoration:completado?"line-through":"none",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{p.texto}</div>
-                    <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:4,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                    <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",textDecoration:completado?"line-through":"none",lineHeight:1.4,whiteSpace:"pre-wrap"}}>{p.texto}</div>
+                    <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:4,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                       <span>{p.autor?.nombre || "Anónimo"}</span>
                       {p.fecha_objetivo && <span>📅 {p.fecha_objetivo}</span>}
                       <span style={{color:colorPrioridad,fontWeight:500}}>● {p.prioridad}</span>
@@ -4212,7 +4319,7 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
                     )}
                   </div>
                   {esAutor && (
-                    <button onClick={()=>eliminar(p)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>🗑</button>
+                    <button onClick={()=>eliminar(p)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>🗑</button>
                   )}
                 </div>
               </div>
@@ -4249,27 +4356,27 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
   return (
     <div style={{padding:"24px 20px",overflowY:"auto"}}>
       <div style={{fontSize:18,fontWeight:600,color:"var(--texto)",marginBottom:6}}>Configura tus servicios</div>
-      <div style={{fontSize:12,color:"var(--texto-sec)",marginBottom:16,lineHeight:1.5}}>Antes de empezar, dime qué servicios o pisos del hospital quieres tener disponibles para asignar a tus pacientes. Puedes modificar esto después.</div>
+      <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginBottom:16,lineHeight:1.5}}>Antes de empezar, dime qué servicios o pisos del hospital quieres tener disponibles para asignar a tus pacientes. Puedes modificar esto después.</div>
 
-      <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>Sugerencias (toca para seleccionar):</div>
+      <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto-sec)",marginBottom:8}}>Sugerencias (toca para seleccionar):</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:18}}>
         {todos.map(s => {
           const sel = seleccionados.includes(s);
           return (
-            <button key={s} onClick={()=>toggle(s)} style={{padding:"6px 12px",fontSize:12,fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)"}}>
+            <button key={s} onClick={()=>toggle(s)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:sel?500:400,borderRadius:14,cursor:"pointer",border:sel?"none":"0.5px solid var(--borde)",background:sel?"var(--primario)":"var(--superficie)",color:sel?"var(--texto-inv)":"var(--texto-sec)"}}>
               {sel ? "✓ " : ""}{s}
             </button>
           );
         })}
       </div>
 
-      <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:6}}>O agrega uno personalizado:</div>
+      <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto-sec)",marginBottom:6}}>O agrega uno personalizado:</div>
       <div style={{display:"flex",gap:6,marginBottom:18}}>
-        <input value={personalizado} onChange={e=>setPersonalizado(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarPersonalizado();}} placeholder="Ej: Pediatría, 4to piso ala B..." style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
-        <button onClick={agregarPersonalizado} disabled={!personalizado.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:personalizado.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:personalizado.trim()?"pointer":"default"}}>+ Agregar</button>
+        <input value={personalizado} onChange={e=>setPersonalizado(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarPersonalizado();}} placeholder="Ej: Pediatría, 4to piso ala B..." style={{flex:1,padding:"9px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
+        <button onClick={agregarPersonalizado} disabled={!personalizado.trim()} style={{padding:"9px 14px",fontSize:"var(--fs-2)",fontWeight:500,background:personalizado.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:personalizado.trim()?"pointer":"default"}}>+ Agregar</button>
       </div>
 
-      <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:8,marginBottom:16,fontSize:12,color:"var(--primario-osc)",lineHeight:1.5}}>
+      <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:8,marginBottom:16,fontSize:"var(--fs-1)",color:"var(--primario-osc)",lineHeight:1.5}}>
         <strong>{seleccionados.length}</strong> servicio{seleccionados.length === 1 ? "" : "s"} seleccionado{seleccionados.length === 1 ? "" : "s"}{seleccionados.length > 0 ? `: ${seleccionados.join(", ")}` : ""}
       </div>
 
@@ -4405,7 +4512,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       ccv: lista.filter(c => c.pabellon === "CCV").slice().sort(orden),
     };
   };
-  const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
+  const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--fs-3)", background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
 
   // ============================================================
   // CRUD
@@ -4516,7 +4623,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           const rm = await listarMiembros(contexto);
           if (rm.ok) rm.miembros.forEach(m => {
             const uid = m.perfiles?.id;
-            if (uid && uid !== currentUser.id) crearNotificacion(uid, `Cirugía completada: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha})`, "cirugia");
+            if (uid && uid !== currentUser.id) crearNotificacion(uid, `Cirugía completada: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha}) — por ${currentUser.nombre}`, "cirugia");
           });
         } catch {}
       }
@@ -4553,7 +4660,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       const miembro = miembrosEquipo.find(m => m.perfiles?.nombre === nombre);
       const uid = miembro?.perfiles?.id;
       if (uid && uid !== currentUser.id) {
-        crearNotificacion(uid, `Te asignaron como primer ayudante: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha} ${cirugia.hora?.slice(0,5)})`, "cirugia");
+        crearNotificacion(uid, `Te asignaron como primer ayudante: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha} ${cirugia.hora?.slice(0,5)}) — por ${currentUser.nombre}`, "cirugia");
       }
     }
   };
@@ -4863,7 +4970,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{resetForm();setVista(editId?"detalle":"tabla");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <button onClick={()=>{resetForm();setVista(editId?"detalle":"tabla");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>{editId ? "Editar cirugía" : "Nueva cirugía"} {esEquipo && !editId && `en equipo "${equipoActual?.nombre}"`}</div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -4942,7 +5049,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         <label style={labelStyle}>Observaciones (opcional)</label>
         <textarea value={nuevo.observaciones} onChange={e=>setNuevo({...nuevo,observaciones:e.target.value})} rows={2} style={{...inputStyle,resize:"vertical"}}/>
 
-        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+        {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
 
         <button onClick={editId ? guardarEdicion : guardar} style={{...btnPrimary, marginTop:0}}>{editId ? "Guardar cambios" : "Guardar cirugía"}</button>
       </div>
@@ -4957,31 +5064,31 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     const esCirujano = seleccionado.cirujano_id === currentUser.id;
     return (
       <div style={{padding:"16px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("tabla");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la tabla</button>
+        <button onClick={()=>{setVista("tabla");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la tabla</button>
 
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
             <div>
               <div style={{fontSize:18,fontWeight:600,color:"var(--texto)"}}>{seleccionado.iniciales}{seleccionado.edad && ` (${seleccionado.edad}a)`}</div>
               {(seleccionado.ficha_clinica || seleccionado.rut) && (
-                <div style={{fontSize:11.5,color:"var(--texto-ter)",marginTop:2}}>
+                <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>
                   {seleccionado.ficha_clinica ? `FC: ${seleccionado.ficha_clinica}` : ""}{seleccionado.ficha_clinica && seleccionado.rut ? " · " : ""}{seleccionado.rut ? `RUT: ${seleccionado.rut}` : ""}
                 </div>
               )}
-              <div style={{fontSize:13,color:"var(--texto-sec)",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
-              {seleccionado.cirujano && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
-              {seleccionado.primer_ayudante && <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>🧑‍⚕️ Primer ayudante: {seleccionado.primer_ayudante}</div>}
+              <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
+              {seleccionado.cirujano && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
+              {seleccionado.primer_ayudante && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>🧑‍⚕️ Primer ayudante: {seleccionado.primer_ayudante}</div>}
             </div>
-            <button onClick={()=>empezarEdicion(seleccionado)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,whiteSpace:"nowrap"}}>✏️ Editar</button>
+            <button onClick={()=>empezarEdicion(seleccionado)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,whiteSpace:"nowrap"}}>✏️ Editar</button>
           </div>
 
-          <div style={{fontSize:12,color:"var(--texto)",marginBottom:10,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
+          <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",marginBottom:10,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
             <strong>Estado actual:</strong> {seleccionado.estado}
           </div>
 
           <div style={{marginBottom:10,padding:"8px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
-            <div style={{fontSize:11,fontWeight:600,color:"var(--texto)",marginBottom:5}}>🧑‍⚕️ Primer ayudante</div>
+            <div style={{fontSize:"var(--fs-0)",fontWeight:600,color:"var(--texto)",marginBottom:5}}>🧑‍⚕️ Primer ayudante</div>
             {esEquipo && miembrosEquipo.length > 0 ? (
               <select value={seleccionado.primer_ayudante || ""} onChange={e=>asignarPrimerAyudante(seleccionado, e.target.value)} style={{...inputStyle, marginBottom:0}}>
                 <option value="">— Sin primer ayudante —</option>
@@ -4996,7 +5103,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           </div>
 
           {seleccionado.observaciones && (
-            <div style={{fontSize:12,color:"var(--texto)",marginBottom:10,padding:"8px 10px",background:"var(--alerta-bg)",borderRadius:6}}>
+            <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",marginBottom:10,padding:"8px 10px",background:"var(--alerta-bg)",borderRadius:6}}>
               <strong>Observaciones:</strong> {seleccionado.observaciones}
             </div>
           )}
@@ -5007,13 +5114,13 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                 key={estado} 
                 onClick={()=>cambiarEstado(seleccionado, estado)}
                 disabled={seleccionado.estado === estado}
-                style={{padding:"5px 10px",fontSize:11,background:seleccionado.estado === estado ? "var(--primario)" : "var(--superficie)",color:seleccionado.estado === estado ?"var(--texto-inv)":"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:seleccionado.estado === estado ? "default" : "pointer",fontWeight:500}}
+                style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:seleccionado.estado === estado ? "var(--primario)" : "var(--superficie)",color:seleccionado.estado === estado ?"var(--texto-inv)":"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:seleccionado.estado === estado ? "default" : "pointer",fontWeight:500}}
               >{estado.replace("_"," ")}</button>
             ))}
           </div>
 
           {esCirujano && (
-            <button onClick={()=>eliminar(seleccionado)} style={{marginTop:14,width:"100%",padding:"10px",fontSize:12,background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar cirugía</button>
+            <button onClick={()=>eliminar(seleccionado)} style={{marginTop:14,width:"100%",padding:"10px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--peligro)",border:"1px solid var(--peligro)",borderRadius:8,cursor:"pointer",fontWeight:500}}>🗑 Eliminar cirugía</button>
           )}
         </div>
       </div>
@@ -5029,20 +5136,20 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       {/* Submenú de herramientas (aparece al tocar de nuevo la pestaña "Tabla") */}
       {toolsOpen && !soloLectura && (
         <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
-          <label style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+          <label style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
             📊 Importar Excel
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
           </label>
-          <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:12,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
+          <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
           <input ref={inputFotoTablaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoTabla}/>
           <div style={{position:"relative",marginLeft:"auto"}}>
-            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12,background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
+            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
             {vistaMenuOpen && (
               <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:4,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:2,minWidth:130}}>
-                <button onClick={()=>{setModoVista("mensual");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="mensual"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="mensual"?600:400}}>🗓️ Mensual</button>
-                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Semanal</button>
-                <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:12,textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
+                <button onClick={()=>{setModoVista("mensual");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="mensual"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="mensual"?600:400}}>🗓️ Mensual</button>
+                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Semanal</button>
+                <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
               </div>
             )}
           </div>
@@ -5054,23 +5161,23 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         {modoVista === "mensual" ? (
           <div style={{display:"flex",alignItems:"center",gap:4}}>
             <button onClick={()=>{const d=new Date(mesActual);d.setMonth(d.getMonth()-1);setMesActual(d);}} style={navBtn}>‹</button>
-            <span style={{fontSize:12,fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center",textTransform:"capitalize"}}>
+            <span style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center",textTransform:"capitalize"}}>
               {mesActual.toLocaleDateString("es-CL",{month:"long",year:"numeric"})}
             </span>
             <button onClick={()=>{const d=new Date(mesActual);d.setMonth(d.getMonth()+1);setMesActual(d);}} style={navBtn}>›</button>
-            <button onClick={()=>{const d=new Date();d.setDate(1);d.setHours(0,0,0,0);setMesActual(d);}} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
+            <button onClick={()=>{const d=new Date();d.setDate(1);d.setHours(0,0,0,0);setMesActual(d);}} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:"var(--fs-0)"}}>Hoy</button>
           </div>
         ) : (
           <div style={{display:"flex",alignItems:"center",gap:4}}>
             <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()-7);setLunesSemana(d);}} style={navBtn}>‹</button>
-            <span style={{fontSize:12,fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center"}}>
+            <span style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",minWidth:120,textAlign:"center"}}>
               {new Date(diasSemana[0]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})} – {new Date(diasSemana[6]+"T00:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"})}
             </span>
             <button onClick={()=>{const d=new Date(lunesSemana);d.setDate(d.getDate()+7);setLunesSemana(d);}} style={navBtn}>›</button>
-            <button onClick={()=>setLunesSemana(lunesDe(new Date()))} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:11}}>Hoy</button>
+            <button onClick={()=>setLunesSemana(lunesDe(new Date()))} style={{...navBtn,width:"auto",padding:"0 10px",fontSize:"var(--fs-0)"}}>Hoy</button>
           </div>
         )}
-        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:11,borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+        <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="todos">Todos los estados</option>
           <option value="programada">Programadas</option>
           <option value="en_curso">En curso</option>
@@ -5078,22 +5185,22 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
-        <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:"auto"}}>{modoVista==="mensual" ? cirugiasMes.length : cirugiasSemana.length} cx</span>
+        <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:"auto"}}>{modoVista==="mensual" ? cirugiasMes.length : cirugiasSemana.length} cx</span>
       </div>
 
       {loadingCirugias && (
-        <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando tabla...</div>
+        <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Cargando tabla...</div>
       )}
 
       {!loadingCirugias && modoVista !== "mensual" && cirugiasSemana.length === 0 && (
-        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
           No hay cirugías esta semana.<br/>
           Usa ‹ › para cambiar de semana, o agrega con + Nueva / Importar Excel.
         </div>
       )}
 
       {!loadingCirugias && modoVista === "mensual" && cirugiasMes.length === 0 && (
-        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"30px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
           No hay cirugías este mes.<br/>
           Usa ‹ › para cambiar de mes, o agrega con + Nueva / Importar Excel.
         </div>
@@ -5105,7 +5212,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <div style={{minWidth:560}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:4,marginBottom:4}}>
               {["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(d => (
-                <div key={d} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"var(--texto-sec)",textTransform:"uppercase",letterSpacing:0.3,padding:"2px 0"}}>{d}</div>
+                <div key={d} style={{textAlign:"center",fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-sec)",textTransform:"uppercase",letterSpacing:0.3,padding:"2px 0"}}>{d}</div>
               ))}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(7, 1fr)",gap:4}}>
@@ -5116,7 +5223,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                 const diaNum = parseInt(fecha.slice(8), 10);
                 return (
                   <div key={fecha} style={{background:esHoy?"var(--hoy-bg)":"var(--fondo-suave)",border:esHoy?"1.5px solid var(--primario)":"0.5px solid var(--borde-suave)",borderRadius:8,padding:4,minHeight:64}}>
-                    <div style={{fontSize:10,fontWeight:700,color:esHoy?"var(--primario)":"var(--texto-sec)",textAlign:"right",padding:"0 3px 3px"}}>{diaNum}</div>
+                    <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:esHoy?"var(--primario)":"var(--texto-sec)",textAlign:"right",padding:"0 3px 3px"}}>{diaNum}</div>
                     <div style={{display:"flex",flexDirection:"column",gap:3}}>
                       {lista.map(c => (
                         <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} title={`${c.hora?.slice(0,5)} ${c.iniciales} — ${c.procedimiento}`} style={{background:fondoEstado[c.estado],borderLeft:`3px solid ${coloresEstado[c.estado]}`,borderRadius:4,padding:"2px 4px",cursor:"pointer",overflow:"hidden"}}>
@@ -5147,14 +5254,14 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
               const Tarjeta = (c) => (
                 <div key={c.id} onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:fondoEstado[c.estado],border:`0.5px solid ${coloresEstado[c.estado]}`,borderLeft:`4px solid ${coloresEstado[c.estado]}`,borderRadius:6,padding:"6px 7px",cursor:"pointer"}}>
                   <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                    <span style={{fontSize:10,fontWeight:700,color:coloresEstado[c.estado]}}>{c.hora?.slice(0,5)}</span>
+                    <span style={{fontSize:"var(--fs-xs)",fontWeight:700,color:coloresEstado[c.estado]}}>{c.hora?.slice(0,5)}</span>
                     {c.pabellon==="CCV"
                       ? <span style={{fontSize:8,fontWeight:600,background:"var(--ccv)",color:"var(--texto-inv)",padding:"0 4px",borderRadius:6}}>CCV</span>
                       : c.pabellon && <span style={{fontSize:8,color:"var(--texto-ter)"}}>Pab {c.pabellon}</span>}
                   </div>
-                  <div style={{fontSize:10,color:"var(--texto)",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
+                  <div style={{fontSize:"var(--fs-xs)",color:"var(--texto)",fontWeight:600,marginTop:2,lineHeight:1.25}}>{c.iniciales}{c.edad?` (${c.edad}a)`:""}</div>
                   {(c.ficha_clinica || c.rut) && <div style={{fontSize:8.5,color:"var(--texto-ter)",marginTop:1}}>{c.ficha_clinica?`FC ${c.ficha_clinica}`:""}{c.ficha_clinica&&c.rut?" · ":""}{c.rut||""}</div>}
-                  <div style={{fontSize:10,color:"var(--texto-sec)",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
+                  <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-sec)",marginTop:1,lineHeight:1.25}}>{c.procedimiento}{c.lateralidad?` · ${c.lateralidad}`:""}</div>
                   {c.cirujano && <div style={{fontSize:9,color:"var(--texto-ter)",marginTop:1}}>👨‍⚕️ {c.cirujano}</div>}
                   {c.primer_ayudante && <div style={{fontSize:9,color:"var(--texto-ter)"}}>🧑‍⚕️ {c.primer_ayudante}</div>}
                   <div style={{marginTop:3,display:"inline-block",fontSize:8,fontWeight:700,textTransform:"uppercase",letterSpacing:.3,color:"var(--texto-inv)",background:coloresEstado[c.estado],padding:"1px 6px",borderRadius:8}}>{textoEstado[c.estado]}</div>
@@ -5163,12 +5270,12 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
               return (
                 <div key={fecha} style={{background:esHoy?"var(--hoy-bg)":"var(--fondo-suave)",borderRadius:8,border:esHoy?"1.5px solid var(--primario)":"0.5px solid var(--borde-suave)",padding:6,minHeight:130}}>
-                  <div style={{textAlign:"center",fontSize:11,fontWeight:700,color:esHoy?"var(--primario)":"var(--texto-sec)",padding:"3px 0 6px",borderBottom:"0.5px solid var(--borde-suave)",marginBottom:6,textTransform:"capitalize"}}>
+                  <div style={{textAlign:"center",fontSize:"var(--fs-0)",fontWeight:700,color:esHoy?"var(--primario)":"var(--texto-sec)",padding:"3px 0 6px",borderBottom:"0.5px solid var(--borde-suave)",marginBottom:6,textTransform:"capitalize"}}>
                     {dObj.toLocaleDateString("es-CL",{weekday:"short"})} {dObj.getDate()}
                     {total>0 && <span style={{fontSize:9,fontWeight:500,color:"var(--texto-ter)"}}> · {total}</span>}
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                    {total===0 && <div style={{textAlign:"center",fontSize:10,color:"var(--borde-suave)",padding:"14px 0"}}>—</div>}
+                    {total===0 && <div style={{textAlign:"center",fontSize:"var(--fs-xs)",color:"var(--borde-suave)",padding:"14px 0"}}>—</div>}
                     {/* Pabellones del hospital primero */}
                     {hospital.map(Tarjeta)}
                     {/* CCV (Costanera) separado y siempre abajo */}
@@ -5190,22 +5297,22 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         const ordenadas = [...hospital, ...ccv]; // hospital primero, CCV abajo
         return (
         <div key={fecha} style={{marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:600,color:"var(--texto)",marginBottom:8,padding:"4px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
+          <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",marginBottom:8,padding:"4px 10px",background:"var(--fondo-suave)",borderRadius:6}}>
             📅 {new Date(fecha + "T00:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})} ({porFecha[fecha].length})
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
             {ordenadas.map((c,idx) => (
               <Fragment key={c.id}>
                 {idx===hospital.length && ccv.length>0 && (
-                  <div style={{fontSize:10,fontWeight:700,color:"var(--ccv)",textAlign:"center",margin:"2px 0",padding:"2px 0",borderTop:"1px dashed var(--ccv-borde)",borderBottom:"1px dashed var(--ccv-borde)"}}>CCV · COSTANERA</div>
+                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--ccv)",textAlign:"center",margin:"2px 0",padding:"2px 0",borderTop:"1px dashed var(--ccv-borde)",borderBottom:"1px dashed var(--ccv-borde)"}}>CCV · COSTANERA</div>
                 )}
                 <div onClick={()=>{setSeleccionado(c);setVista("detalle");}} style={{background:fondoEstado[c.estado],border:`0.5px solid ${coloresEstado[c.estado]}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",borderLeft:`4px solid ${coloresEstado[c.estado]}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,color:"var(--texto)",fontWeight:500}}>
+                      <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",fontWeight:500}}>
                         {c.hora?.slice(0,5)} | {c.iniciales}{c.edad ? ` (${c.edad}a)` : ""} | {c.procedimiento}{c.lateralidad ? ` (${c.lateralidad})` : ""}
                       </div>
-                      <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>
+                      <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:2}}>
                         {c.ficha_clinica && `FC ${c.ficha_clinica} | `}{c.rut && `RUT ${c.rut} | `}{c.pabellon==="CCV" ? "CCV" : `Pabellón ${c.pabellon}`}{c.cirujano && ` | 👨‍⚕️ ${c.cirujano}`}{c.primer_ayudante && ` | 🧑‍⚕️ ${c.primer_ayudante}`}
                       </div>
                     </div>
@@ -5273,13 +5380,13 @@ function PlantillasExamenesModal({ paciente, currentUser, onGuardado, onClose })
     else setMsg("No se pudo aplicar la plantilla.");
   };
 
-  const chip = (activo) => ({ padding: "7px 11px", fontSize: 12.5, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: activo ? "var(--primario)" : "var(--fondo-suave)", color: activo ? "var(--texto-inv)" : "var(--texto)", fontWeight: activo ? 700 : 500 });
+  const chip = (activo) => ({ padding: "7px 11px", fontSize: "var(--fs-1)", borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: activo ? "var(--primario)" : "var(--fondo-suave)", color: activo ? "var(--texto-inv)" : "var(--texto)", fontWeight: activo ? 700 : 500 });
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 400, maxHeight: "86vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📋 Plantillas de exámenes</div>
+          <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📋 Plantillas de exámenes</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
 
@@ -5291,21 +5398,21 @@ function PlantillasExamenesModal({ paciente, currentUser, onGuardado, onClose })
         {modo === "aplicar" && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 12, color: "var(--texto-sec)" }}>Fecha:</span>
-              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ fontSize: 12.5, padding: "5px 8px", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
+              <span style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)" }}>Fecha:</span>
+              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={{ fontSize: "var(--fs-1)", padding: "5px 8px", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
             </div>
             {plantillas.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: "var(--texto-ter)", fontStyle: "italic", padding: "6px 0" }}>Aún no tienes plantillas. Crea una en "Crear nueva".</div>
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", fontStyle: "italic", padding: "6px 0" }}>Aún no tienes plantillas. Crea una en "Crear nueva".</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {plantillas.map(p => (
                   <div key={p.nombre} style={{ background: "var(--fondo-suave)", borderRadius: 9, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--texto)" }}>{p.nombre}</span>
-                      <button onClick={() => borrarPlantilla(p.nombre)} style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: 13 }}>🗑</button>
+                      <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>{p.nombre}</span>
+                      <button onClick={() => borrarPlantilla(p.nombre)} style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-2)" }}>🗑</button>
                     </div>
-                    <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginBottom: 8 }}>{p.items.join(" · ")}</div>
-                    <button onClick={() => aplicar(p)} disabled={guardando} style={{ width: "100%", padding: 9, fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 7, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Agregando…" : `Agregar ${p.items.length} examen(es)`}</button>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8 }}>{p.items.join(" · ")}</div>
+                    <button onClick={() => aplicar(p)} disabled={guardando} style={{ width: "100%", padding: 9, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 7, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Agregando…" : `Agregar ${p.items.length} examen(es)`}</button>
                   </div>
                 ))}
               </div>
@@ -5315,16 +5422,16 @@ function PlantillasExamenesModal({ paciente, currentUser, onGuardado, onClose })
 
         {modo === "crear" && (
           <>
-            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la plantilla (ej: Control post-op)" style={{ width: "100%", padding: "9px 11px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 10 }} />
-            <div style={{ fontSize: 12, color: "var(--texto-sec)", marginBottom: 6 }}>Exámenes incluidos:</div>
+            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la plantilla (ej: Control post-op)" style={{ width: "100%", padding: "9px 11px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 10 }} />
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginBottom: 6 }}>Exámenes incluidos:</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
               {EXAMENES_PLANTILLA.map(it => <button key={it} onClick={() => toggle(it)} style={chip(sel.includes(it))}>{it}</button>)}
             </div>
-            <button onClick={crearPlantilla} style={{ width: "100%", padding: 11, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar plantilla</button>
+            <button onClick={crearPlantilla} style={{ width: "100%", padding: 11, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar plantilla</button>
           </>
         )}
 
-        {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginTop: 10 }}>{msg}</div>}
+        {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginTop: 10 }}>{msg}</div>}
       </div>
     </div>
   );
@@ -5408,7 +5515,7 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 440, maxHeight: "88vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📷 Exámenes desde foto</div>
+          <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📷 Exámenes desde foto</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
 
@@ -5416,22 +5523,22 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
 
         {fase === "capturar" && (
           <>
-            <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>Toma o sube hasta 5 fotos de los resultados. Revisa antes de extraer.</div>
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 10 }}>Toma o sube hasta 5 fotos de los resultados. Revisa antes de extraer.</div>
             {fotos.length > 0 && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                 {fotos.map((d, i) => (
                   <div key={i} style={{ position: "relative" }}>
                     <img src={d} alt={`foto ${i + 1}`} style={{ height: 76, borderRadius: 6, border: "0.5px solid var(--borde)" }} />
-                    <button onClick={() => setFotos(fotos.filter((_, j) => j !== i))} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: "var(--peligro)", color: "#fff", border: "none", fontSize: 11, cursor: "pointer", lineHeight: 1 }}>✕</button>
+                    <button onClick={() => setFotos(fotos.filter((_, j) => j !== i))} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: "var(--peligro)", color: "#fff", border: "none", fontSize: "var(--fs-0)", cursor: "pointer", lineHeight: 1 }}>✕</button>
                   </div>
                 ))}
               </div>
             )}
             {fotos.length < 5 && (
-              <button onClick={() => inputRef.current?.click()} style={{ width: "100%", padding: "10px", fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10 }}>{fotos.length ? "+ Agregar otra foto" : "📸 Tomar / subir foto"}</button>
+              <button onClick={() => inputRef.current?.click()} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10 }}>{fotos.length ? "+ Agregar otra foto" : "📸 Tomar / subir foto"}</button>
             )}
-            {error && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 8 }}>{error}</div>}
-            <button onClick={extraer} disabled={!fotos.length} style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 600, background: fotos.length ? "var(--primario)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: fotos.length ? "pointer" : "default" }}>Extraer datos de {fotos.length} foto{fotos.length === 1 ? "" : "s"}</button>
+            {error && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{error}</div>}
+            <button onClick={extraer} disabled={!fotos.length} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: fotos.length ? "var(--primario)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: fotos.length ? "pointer" : "default" }}>Extraer datos de {fotos.length} foto{fotos.length === 1 ? "" : "s"}</button>
           </>
         )}
 
@@ -5444,23 +5551,23 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
 
         {fase === "revisar" && (
           <>
-            <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>Revisa y confirma. Puedes ajustar la fecha o desmarcar los que no quieras guardar.</div>
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 10 }}>Revisa y confirma. Puedes ajustar la fecha o desmarcar los que no quieras guardar.</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
               {extraidos.map((ex, i) => (
                 <div key={i} style={{ background: "var(--fondo-suave)", borderRadius: 8, padding: "10px 12px", opacity: ex.incluir ? 1 : 0.5 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <input type="checkbox" checked={ex.incluir} onChange={() => setExtraidos(prev => prev.map((e, j) => j === i ? { ...e, incluir: !e.incluir } : e))} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", flex: 1 }}>{ex.nombre || ex.tipo}</span>
-                    <input type="date" value={ex.fecha_examen} onChange={e => setExtraidos(prev => prev.map((x, j) => j === i ? { ...x, fecha_examen: e.target.value } : x))} style={{ fontSize: 11.5, padding: "3px 6px", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
+                    <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", flex: 1 }}>{ex.nombre || ex.tipo}</span>
+                    <input type="date" value={ex.fecha_examen} onChange={e => setExtraidos(prev => prev.map((x, j) => j === i ? { ...x, fecha_examen: e.target.value } : x))} style={{ fontSize: "var(--fs-0)", padding: "3px 6px", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--texto-sec)", lineHeight: 1.4, paddingLeft: 24 }}>{resumenParams(ex) || <em style={{ color: "var(--texto-ter)" }}>sin valores detectados</em>}</div>
+                  <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.4, paddingLeft: 24 }}>{resumenParams(ex) || <em style={{ color: "var(--texto-ter)" }}>sin valores detectados</em>}</div>
                 </div>
               ))}
             </div>
-            {error && <div style={{ fontSize: 12, color: "var(--peligro)", marginBottom: 8 }}>{error}</div>}
+            {error && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{error}</div>}
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { setFase("capturar"); setExtraidos([]); }} style={{ padding: "10px 14px", fontSize: 13, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Atrás</button>
-              <button onClick={guardarTodos} disabled={guardando} style={{ flex: 1, padding: 12, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : `Guardar ${extraidos.filter(e => e.incluir).length} examen(es)`}</button>
+              <button onClick={() => { setFase("capturar"); setExtraidos([]); }} style={{ padding: "10px 14px", fontSize: "var(--fs-2)", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Atrás</button>
+              <button onClick={guardarTodos} disabled={guardando} style={{ flex: 1, padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : `Guardar ${extraidos.filter(e => e.incluir).length} examen(es)`}</button>
             </div>
           </>
         )}
@@ -5502,8 +5609,8 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   const imc = (f.peso && f.talla) ? (parseFloat(f.peso) / Math.pow(parseFloat(f.talla) / 100, 2)).toFixed(1) : "";
   const tieneAnticoag = /taco|warfarin|acenocumarol|sintrom|neosintrom|enoxaparin|clexane|heparin|rivaroxaban|xarelto|apixaban|eliquis|dabigatran|pradaxa|clopidogrel|plavix|aspirin|\baas\b|ticagrelor|prasugrel/i.test((f.farmacos || "") + " " + (f.morbidos || ""));
 
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
-  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
+  const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   const campo = (l, k, ml = false) => (<div><label style={lbl}>{l}</label>{ml ? <textarea rows={2} value={f[k]} onChange={e => set(k, e.target.value)} style={{ ...inp, resize: "vertical" }} /> : <input value={f[k]} onChange={e => set(k, e.target.value)} style={inp} />}</div>);
 
   const historiaTexto = () => {
@@ -5859,7 +5966,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
+          <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
@@ -5873,20 +5980,20 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         </div>
         <div style={{ gridColumn: "1 / -1" }}>{campo("Anamnesis próxima", "anamnesis", true)}</div>
         <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>Plan (ingresa para…)</label><input value={f.plan} onChange={e => set("plan", e.target.value)} placeholder="Ej: resección transuretral de próstata" style={inp} /></div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Anamnesis remota</div>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Anamnesis remota</div>
         {campo("Antecedentes mórbidos", "morbidos", true)}
         {campo("Fármacos", "farmacos", true)}
-        {tieneAnticoag && <div style={{ background: "var(--peligro-bg,#fdecec)", border: "0.5px solid var(--peligro)", color: "var(--peligro)", borderRadius: 8, padding: "8px 10px", fontSize: 12, marginBottom: 8, lineHeight: 1.4 }}>⚠️ Anticoagulante/antiagregante detectado. Define y registra la <b>fecha y hora de suspensión</b> antes de pabellón (p. ej. HBPM 12 h antes; TACO según INR; AAS/clopidogrel según riesgo).</div>}
+        {tieneAnticoag && <div style={{ background: "var(--peligro-bg,#fdecec)", border: "0.5px solid var(--peligro)", color: "var(--peligro)", borderRadius: 8, padding: "8px 10px", fontSize: "var(--fs-1)", marginBottom: 8, lineHeight: 1.4 }}>⚠️ Anticoagulante/antiagregante detectado. Define y registra la <b>fecha y hora de suspensión</b> antes de pabellón (p. ej. HBPM 12 h antes; TACO según INR; AAS/clopidogrel según riesgo).</div>}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Quirúrgicos", "quirurgicos")}{campo("Alergias", "alergias")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{campo("Tabaco", "tabaco")}{campo("OH", "oh")}{campo("Familiares", "familiares")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Acepta transfusiones", "transfusiones")}{campo("Urocultivo", "urocultivo")}</div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Examen físico {imc && <span style={{ fontWeight: 500, color: "var(--texto-ter)" }}>· IMC {imc}</span>}</div>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Examen físico {imc && <span style={{ fontWeight: 500, color: "var(--texto-ter)" }}>· IMC {imc}</span>}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{campo("Peso (kg)", "peso")}{campo("Talla (cm)", "talla")}{campo("PA", "pa")}</div>
         {campo("Cabeza y cuello", "cabeza")}{campo("Tórax", "torax")}{campo("Abdomen", "abdomen")}{campo("Fosas renales", "fosas")}{campo("EEII", "eeii")}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Genitales", "genitales")}{campo("T. rectal", "rectal")}</div>
         {campo("Hipótesis diagnóstica", "hipotesis", true)}
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
-        {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
         {onGuardarIngreso && (
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
             <div style={{ flex: 1 }}>
@@ -5894,26 +6001,26 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
               <input list="carpetas-list" value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="(sin carpeta)" style={inp} />
               <datalist id="carpetas-list">{carpetas.map(c => <option key={c} value={c} />)}</datalist>
             </div>
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso(f, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: 13, fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso(f, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-          <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Ingreso</button>
-          <button onClick={() => setAnexosAbierto(v => !v)} style={{ flex: 1, padding: 11, fontSize: 13, fontWeight: 600, background: anexosAbierto ? "var(--primario)" : "var(--superficie)", color: anexosAbierto ? "var(--texto-inv)" : "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📎 Anexos {anexosAbierto ? "−" : "+"}</button>
-          <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1.2, padding: 11, fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "…" : "➕ Hospitalizar"}</button>
+          <button onClick={generarPDF} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📄 Ingreso</button>
+          <button onClick={() => setAnexosAbierto(v => !v)} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 600, background: anexosAbierto ? "var(--primario)" : "var(--superficie)", color: anexosAbierto ? "var(--texto-inv)" : "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>📎 Anexos {anexosAbierto ? "−" : "+"}</button>
+          <button onClick={agregarAHospitalizados} disabled={guardando} style={{ flex: 1.2, padding: 11, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "…" : "➕ Hospitalizar"}</button>
         </div>
         {anexosAbierto && (
           <div style={{ marginTop: 12, background: "var(--fondo-suave)", borderRadius: 10, padding: 12 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--primario)", marginBottom: 8 }}>Anexos prellenados (revisa antes de imprimir)</div>
-            <div style={{ fontSize: 12, color: "var(--texto-sec)", lineHeight: 1.6 }}>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginBottom: 8 }}>Anexos prellenados (revisa antes de imprimir)</div>
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", lineHeight: 1.6 }}>
               <div><b>ETE / Caprini:</b> {f.nombre || "—"} · {f.edad || "—"} años · {f.sexo || "—"} · IMC {imc || "—"} · Dx: {f.hipotesis || "—"}</div>
               <div><b>Consentimiento:</b> {f.nombre || "—"} · RUN {f.rut || "—"} · condición: {f.hipotesis || "—"}</div>
               <div><b>Preanestesia:</b> {f.nombre || "—"} · Peso {f.peso || "—"} kg · Talla {f.talla || "—"} cm · PA {f.pa || "—"} · Alergias: {f.alergias || "—"}</div>
             </div>
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-              <button onClick={generarConsentimientoPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: 12, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 Consentimiento</button>
-              <button onClick={generarPreanestesiaPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: 12, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 Preanestesia</button>
-              <button onClick={generarETEPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: 12, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 ETE / Caprini</button>
+              <button onClick={generarConsentimientoPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 Consentimiento</button>
+              <button onClick={generarPreanestesiaPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 Preanestesia</button>
+              <button onClick={generarETEPDF} style={{ flex: "1 1 30%", padding: 10, fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📄 ETE / Caprini</button>
             </div>
           </div>
         )}
@@ -5925,7 +6032,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
 function IngresosPanel({ currentUser, contexto }) {
   const [ingresos, setIngresos] = useState([]);
-  const [carpetasLocal, setCarpetasLocal] = useState([]);
+  const [carpetas, setCarpetas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -5934,63 +6041,111 @@ function IngresosPanel({ currentUser, contexto }) {
 
   const cargar = async () => {
     setCargando(true);
-    let q = supabase.from("ingresos").select("*").order("updated_at", { ascending: false });
-    q = equipoId ? q.eq("equipo_id", equipoId) : q.eq("user_id", currentUser.id).is("equipo_id", null);
-    const { data, error } = await q;
-    if (!error) setIngresos(data || []);
+    const scope = (q) => equipoId ? q.eq("equipo_id", equipoId) : q.eq("user_id", currentUser.id).is("equipo_id", null);
+    const [ri, rc] = await Promise.all([
+      scope(supabase.from("ingresos").select("*").order("updated_at", { ascending: false })),
+      scope(supabase.from("carpetas_ingresos").select("*").order("orden", { ascending: true })),
+    ]);
+    setIngresos(ri.data || []); setCarpetas(rc.data || []);
     setCargando(false);
   };
   useEffect(() => { cargar(); }, [contexto]);
 
-  const carpetasBD = Array.from(new Set(ingresos.map(i => i.carpeta).filter(Boolean)));
-  const todasCarpetas = Array.from(new Set([...carpetasLocal, ...carpetasBD])).sort();
+  // Todas las rutas conocidas: de la tabla + derivadas de ingresos + ancestros.
+  const rutasSet = new Set();
+  carpetas.forEach(c => c.ruta && rutasSet.add(c.ruta));
+  ingresos.forEach(i => { if (i.carpeta) rutasSet.add(i.carpeta); });
+  Array.from(rutasSet).forEach(r => { const parts = r.split("/"); for (let k = 1; k < parts.length; k++) rutasSet.add(parts.slice(0, k).join("/")); });
+  const todasRutas = Array.from(rutasSet).sort();
+  const ordenDe = {}; carpetas.forEach(c => { ordenDe[c.ruta] = c.orden ?? 0; });
 
-  const guardarIngreso = async (datos, carpeta, id) => {
-    const fila = { user_id: currentUser.id, equipo_id: equipoId, carpeta: carpeta || null, nombre: datos.nombre || null, ficha: datos.ficha || null, datos, updated_at: new Date().toISOString() };
-    if (id) await supabase.from("ingresos").update(fila).eq("id", id);
-    else await supabase.from("ingresos").insert(fila);
+  // Árbol de carpetas.
+  const raiz = { children: {}, ingresos: [] };
+  const nodoDe = (ruta) => {
+    if (!ruta) return raiz;
+    const parts = ruta.split("/"); let n = raiz;
+    parts.forEach((seg, i) => { const path = parts.slice(0, i + 1).join("/"); if (!n.children[seg]) n.children[seg] = { name: seg, path, children: {}, ingresos: [] }; n = n.children[seg]; });
+    return n;
+  };
+  todasRutas.forEach(r => nodoDe(r));
+  ingresos.forEach(i => nodoDe(i.carpeta).ingresos.push(i));
+  const contar = (node) => node.ingresos.length + Object.values(node.children).reduce((s, c) => s + contar(c), 0);
+
+  const crearCarpeta = async (padre) => {
+    const n = window.prompt(padre ? `Nueva subcarpeta dentro de "${padre}":` : "Nueva carpeta (ej: 2026):");
+    if (!n || !n.trim()) return;
+    const ruta = (padre ? padre + "/" : "") + n.trim().replace(/\//g, "-");
+    const hermanos = carpetas.filter(c => c.ruta.split("/").slice(0, -1).join("/") === (padre || ""));
+    const orden = hermanos.length ? Math.max(...hermanos.map(h => h.orden || 0)) + 1 : 0;
+    await supabase.from("carpetas_ingresos").insert({ user_id: currentUser.id, equipo_id: equipoId, ruta, orden });
     await cargar();
   };
-  const eliminar = async (id) => { if (!confirm("¿Eliminar este ingreso?")) return; await supabase.from("ingresos").delete().eq("id", id); await cargar(); };
-  const mover = async (ing) => {
-    const c = window.prompt(`Carpeta destino (vacío = sin carpeta).\nExistentes: ${todasCarpetas.join(", ") || "—"}`, ing.carpeta || "");
+  const eliminarCarpeta = async (ruta) => {
+    if (!confirm(`¿Eliminar la carpeta "${ruta}" y sus subcarpetas? Los ingresos dentro quedarán sin carpeta.`)) return;
+    const ids = carpetas.filter(c => c.ruta === ruta || c.ruta.startsWith(ruta + "/")).map(c => c.id);
+    if (ids.length) await supabase.from("carpetas_ingresos").delete().in("id", ids);
+    const ing = ingresos.filter(i => i.carpeta === ruta || (i.carpeta || "").startsWith(ruta + "/")).map(i => i.id);
+    if (ing.length) await supabase.from("ingresos").update({ carpeta: null }).in("id", ing);
+    await cargar();
+  };
+  const moverIngreso = async (ing) => {
+    const c = window.prompt("Mover a carpeta (ruta con / para subcarpeta; vacío = sin carpeta).\nExistentes:\n" + (todasRutas.join("\n") || "—"), ing.carpeta || "");
     if (c === null) return;
     await supabase.from("ingresos").update({ carpeta: c.trim() || null }).eq("id", ing.id); await cargar();
   };
-  const nuevaCarpeta = () => { const n = window.prompt("Nombre de la nueva carpeta:"); if (n && n.trim()) setCarpetasLocal(prev => [...new Set([...prev, n.trim()])]); };
+  const guardarIngreso = async (datos, carpeta, id) => {
+    const fila = { user_id: currentUser.id, equipo_id: equipoId, carpeta: carpeta || null, nombre: datos.nombre || null, ficha: datos.ficha || null, datos, updated_at: new Date().toISOString() };
+    if (id) await supabase.from("ingresos").update(fila).eq("id", id); else await supabase.from("ingresos").insert(fila);
+    await cargar();
+  };
+  const eliminar = async (id) => { if (!confirm("¿Eliminar este ingreso?")) return; await supabase.from("ingresos").delete().eq("id", id); await cargar(); };
 
-  const grupos = {}; ingresos.forEach(i => { const k = i.carpeta || "Sin carpeta"; (grupos[k] = grupos[k] || []).push(i); });
-  todasCarpetas.forEach(c => { if (!grupos[c]) grupos[c] = []; });
-  const nombresGrupos = Object.keys(grupos).sort((a, b) => a === "Sin carpeta" ? 1 : b === "Sin carpeta" ? -1 : a.localeCompare(b));
+  const filaIngreso = (ing) => (
+    <div key={ing.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "9px 12px", marginBottom: 5 }}>
+      <div onClick={() => { setEditando(ing); setModalAbierto(true); }} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ing.nombre || "(sin nombre)"}</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{ing.ficha ? "Ficha " + ing.ficha + " · " : ""}{(ing.updated_at || "").slice(0, 10)}</div>
+      </div>
+      <button onClick={() => moverIngreso(ing)} title="Mover a carpeta" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)" }}>📁</button>
+      <button onClick={() => eliminar(ing.id)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>
+    </div>
+  );
+
+  const renderNodo = (node, depth) => {
+    const hijos = Object.values(node.children).sort((a, b) => (ordenDe[a.path] ?? 0) - (ordenDe[b.path] ?? 0) || a.name.localeCompare(b.name));
+    return hijos.map(h => {
+      const col = colapsadas[h.path];
+      return (
+        <div key={h.path} style={{ marginLeft: depth ? 12 : 0, marginBottom: 3, borderLeft: depth ? "1px solid var(--borde)" : "none", paddingLeft: depth ? 6 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 2px" }}>
+            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({contar(h)})</span></span>
+            <button onClick={() => crearCarpeta(h.path)} title="Nueva subcarpeta" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 5, color: "var(--primario)", cursor: "pointer", fontSize: "var(--fs-2)", width: 22, height: 20, lineHeight: 1, padding: 0 }}>＋</button>
+            <button onClick={() => eliminarCarpeta(h.path)} title="Eliminar carpeta" style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)" }}>🗑</button>
+          </div>
+          {!col && <div>{renderNodo(h, depth + 1)}{h.ingresos.map(filaIngreso)}</div>}
+        </div>
+      );
+    });
+  };
 
   return (
     <div style={{ padding: 16 }}>
-      {modalAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={editando} carpetas={todasCarpetas} onGuardarIngreso={guardarIngreso} onCreado={() => {}} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      {modalAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={editando} carpetas={todasRutas} onGuardarIngreso={guardarIngreso} onCreado={() => {}} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: 13.5, fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo ingreso</button>
-        <button onClick={nuevaCarpeta} style={{ padding: "11px 14px", fontSize: 13, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
+        <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo ingreso</button>
+        <button onClick={() => crearCarpeta("")} style={{ padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
       </div>
-      {cargando ? <div style={{ color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div> :
-        ingresos.length === 0 && todasCarpetas.length === 0 ? <div style={{ color: "var(--texto-ter)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Aún no hay ingresos guardados.</div> :
-        nombresGrupos.map(g => (
-          <div key={g} style={{ marginBottom: 12 }}>
-            <div onClick={() => setColapsadas(p => ({ ...p, [g]: !p[g] }))} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, fontWeight: 700, color: "var(--texto-sec)", padding: "4px 2px", cursor: "pointer" }}>
-              <span>📁 {g} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({grupos[g].length})</span></span>
-              <span>{colapsadas[g] ? "▸" : "▾"}</span>
+      {cargando ? <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div> :
+        (ingresos.length === 0 && todasRutas.length === 0) ? <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "20px 0" }}>Aún no hay ingresos guardados.</div> :
+        <>
+          {renderNodo(raiz, 0)}
+          {raiz.ingresos.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto-sec)", padding: "4px 2px" }}>Sin carpeta ({raiz.ingresos.length})</div>
+              {raiz.ingresos.map(filaIngreso)}
             </div>
-            {!colapsadas[g] && grupos[g].map(ing => (
-              <div key={ing.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "10px 12px", marginBottom: 6 }}>
-                <div onClick={() => { setEditando(ing); setModalAbierto(true); }} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ing.nombre || "(sin nombre)"}</div>
-                  <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>{ing.ficha ? "Ficha " + ing.ficha + " · " : ""}{(ing.updated_at || "").slice(0, 10)}</div>
-                </div>
-                <button onClick={() => mover(ing)} title="Mover a carpeta" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>📁</button>
-                <button onClick={() => eliminar(ing.id)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--peligro)" }}>🗑</button>
-              </div>
-            ))}
-            {!colapsadas[g] && grupos[g].length === 0 && <div style={{ fontSize: 11.5, color: "var(--texto-ter)", fontStyle: "italic", padding: "2px 4px 6px" }}>Carpeta vacía · usa 📁 en un ingreso para moverlo aquí.</div>}
-          </div>
-        ))
+          )}
+        </>
       }
     </div>
   );
@@ -6029,8 +6184,8 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
   const toggleProd = (nom) => setProductos(p => ({ ...p, [nom]: { on: !p[nom]?.on, cant: p[nom]?.cant || "" } }));
   const setCantProd = (nom, cant) => setProductos(p => ({ ...p, [nom]: { on: true, cant } }));
 
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
-  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
+  const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
 
   const generarPDF = async () => {
     const algunProd = Object.values(productos).some(p => p?.on);
@@ -6100,51 +6255,67 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
       campo("Hb", hb, M + 3 * (w5 + 3), w5, y);
       campo("PESO", peso ? `${peso} kg` : "", M + 4 * (w5 + 3), w5, y); y += 12;
 
-      // Producto y cantidad (izq) · Carácter (der)
-      const colY = y;
+      // Producto y cantidad (izq) · Carácter (der), con divisoria vertical
+      const colY = y; const midX = W / 2;
+      doc.setDrawColor(160, 160, 160); doc.setLineWidth(0.2); doc.line(midX, colY - 3, midX, colY + 46);
       doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(40, 40, 40);
-      doc.text("PRODUCTO Y CANTIDAD", M, y);
-      doc.text("CARÁCTER DE LA TRANSFUSIÓN", W / 2 + 4, y);
-      let yl = y + 5;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+      doc.text("PRODUCTO  Y  CANTIDAD", M, y);
+      doc.text("CARÁCTER DE LA TRANSFUSIÓN", midX + 5, y);
+      let yl = y + 6; doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
       const check = (x, yy, on) => { doc.setDrawColor(80, 80, 80); doc.rect(x, yy - 3, 3.5, 3.5); if (on) { doc.setFont("helvetica", "bold"); doc.text("X", x + 0.55, yy - 0.3); doc.setFont("helvetica", "normal"); } };
       PRODUCTOS_TX.forEach(nom => {
         const p = productos[nom];
-        check(M, yl, p?.on);
-        doc.setTextColor(20, 20, 20);
-        doc.text(nom, M + 5.5, yl);
-        if (p?.on && p.cant) doc.text(`${p.cant} U`, M + 55, yl);
-        yl += 6.2;
+        check(M, yl, p?.on); doc.setTextColor(20, 20, 20); doc.text(nom, M + 5.5, yl);
+        if (nom !== "Autotransfusión") { doc.setDrawColor(180, 180, 180); doc.line(M + 42, yl + 0.5, M + 56, yl + 0.5); if (p?.on && p.cant) doc.text(String(p.cant), M + 45, yl - 0.3); doc.text("U", M + 57.5, yl); }
+        yl += 6.4;
       });
-      let yr = colY + 5;
+      let yr = colY + 6;
       CARACTER_TX.forEach(c => {
         const on = caracter === c;
-        check(W / 2 + 4, yr, on);
-        doc.text(c === "Otros" && caracterOtro ? `Otros: ${caracterOtro}` : c, W / 2 + 9.5, yr, { maxWidth: (W / 2) - M - 10 });
-        yr += 7;
+        check(midX + 5, yr, on);
+        doc.text(c === "Otros" && caracterOtro ? `Otros: ${caracterOtro}` : c, midX + 10.5, yr, { maxWidth: (W / 2) - M - 12 });
+        yr += 8;
       });
-      y = Math.max(yl, yr) + 4;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(6.6); doc.setTextColor(120, 120, 120);
+      doc.text("*EL CARÁCTER INMEDIATA ES DE EXCLUSIVA RESPONSABILIDAD DEL MÉDICO QUE INDICA", midX + 5, yr + 1, { maxWidth: (W / 2) - M - 8 });
+      y = Math.max(yl, yr + 6) + 3;
 
-      // Transfusiones previas / reacciones
+      // Aporto donantes
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(20, 20, 20);
+      doc.text("APORTO DONANTES", M, y); check(M + 34, y, false); doc.text("SÍ", M + 39, y); check(M + 48, y, false); doc.text("NO", M + 53, y);
+      y += 8;
+
+      // Médico solicitante + Código
+      doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.2);
+      doc.roundedRect(M, y, full * 0.66, 12, 1, 1); doc.roundedRect(M + full * 0.66 + 3, y, full * 0.34 - 3, 12, 1, 1);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(90, 90, 90);
+      doc.text("NOMBRE Y FIRMA MÉDICO SOLICITANTE", M + 1.5, y - 1.5);
+      doc.text("CÓDIGO", M + full * 0.66 + 5, y - 1.5);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(20, 20, 20);
+      doc.text(currentUser?.nombre || "", M + 2, y + 5);
+      y += 17;
+
+      // Transfusiones previas / reacciones adversas
       doc.setFontSize(8);
-      check(M, y, txPrevias === "si"); doc.text("Transf. previas: Sí", M + 5.5, y);
-      check(M + 42, y, txPrevias === "no"); doc.text("No", M + 47.5, y);
-      check(M + 62, y, reacciones === "si"); doc.text("Reacciones adversas: Sí", M + 67.5, y);
-      check(M + 118, y, reacciones === "no"); doc.text("No", M + 123.5, y);
-      y += 6;
-      if (reacciones === "si" && reaccionTipo) { doc.text(`Tipo de reacción: ${reaccionTipo}`, M, y); y += 6; }
+      check(M, y, txPrevias === "si"); doc.text("TRANSFUSIONES PREVIAS  SÍ", M + 5.5, y);
+      check(M + 52, y, txPrevias === "no"); doc.text("NO", M + 57.5, y);
+      check(M + 70, y, reacciones === "si"); doc.text("REACCIONES ADVERSAS  SÍ", M + 75.5, y);
+      check(M + 120, y, reacciones === "no"); doc.text("NO", M + 125.5, y);
+      doc.text("TIPO:", M + 135, y); doc.setDrawColor(180, 180, 180); doc.line(M + 143, y + 0.5, W - M, y + 0.5);
+      if (reacciones === "si" && reaccionTipo) doc.text(reaccionTipo.slice(0, 20), M + 145, y - 0.3);
+      y += 8;
 
-      // Médico solicitante
-      y += 4;
-      doc.setDrawColor(150, 150, 150); doc.line(M, y, M + 90, y);
-      doc.setFontSize(7.5); doc.setTextColor(90, 90, 90);
-      doc.text("NOMBRE Y FIRMA MÉDICO SOLICITANTE", M, y + 4);
-      doc.setFontSize(9); doc.setTextColor(20, 20, 20);
-      doc.text(currentUser?.nombre || "", M, y - 1.5);
+      // Nombre legible del responsable de la toma de muestra + Código
+      doc.setDrawColor(150, 150, 150);
+      doc.roundedRect(M, y, full * 0.66, 11, 1, 1); doc.roundedRect(M + full * 0.66 + 3, y, full * 0.34 - 3, 11, 1, 1);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(90, 90, 90);
+      doc.text("NOMBRE LEGIBLE DEL RESPONSABLE DE LA TOMA DE MUESTRA", M + 1.5, y - 1.5);
+      doc.text("CÓDIGO", M + full * 0.66 + 5, y - 1.5);
+      y += 16;
 
-      // Nota al pie
-      doc.setFont("helvetica", "italic"); doc.setFontSize(7); doc.setTextColor(120, 120, 120);
-      doc.text("NOTA: cualquier solicitud incompleta o ilegible será rechazada por el Banco de Sangre. · Generado con UroSearch", M, 288);
+      // NOTA final (en negrita, como la plantilla)
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(20, 20, 20);
+      doc.text("NOTA: CUALQUIER SOLICITUD INCOMPLETA O ILEGIBLE SERÁ RECHAZADA POR EL BANCO DE SANGRE", M, Math.max(y, 285), { maxWidth: full });
 
       const nombreArch = `orden_transfusion_${(paciente.iniciales || "paciente").replace(/\s+/g, "_")}.pdf`;
       doc.save(nombreArch);
@@ -6159,10 +6330,10 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 640, maxHeight: "88vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--texto)" }}>🩸 Orden de transfusión</div>
+          <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>🩸 Orden de transfusión</div>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginBottom: 12, background: "var(--fondo-suave)", padding: "8px 10px", borderRadius: 7 }}>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 12, background: "var(--fondo-suave)", padding: "8px 10px", borderRadius: 7 }}>
           {paciente.iniciales} · {paciente.edad} años · {paciente.sexo} · Cama {paciente.cama || "—"} · {paciente.servicio}
         </div>
 
@@ -6183,22 +6354,22 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
           {PREVISIONES_TX.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "6px 0 6px" }}>Producto y cantidad</div>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", margin: "6px 0 6px" }}>Producto y cantidad</div>
         {PRODUCTOS_TX.map(nom => (
           <div key={nom} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, fontSize: 13, color: "var(--texto)", cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, fontSize: "var(--fs-2)", color: "var(--texto)", cursor: "pointer" }}>
               <input type="checkbox" checked={!!productos[nom]?.on} onChange={() => toggleProd(nom)} />
               {nom}
             </label>
             {productos[nom]?.on && nom !== "Autotransfusión" && (
-              <input value={productos[nom]?.cant || ""} onChange={e => setCantProd(nom, e.target.value)} placeholder="U" inputMode="numeric" style={{ width: 60, padding: "6px 8px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
+              <input value={productos[nom]?.cant || ""} onChange={e => setCantProd(nom, e.target.value)} placeholder="U" inputMode="numeric" style={{ width: 60, padding: "6px 8px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 6, background: "var(--superficie)", color: "var(--texto)" }} />
             )}
           </div>
         ))}
 
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--primario)", margin: "10px 0 6px" }}>Carácter</div>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", margin: "10px 0 6px" }}>Carácter</div>
         {CARACTER_TX.map(c => (
-          <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: 13, color: "var(--texto)", cursor: "pointer" }}>
+          <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, fontSize: "var(--fs-2)", color: "var(--texto)", cursor: "pointer" }}>
             <input type="radio" name="caracterTx" checked={caracter === c} onChange={() => setCaracter(c)} />
             {c}
           </label>
@@ -6208,12 +6379,12 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
         )}
 
         <div style={{ display: "flex", gap: 16, margin: "10px 0" }}>
-          <div style={{ fontSize: 12.5, color: "var(--texto)" }}>
+          <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)" }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Transf. previas</div>
             <label style={{ marginRight: 10 }}><input type="radio" name="txp" checked={txPrevias === "si"} onChange={() => setTxPrevias("si")} /> Sí</label>
             <label><input type="radio" name="txp" checked={txPrevias === "no"} onChange={() => setTxPrevias("no")} /> No</label>
           </div>
-          <div style={{ fontSize: 12.5, color: "var(--texto)" }}>
+          <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)" }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>Reacciones adversas</div>
             <label style={{ marginRight: 10 }}><input type="radio" name="rxa" checked={reacciones === "si"} onChange={() => setReacciones("si")} /> Sí</label>
             <label><input type="radio" name="rxa" checked={reacciones === "no"} onChange={() => setReacciones("no")} /> No</label>
@@ -6223,8 +6394,8 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
           <input value={reaccionTipo} onChange={e => setReaccionTipo(e.target.value)} placeholder="Tipo de reacción" style={inp} />
         )}
 
-        {msg && <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
-        <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1, marginTop: 4 }}>{generando ? "Generando…" : "📄 Generar orden en PDF"}</button>
+        {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1, marginTop: 4 }}>{generando ? "Generando…" : "📄 Generar orden en PDF"}</button>
       </div>
     </div>
   );
@@ -6633,7 +6804,7 @@ const cargarMiembrosEquipo = async () => {
   // Estilo de cada ítem del menú desplegable
   const itemMenu = (activo) => ({
     display:"block", width:"100%", textAlign:"left",
-    padding:"8px 10px", fontSize:12.5, borderRadius:7, cursor:"pointer",
+    padding:"8px 10px", fontSize:"var(--fs-1)", borderRadius:7, cursor:"pointer",
     background: activo ? "var(--primario-suave, #E8F3FB)" : "none",
     color: activo ? "var(--primario)" : "var(--texto)",
     fontWeight: activo ? 700 : 500, border:"none",
@@ -6714,10 +6885,12 @@ const cargarMiembrosEquipo = async () => {
     if (soloLectura) return;
     e.stopPropagation();
     const startX = e.clientX, startY = e.clientY;
-    let activo = false;
+    let activo = false, autoDir = 0, scEl = null, autoTimer = null;
     const move = (ev) => {
       if (ev.cancelable) ev.preventDefault();
       setDragPos({ x: ev.clientX, y: ev.clientY });
+      const vh = window.innerHeight;
+      autoDir = ev.clientY < 95 ? -1 : ev.clientY > vh - 95 ? 1 : 0;
       const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-serv]");
       if (el) {
         const serv = el.getAttribute("data-serv");
@@ -6729,6 +6902,7 @@ const cargarMiembrosEquipo = async () => {
     };
     const up = async () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      clearInterval(autoTimer);
       const over = overRef.current, dp = dragPacRef.current;
       dragPacRef.current = null; overRef.current = null; setDragPos(null); setGapId(null);
       arrastreRecienteRef.current = Date.now();
@@ -6750,6 +6924,8 @@ const cargarMiembrosEquipo = async () => {
       window.removeEventListener("pointermove", preMove); window.removeEventListener("pointerup", preUp);
       dragPacRef.current = p; overRef.current = null; setGapId(null); setDragPos({ x: startX, y: startY });
       try { navigator.vibrate?.(15); } catch {}
+      scEl = scrollParent(kanbanRef.current || document.body);
+      autoTimer = setInterval(() => { if (autoDir !== 0 && scEl) scEl.scrollBy(0, autoDir * 16); }, 16);
       window.addEventListener("pointermove", move, { passive: false });
       window.addEventListener("pointerup", up);
     };
@@ -6963,7 +7139,7 @@ const cargarMiembrosEquipo = async () => {
     // Avisar a los encargados cuando se da de alta
     if (nuevoEstado === "alta" && Array.isArray(paciente.encargados)) {
       paciente.encargados.filter(id => id !== currentUser.id).forEach(id => {
-        crearNotificacion(id, `Paciente dado de alta: ${paciente.iniciales} (cama ${paciente.cama})`, "paciente");
+        crearNotificacion(id, `Paciente dado de alta: ${paciente.iniciales} (cama ${paciente.cama}) — por ${currentUser.nombre}`, "paciente");
       });
     }
   };
@@ -7012,7 +7188,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   setPacientes(prev => prev.map(p => p.id === pacienteId ? result.paciente : p));
   // Notificar a los recién agregados (no a quien se auto-asigna)
   nuevosEncargados.filter(id => !previos.includes(id) && id !== currentUser.id).forEach(id => {
-    crearNotificacion(id, `Te asignaron como encargado del paciente ${paciente?.iniciales || ""} (cama ${paciente?.cama || "?"})`, "paciente");
+    crearNotificacion(id, `Te asignaron como encargado del paciente ${paciente?.iniciales || ""} (cama ${paciente?.cama || "?"}) — por ${currentUser.nombre}`, "paciente");
   });
 };
   const toggleOperado = async () => {
@@ -7097,6 +7273,21 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     cargarPendientesPaciente(paciente.id);
   };
 
+  const imprimirNota = async (ev) => {
+    let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 18; let y = 18;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, y - 4, 16, 16); } catch {}
+    doc.setFont("times", "bold"); doc.setFontSize(11); doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
+    doc.setFont("times", "normal"); doc.setFontSize(10);
+    doc.text(`Nombre: ${seleccionado.iniciales || ""}`, M, y); doc.text(`Edad: ${seleccionado.edad || ""}`, W - M - 38, y); y += 5;
+    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || ""}    Servicio: ${seleccionado.servicio || ""}    Cama: ${seleccionado.cama || "—"}`, M, y); y += 5;
+    doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 7;
+    doc.setFont("times", "bold"); doc.setFontSize(9.5);
+    doc.text(`${ev.fecha_evolucion || ""} ${ev.hora_evolucion || ""}   ·   ${ev.autor?.nombre || ""}${ev.tipo && ev.tipo !== "libre" ? "   [" + ev.tipo + "]" : ""}`, M, y); y += 6;
+    doc.setFont("times", "normal"); doc.setFontSize(10.5);
+    doc.splitTextToSize(ev.texto || "", W - 2 * M).forEach(l => { if (y > 285) { doc.addPage(); y = 18; } doc.text(l, M, y); y += 5.2; });
+    doc.save(`nota_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}_${(ev.fecha_evolucion || "").replace(/-/g, "")}.pdf`);
+  };
   const descargarEvolucionesPDF = async () => {
     if (!evoluciones || evoluciones.length === 0) { alert("Este paciente aún no tiene evoluciones para exportar."); return; }
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
@@ -7153,7 +7344,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     setPendientesPaciente(prev => [result.pendiente, ...prev]);
     // Notificar encargados asignados
     nuevoPendientePac.encargados.filter(id => id !== currentUser.id).forEach(id => {
-      crearNotificacion(id, `Te asignaron un pendiente del paciente ${seleccionado.iniciales}: "${nuevoPendientePac.texto.trim().slice(0,70)}"`, "pendiente");
+      crearNotificacion(id, `Te asignaron un pendiente del paciente ${seleccionado.iniciales}: "${nuevoPendientePac.texto.trim().slice(0,70)}" — por ${currentUser.nombre}`, "pendiente");
     });
     setNuevoPendientePac({ texto: "", prioridad: "normal", fecha_objetivo: "", encargados: [] });
   };
@@ -7454,24 +7645,24 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nuevo paciente {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
 
         {/* Captura por foto: autocompleta desde la hoja de ingreso */}
         <div style={{textAlign:"center",border:"1.5px dashed var(--borde)",borderRadius:12,padding:"14px",marginBottom:14,background:"var(--fondo-suave)"}}>
           <input ref={inputFotoIngresoRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoNuevoIngreso}/>
           {extrayendoIngreso ? (
-            <div style={{fontSize:13,color:"var(--texto-sec)"}}>🔍 Leyendo la hoja de ingreso…</div>
+            <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>🔍 Leyendo la hoja de ingreso…</div>
           ) : (
             <>
               <div style={{fontSize:24,marginBottom:4}}>📷</div>
-              <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:2}}>Crear desde foto del ingreso</div>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:10}}>La IA extrae diagnóstico, antecedentes, exámenes e historia. Hasta 3 fotos.</div>
-              <button onClick={()=>inputFotoIngresoRef.current?.click()} style={{padding:"8px 16px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Tomar / subir foto</button>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:2}}>Crear desde foto del ingreso</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:10}}>La IA extrae diagnóstico, antecedentes, exámenes e historia. Hasta 3 fotos.</div>
+              <button onClick={()=>inputFotoIngresoRef.current?.click()} style={{padding:"8px 16px",fontSize:"var(--fs-2)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Tomar / subir foto</button>
             </>
           )}
         </div>
-        {extraccionMsg && <div style={{fontSize:12,padding:"8px 10px",marginBottom:12,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
+        {extraccionMsg && <div style={{fontSize:"var(--fs-1)",padding:"8px 10px",marginBottom:12,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -7526,14 +7717,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </select>
         ) : (
           // Sin servicios aún: entra directo al modo "crear nuevo"
-          <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:6,lineHeight:1.4}}>
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:6,lineHeight:1.4}}>
             {esEquipo ? "Este equipo aún no tiene servicios. Crea el primero:" : "Aún no tienes servicios. Crea el primero:"}
           </div>
         )}
         {esEquipo && nuevo.servicio && serviciosSinFormalizar.includes(nuevo.servicio) && (
-          <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4,lineHeight:1.4}}>
+          <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:4,lineHeight:1.4}}>
             «{nuevo.servicio}» ya lo usan otros pacientes pero no está en la lista formal del equipo.{" "}
-            <button type="button" onClick={async()=>{const r=await crearServicioEquipo(contexto,currentUser.id,nuevo.servicio,serviciosEquipo.length); if(r.ok) setServiciosEquipo(p=>[...p,r.servicio]); else alert(r.error);}} style={{background:"none",border:"none",color:"var(--primario)",textDecoration:"underline",cursor:"pointer",fontSize:10.5,padding:0}}>Formalizarlo ahora</button>
+            <button type="button" onClick={async()=>{const r=await crearServicioEquipo(contexto,currentUser.id,nuevo.servicio,serviciosEquipo.length); if(r.ok) setServiciosEquipo(p=>[...p,r.servicio]); else alert(r.error);}} style={{background:"none",border:"none",color:"var(--primario)",textDecoration:"underline",cursor:"pointer",fontSize:"var(--fs-xs)",padding:0}}>Formalizarlo ahora</button>
           </div>
         )}
 
@@ -7551,15 +7742,15 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               type="button"
               onClick={crearServicioInline}
               disabled={!nuevoServicioInline.trim() || guardandoServicioInline}
-              style={{padding:"9px 14px",fontSize:13,fontWeight:600,background:nuevoServicioInline.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}
+              style={{padding:"9px 14px",fontSize:"var(--fs-2)",fontWeight:600,background:nuevoServicioInline.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap"}}
             >{guardandoServicioInline ? "…" : "Crear"}</button>
             {serviciosDisponibles.length > 0 && (
-              <button type="button" onClick={()=>{setCreandoServicioInline(false); setNuevoServicioInline("");}} style={{padding:"9px 10px",fontSize:13,background:"none",border:"none",color:"var(--texto-ter)",cursor:"pointer"}}>✕</button>
+              <button type="button" onClick={()=>{setCreandoServicioInline(false); setNuevoServicioInline("");}} style={{padding:"9px 10px",fontSize:"var(--fs-2)",background:"none",border:"none",color:"var(--texto-ter)",cursor:"pointer"}}>✕</button>
             )}
           </div>
         )}
         {esEquipo && (creandoServicioInline || serviciosDisponibles.length === 0) && (
-          <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4}}>
+          <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:4}}>
             Al crearlo, lo verán todos los miembros del equipo.
           </div>
         )}
@@ -7576,7 +7767,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <label style={labelStyle}>Historia / ingreso (opcional)</label>
         <textarea value={nuevo.historia} onChange={e=>setNuevo({...nuevo,historia:e.target.value})} placeholder="Se autocompleta desde la foto del ingreso. Puedes editarla." rows={4} style={{...inputStyle,resize:"vertical"}}/>
 
-        {error && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
+        {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{error}</div>}
 
         <button onClick={guardarNuevo} style={{...btnPrimary, marginTop:0}}>Guardar paciente</button>
       </div>
@@ -7591,18 +7782,18 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const permiteDrag = true; // el orden se comparte: en equipo se guarda en el servidor
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <button onClick={()=>setVista("lista")} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:6}}>
           ⚙️ {esEquipo ? `Servicios de ${equipoActual?.nombre || "equipo"}` : "Mis servicios"}
         </div>
-        <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:14}}>
+        <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",marginBottom:14}}>
           {esEquipo
             ? "Estos servicios los ven, crean y eliminan todos los miembros del equipo. Mantén presionado ☰ y arrastra para reordenar: el orden se comparte con todos."
             : "Configura los servicios/pisos del hospital donde atiendes. Mantén presionado ☰ y arrastra para reordenarlos."}
         </div>
 
         {esEquipo && misServiciosLista.length > 0 && (
-          <button onClick={migrarServicios} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:12.5,fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
+          <button onClick={migrarServicios} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:"var(--fs-1)",fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
             ⬆️ Copiar mis {misServiciosLista.length} servicio(s) personales a este equipo
           </button>
         )}
@@ -7611,18 +7802,18 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             const r = await crearServiciosEquipoBulk(contexto, currentUser.id, serviciosSinFormalizar);
             if (!r.ok) return alert(r.error);
             setServiciosEquipo(prev => [...prev, ...r.servicios]);
-          }} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:12.5,fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
+          }} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:"var(--fs-1)",fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
             📋 Formalizar {serviciosSinFormalizar.length} servicio(s) ya usados en pacientes ({serviciosSinFormalizar.join(", ")})
           </button>
         )}
 
         <div style={{display:"flex",gap:6,marginBottom:14}}>
-          <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:13,borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
-          <button onClick={agregarServicio} disabled={!nuevoServicio.trim()} style={{padding:"9px 14px",fontSize:13,fontWeight:500,background:nuevoServicio.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Agregar</button>
+          <input value={nuevoServicio} onChange={e=>setNuevoServicio(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")agregarServicio();}} placeholder="Ej: Cirugía 3er piso" style={{flex:1,padding:"9px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}}/>
+          <button onClick={agregarServicio} disabled={!nuevoServicio.trim()} style={{padding:"9px 14px",fontSize:"var(--fs-2)",fontWeight:500,background:nuevoServicio.trim()?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Agregar</button>
         </div>
 
         {serviciosActivos.length === 0 ? (
-          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:13}}>
+          <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>
             {esEquipo
               ? (serviciosSinFormalizar.length > 0
                   ? "Ya hay servicios en uso arriba ↑ — formalízalos con el botón, o agrega uno nuevo."
@@ -7654,9 +7845,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                         title="Arrastra para reordenar"
                       >☰</span>
                     )}
-                    <div style={{fontSize:13,color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.nombre}</div>
+                    <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.nombre}</div>
                   </div>
-                  <button onClick={()=>quitarServicio(s)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:14,flexShrink:0}}>🗑</button>
+                  <button onClick={()=>quitarServicio(s)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",flexShrink:0}}>🗑</button>
                 </div>
               );
             })}
@@ -7677,7 +7868,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
         {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setPlantillasAbierto(false)} />}
-        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:13,cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
+        <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
        {/* Cabecera */}
 <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
@@ -7746,13 +7937,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     <button key={ant} type="button" onClick={()=>{
                       const nueva = activo ? lista.filter(x=>x!==ant) : [...lista, ant];
                       setEditForm({...editForm, antecedentes: nueva});
-                    }} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:activo?"none":"0.5px solid var(--borde)",background:activo?"#f2a03f":"var(--superficie)",color:activo?"var(--texto-inv)":"var(--texto-ter)",fontWeight:activo?600:400}}>
+                    }} style={{padding:"5px 11px",fontSize:"var(--fs-2)",borderRadius:14,cursor:"pointer",border:activo?"none":"0.5px solid var(--borde)",background:activo?"#f2a03f":"var(--superficie)",color:activo?"var(--texto-inv)":"var(--texto-ter)",fontWeight:activo?600:400}}>
                       {ant}
                     </button>
                   );
                 })}
                 {personalizados.map(ant => (
-                  <button key={ant} type="button" title="Clic para quitar" onClick={()=>setEditForm({...editForm, antecedentes: lista.filter(x=>x!==ant)})} style={{padding:"5px 11px",fontSize:13,borderRadius:14,cursor:"pointer",border:"none",background:"#f2a03f",color:"var(--texto-inv)",fontWeight:600}}>
+                  <button key={ant} type="button" title="Clic para quitar" onClick={()=>setEditForm({...editForm, antecedentes: lista.filter(x=>x!==ant)})} style={{padding:"5px 11px",fontSize:"var(--fs-2)",borderRadius:14,cursor:"pointer",border:"none",background:"#f2a03f",color:"var(--texto-inv)",fontWeight:600}}>
                     {ant} ✕
                   </button>
                 ))}
@@ -7762,7 +7953,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
         <div style={{display:"flex",gap:6,marginTop:8}}>
           <input value={otroAntecedente} onChange={e=>setOtroAntecedente(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&otroAntecedente.trim()){const lista=Array.isArray(editForm.antecedentes)?editForm.antecedentes:[];if(!lista.includes(otroAntecedente.trim()))setEditForm({...editForm,antecedentes:[...lista,otroAntecedente.trim()]});setOtroAntecedente("");}}} placeholder="Otro antecedente (ej: EPOC, ERC etapa 3...)" style={{...inputStyle,marginBottom:0,flex:1}}/>
-          <button type="button" disabled={!otroAntecedente.trim()} onClick={()=>{const lista=Array.isArray(editForm.antecedentes)?editForm.antecedentes:[];if(!lista.includes(otroAntecedente.trim()))setEditForm({...editForm,antecedentes:[...lista,otroAntecedente.trim()]});setOtroAntecedente("");}} style={{padding:"0 16px",fontSize:13,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,opacity:otroAntecedente.trim()?1:0.5}}>+ Agregar</button>
+          <button type="button" disabled={!otroAntecedente.trim()} onClick={()=>{const lista=Array.isArray(editForm.antecedentes)?editForm.antecedentes:[];if(!lista.includes(otroAntecedente.trim()))setEditForm({...editForm,antecedentes:[...lista,otroAntecedente.trim()]});setOtroAntecedente("");}} style={{padding:"0 16px",fontSize:"var(--fs-2)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,opacity:otroAntecedente.trim()?1:0.5}}>+ Agregar</button>
         </div>
       </div>
       <div>
@@ -7775,7 +7966,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={guardarEdicion} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar cambios</button>
-        <button onClick={()=>setEditandoFicha(false)} style={{padding:"9px 14px",fontSize:13,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+        <button onClick={()=>setEditandoFicha(false)} style={{padding:"9px 14px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
       </div>
     </div>
   ) : (
@@ -7787,37 +7978,37 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             {seleccionado.edad} años · Cama {seleccionado.cama || "por asignar"} · {seleccionado.servicio}
           </div>
           {(seleccionado.ficha_clinica || seleccionado.rut) && (
-            <div style={{fontSize:13,color:"var(--texto-ter)",marginTop:3}}>
+            <div style={{fontSize:"var(--fs-2)",color:"var(--texto-ter)",marginTop:3}}>
               {seleccionado.ficha_clinica ? `FC: ${seleccionado.ficha_clinica}` : ""}{seleccionado.ficha_clinica && seleccionado.rut ? " · " : ""}{seleccionado.rut ? `RUT: ${seleccionado.rut}` : ""}
             </div>
           )}
-          <div style={{fontSize:14,color:"var(--texto-ter)",marginTop:4}}>Ingreso: {fmtFecha(seleccionado.fecha_ingreso)}</div>
+          <div style={{fontSize:"var(--fs-2)",color:"var(--texto-ter)",marginTop:4}}>Ingreso: {fmtFecha(seleccionado.fecha_ingreso)}</div>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:14,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏️</button>
-          {!soloLectura && <button onClick={()=>setOrdenTxAbierta(true)} title="Orden de transfusión" aria-label="Orden de transfusión" style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🩸 Transfusión</button>}
+          <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:"var(--fs-2)",lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏️</button>
+          {!soloLectura && <button onClick={()=>setOrdenTxAbierta(true)} title="Orden de transfusión" aria-label="Orden de transfusión" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🩸 Transfusión</button>}
           {!soloLectura && <>
             <input ref={inputFotoFichaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoFichaIngreso}/>
-            <button onClick={()=>inputFotoFichaRef.current?.click()} disabled={extrayendoIngreso} title="Agregar ingreso desde foto" aria-label="Agregar ingreso desde foto" style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoIngreso?"default":"pointer",fontWeight:500,opacity:extrayendoIngreso?0.6:1}}>{extrayendoIngreso?"🔍 Leyendo…":"📷 Ingreso"}</button>
+            <button onClick={()=>inputFotoFichaRef.current?.click()} disabled={extrayendoIngreso} title="Agregar ingreso desde foto" aria-label="Agregar ingreso desde foto" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoIngreso?"default":"pointer",fontWeight:500,opacity:extrayendoIngreso?0.6:1}}>{extrayendoIngreso?"🔍 Leyendo…":"📷 Ingreso"}</button>
           </>}
           {seleccionado.estado === "activo" ? (
-            <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:11,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
+            <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
           ) : (
-            <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>↺ Reactivar</button>
+            <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>↺ Reactivar</button>
           )}
           {esCreador && (
-            <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>🗑</button>
+            <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>🗑</button>
           )}
         </div>
       </div>
-      {extraccionMsg && <div style={{fontSize:12,padding:"8px 10px",marginTop:8,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
-      <div style={{fontSize:14,color:"var(--texto)",marginTop:8,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
+      {extraccionMsg && <div style={{fontSize:"var(--fs-1)",padding:"8px 10px",marginTop:8,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
+      <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",marginTop:8,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
         <strong>Diagnóstico:</strong> {seleccionado.diagnostico}
       </div>
       {/* Estado clínico */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
-        <span style={{fontSize:14,color:"var(--texto)",fontWeight:600}}>Estado del paciente</span>
-        <select value={seleccionado.estado_clinico || ""} onChange={e=>cambiarEstadoClinico(e.target.value)} style={{fontSize:13,padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
+        <span style={{fontSize:"var(--fs-2)",color:"var(--texto)",fontWeight:600}}>Estado del paciente</span>
+        <select value={seleccionado.estado_clinico || ""} onChange={e=>cambiarEstadoClinico(e.target.value)} style={{fontSize:"var(--fs-2)",padding:"5px 10px",borderRadius:6,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",cursor:"pointer"}}>
           <option value="">Sin definir</option>
           <option value="estable">🟢 Estable</option>
           <option value="regular">🟡 Regular</option>
@@ -7826,10 +8017,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </div>
       {/* Operado + agregar cirugía */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6,padding:"10px 12px",background:seleccionado.operado?"var(--exito-bg)":"var(--fondo-suave)",borderRadius:6,gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:14,color:"var(--texto)",fontWeight:600}}>🔪 Operado</span>
+        <span style={{fontSize:"var(--fs-2)",color:"var(--texto)",fontWeight:600}}>🔪 Operado</span>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           {seleccionado.operado && (
-            <button onClick={abrirFormCirugia} style={{fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:500}}>+ Agregar cirugía</button>
+            <button onClick={abrirFormCirugia} style={{fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontWeight:500}}>+ Agregar cirugía</button>
           )}
           <button onClick={toggleOperado} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:seleccionado.operado?"var(--exito)":"var(--borde-suave)",position:"relative",transition:"background 0.2s",padding:0}}>
             <span style={{position:"absolute",top:3,left:seleccionado.operado?23:3,width:20,height:20,borderRadius:"50%",background:"var(--superficie)",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}/>
@@ -7839,14 +8030,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* Formulario para agregar cirugía */}
       {seleccionado.operado && formCirugia && (
         <div style={{marginTop:6,padding:"12px",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:6}}>
-          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)",marginBottom:8}}>Nueva cirugía</div>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:8}}>Nueva cirugía</div>
           <label style={labelStyle}>Fecha de la cirugía</label>
           <input type="date" value={formCirugia.fecha} onChange={e=>setFormCirugia({...formCirugia, fecha:e.target.value})} style={inputStyle}/>
           <label style={labelStyle}>Cirugía realizada</label>
           <input value={formCirugia.nombre} onChange={e=>setFormCirugia({...formCirugia, nombre:e.target.value})} placeholder="Ej: RTU vesical, Nefrectomía..." style={inputStyle}/>
           <div style={{display:"flex",gap:8,marginTop:4}}>
             <button onClick={guardarCirugia} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar cirugía</button>
-            <button onClick={()=>setFormCirugia(null)} style={{padding:"9px 14px",fontSize:13,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+            <button onClick={()=>setFormCirugia(null)} style={{padding:"9px 14px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
           </div>
         </div>
       )}
@@ -7856,31 +8047,31 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {seleccionado.cirugias_realizadas.map((cx, idx) => {
             const dia = diaPostOp(cx.fecha);
             return (
-              <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:14,color:"var(--texto)",padding:"3px 0"}}>
+              <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:"var(--fs-2)",color:"var(--texto)",padding:"3px 0"}}>
                 <span><strong>Día {dia}:</strong> {cx.nombre}</span>
-                <button onClick={()=>eliminarCirugia(idx)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                <button onClick={()=>eliminarCirugia(idx)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>✕</button>
               </div>
             );
           })}
         </div>
       )}
       {Array.isArray(seleccionado.antecedentes) && seleccionado.antecedentes.length > 0 && (
-        <div style={{fontSize:14,color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
+        <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
           <strong>Antecedentes:</strong>{" "}
           <span style={{display:"inline-flex",flexWrap:"wrap",gap:5,verticalAlign:"middle"}}>
             {seleccionado.antecedentes.map(a => (
-              <span key={a} style={{fontSize:12,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{a}</span>
+              <span key={a} style={{fontSize:"var(--fs-1)",background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{a}</span>
             ))}
           </span>
         </div>
       )}
       {seleccionado.alergias && seleccionado.alergias.trim() && (
-        <div style={{fontSize:14,color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--peligro-bg)",borderRadius:6}}>
+        <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--peligro-bg)",borderRadius:6}}>
           <strong style={{color:"var(--peligro)"}}>⚠ Alergias:</strong> {seleccionado.alergias}
         </div>
       )}
       {seleccionado.plan_manejo && (
-        <div style={{fontSize:14,color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,whiteSpace:"pre-wrap"}}>
+        <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,whiteSpace:"pre-wrap"}}>
           <strong>Plan:</strong> {seleccionado.plan_manejo}
         </div>
       )}
@@ -7891,9 +8082,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* HISTORIA DEL PACIENTE */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:seleccionado.historia||editandoHistoria?8:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>📖 Historia</div>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>📖 Historia</div>
             {!editandoHistoria && (
-              <button onClick={()=>{setHistoriaDraft(seleccionado.historia||"");setEditandoHistoria(true);}} style={{padding:"4px 11px",fontSize:11,background:seleccionado.historia?"var(--superficie)":"var(--primario)",color:seleccionado.historia?"var(--primario)":"var(--texto-inv)",border:seleccionado.historia?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>
+              <button onClick={()=>{setHistoriaDraft(seleccionado.historia||"");setEditandoHistoria(true);}} style={{padding:"4px 11px",fontSize:"var(--fs-0)",background:seleccionado.historia?"var(--superficie)":"var(--primario)",color:seleccionado.historia?"var(--primario)":"var(--texto-inv)",border:seleccionado.historia?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>
                 {seleccionado.historia ? "✏ Editar" : "+ Agregar Historia"}
               </button>
             )}
@@ -7903,47 +8094,48 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <textarea value={historiaDraft} onChange={e=>setHistoriaDraft(e.target.value)} placeholder="Breve historia del paciente: motivo de ingreso, contexto clínico, evolución previa..." rows={4} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={guardarHistoria} style={{...btnPrimary,marginTop:0,flex:1}}>Guardar historia</button>
-                <button onClick={()=>setEditandoHistoria(false)} style={{padding:"9px 14px",fontSize:13,background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
+                <button onClick={()=>setEditandoHistoria(false)} style={{padding:"9px 14px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Cancelar</button>
               </div>
             </>
           ) : seleccionado.historia ? (
-            <div style={{fontSize:13,color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.5,background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px"}}>{seleccionado.historia}</div>
+            <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.5,background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px"}}>{seleccionado.historia}</div>
           ) : null}
         </div>
 
         {/* ÚLTIMA EVOLUCIÓN + anteriores colapsadas */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>📝 Evoluciones</div>
+            <div style={ST_TITULO_SEC}>📝 Evoluciones</div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={descargarEvolucionesPDF} title="Descargar evoluciones en PDF" aria-label="Descargar evoluciones en PDF" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📄</button>
-              {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
+              <button onClick={descargarEvolucionesPDF} title="Descargar evoluciones en PDF" aria-label="Descargar evoluciones en PDF" style={ST_BTN_ICO}>📄</button>
+              {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={ST_BTN_MAS}>+</button>}
             </div>
           </div>
           {evoluciones.length === 0 ? (
-            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay evoluciones registradas</div>
+            <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay evoluciones registradas</div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {(mostrarEvosAntiguas ? evoluciones : evoluciones.slice(0,1)).map((e, idx) => (
                 <div key={e.id} style={{background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:idx===0?"3px solid var(--primario)":"3px solid var(--borde)",border:idx===0?"0.5px solid var(--primario)":"none"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,gap:8}}>
-                    <div style={{fontSize:11,color:"var(--texto-ter)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                    <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                       {idx===0 && <span style={{fontSize:9,background:"var(--primario)",color:"var(--texto-inv)",padding:"1px 7px",borderRadius:8,fontWeight:600}}>MÁS RECIENTE</span>}
                       {e.fecha_evolucion} {e.hora_evolucion?.slice(0,5)} | {e.autor?.nombre || "Anónimo"} | <span style={{color:e.tipo==="estructurada"?"var(--exito)":e.tipo==="examen"?"var(--alerta)":"var(--texto-sec)",fontWeight:e.tipo==="examen"?600:400}}>{e.tipo==="examen"?"🧪 examen":e.tipo}</span>
                     </div>
-                    {e.autor_id === currentUser.id && (
-                      <div style={{display:"flex",gap:8,flexShrink:0}}>
-                        <button onClick={()=>abrirEdicionEvo(e)} title="Editar" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:12,padding:0}}>✏️</button>
-                        <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
-                      </div>
-                    )}
+                    <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
+                      <button onClick={()=>imprimirNota(e)} title="Imprimir / PDF" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🖨️</button>
+                      {e.autor_id === currentUser.id && (<>
+                        <button onClick={()=>abrirEdicionEvo(e)} title="Editar" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>✏️</button>
+                        <button onClick={()=>eliminarEvo(e.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
+                      </>)}
+                    </div>
                   </div>
                   {editandoEvoId===e.id ? (
                     <div>
-                      <textarea value={editTexto} onChange={ev=>setEditTexto(ev.target.value)} rows={4} style={{width:"100%",fontSize:13,padding:"8px 10px",border:"0.5px solid var(--primario)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.4,resize:"vertical"}} />
+                      <textarea value={editTexto} onChange={ev=>setEditTexto(ev.target.value)} rows={4} style={{width:"100%",fontSize:"var(--fs-2)",padding:"8px 10px",border:"0.5px solid var(--primario)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.4,resize:"vertical"}} />
                       <div style={{display:"flex",gap:8,marginTop:6}}>
-                        <button onClick={()=>guardarEdicionEvo(e)} style={{padding:"6px 14px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer"}}>Guardar</button>
-                        <button onClick={()=>setEditandoEvoId(null)} style={{padding:"6px 14px",fontSize:12.5,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Cancelar</button>
+                        <button onClick={()=>guardarEdicionEvo(e)} style={{padding:"6px 14px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer"}}>Guardar</button>
+                        <button onClick={()=>setEditandoEvoId(null)} style={{padding:"6px 14px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
@@ -7952,7 +8144,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 </div>
               ))}
               {evoluciones.length > 1 && (
-                <button onClick={()=>setMostrarEvosAntiguas(!mostrarEvosAntiguas)} style={{padding:"8px",fontSize:12,background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                <button onClick={()=>setMostrarEvosAntiguas(!mostrarEvosAntiguas)} style={{padding:"8px",fontSize:"var(--fs-1)",background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
                   {mostrarEvosAntiguas ? "▴ Ver menos evoluciones" : "▾ Ver más evoluciones"}
                 </button>
               )}
@@ -7963,15 +8155,15 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* EXÁMENES agrupados por día + anteriores colapsados */}
         <div style={{order:2,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>🧪 Exámenes</div>
+            <div style={ST_TITULO_SEC}>🧪 Exámenes</div>
             {!soloLectura && <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>setPlantillasAbierto(true)} title="Plantillas de exámenes" aria-label="Plantillas de exámenes" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📋</button>
-              <button onClick={()=>setFotoExamenesAbierto(true)} title="Exámenes desde foto" aria-label="Exámenes desde foto" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📷</button>
-              <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>
+              <button onClick={()=>setPlantillasAbierto(true)} title="Plantillas de exámenes" aria-label="Plantillas de exámenes" style={ST_BTN_ICO}>📋</button>
+              <button onClick={()=>setFotoExamenesAbierto(true)} title="Exámenes desde foto" aria-label="Exámenes desde foto" style={ST_BTN_ICO}>📷</button>
+              <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={ST_BTN_MAS}>+</button>
             </div>}
           </div>
           {examenes.length === 0 ? (
-            <div style={{fontSize:11,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay exámenes registrados</div>
+            <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay exámenes registrados</div>
           ) : (() => {
             // Agrupar por fecha_examen (desc)
             const porDia = {};
@@ -7982,27 +8174,27 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 <div key={ex.id} style={{background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px",borderLeft:"3px solid var(--exito)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:"var(--texto)"}}>
+                      <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto)"}}>
                         <span style={{fontSize:9,padding:"1px 6px",background:"var(--exito)",color:"var(--texto-inv)",borderRadius:3,marginRight:6}}>{ex.tipo}</span>
                         {ex.nombre}
                       </div>
-                      <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:2}}>{ex.autor?.nombre || "Anónimo"}</div>
+                      <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:2}}>{ex.autor?.nombre || "Anónimo"}</div>
                     </div>
                     {ex.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:12,padding:0}}>🗑</button>
+                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
                     )}
                   </div>
                   {ex.datos_estructurados && (ex.datos_estructurados.pirads || ex.datos_estructurados.pesoProstatico || ex.datos_estructurados.lugar || ex.datos_estructurados.tipoCultivo) && (
                     <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
-                      {ex.datos_estructurados.pirads && <span style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>PI-RADS {ex.datos_estructurados.pirads}</span>}
-                      {ex.datos_estructurados.pesoProstatico && <span style={{fontSize:11,background:"var(--chip-azul-bg)",color:"var(--chip-azul)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Próstata {ex.datos_estructurados.pesoProstatico} g</span>}
-                      {ex.datos_estructurados.lugar && <span style={{fontSize:11,background:"var(--ccv-bg)",color:"var(--ccv)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>📍 {ex.datos_estructurados.lugar}</span>}
-                      {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:11,background:"var(--exito-bg)",color:"var(--exito)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
+                      {ex.datos_estructurados.pirads && <span style={{fontSize:"var(--fs-0)",background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>PI-RADS {ex.datos_estructurados.pirads}</span>}
+                      {ex.datos_estructurados.pesoProstatico && <span style={{fontSize:"var(--fs-0)",background:"var(--chip-azul-bg)",color:"var(--chip-azul)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>Próstata {ex.datos_estructurados.pesoProstatico} g</span>}
+                      {ex.datos_estructurados.lugar && <span style={{fontSize:"var(--fs-0)",background:"var(--ccv-bg)",color:"var(--ccv)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>📍 {ex.datos_estructurados.lugar}</span>}
+                      {ex.datos_estructurados.tipoCultivo && <span style={{fontSize:"var(--fs-0)",background:"var(--exito-bg)",color:"var(--exito)",padding:"2px 8px",borderRadius:8,fontWeight:600}}>{ex.datos_estructurados.tipoCultivo}</span>}
                     </div>
                   )}
                   {ex.datos_estructurados && ex.datos_estructurados.germen && (
                     <div style={{marginTop:5}}>
-                      <span style={{fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8,fontWeight:600,fontStyle:"italic"}}>🦠 {ex.datos_estructurados.germen}</span>
+                      <span style={{fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8,fontWeight:600,fontStyle:"italic"}}>🦠 {ex.datos_estructurados.germen}</span>
                     </div>
                   )}
                   {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.antibiograma) && ex.datos_estructurados.antibiograma.length > 0 && (
@@ -8010,7 +8202,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       {ex.datos_estructurados.antibiograma.map((a,i) => {
                         const col = a.sens === "Sensible" ? "var(--exito)" : a.sens === "Resistente" ? "var(--peligro)" : "var(--texto-ter)";
                         const bg = a.sens === "Sensible" ? "var(--exito-bg)" : a.sens === "Resistente" ? "var(--peligro-bg, #FEE2E2)" : "var(--fondo-suave)";
-                        return <span key={i} style={{fontSize:10.5,background:bg,color:col,padding:"2px 7px",borderRadius:8,fontWeight:600}}>{a.atb} · {a.sens?.[0] || "?"}</span>;
+                        return <span key={i} style={{fontSize:"var(--fs-xs)",background:bg,color:col,padding:"2px 7px",borderRadius:8,fontWeight:600}}>{a.atb} · {a.sens?.[0] || "?"}</span>;
                       })}
                     </div>
                   )}
@@ -8038,7 +8230,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                           }
                         }
                         return (
-                          <span key={k} style={{fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8}}>
+                          <span key={k} style={{fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto)",padding:"2px 8px",borderRadius:8}}>
                             <strong>{def?.label || k}:</strong> {v}{def?.unidad ? ` ${def.unidad}` : ""}{flecha}
                           </span>
                         );
@@ -8047,10 +8239,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   )}
                   {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.litiasis) && ex.datos_estructurados.litiasis.length > 0 && (
                     <div style={{marginTop:6}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🪨 Litiasis</div>
+                      <div style={{fontSize:"var(--fs-0)",fontWeight:600,color:"var(--primario)",marginBottom:3}}>🪨 Litiasis</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         {ex.datos_estructurados.litiasis.map((l,i) => (
-                          <span key={i} style={{fontSize:11,background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
+                          <span key={i} style={{fontSize:"var(--fs-0)",background:"var(--alerta-bg)",color:"var(--alerta)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
                             {[l.ubicacion,l.tercio,l.lateralidad,l.tamano?`${l.tamano} mm`:"",l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · ")}
                           </span>
                         ))}
@@ -8059,24 +8251,24 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   )}
                   {ex.datos_estructurados && Array.isArray(ex.datos_estructurados.tumores) && ex.datos_estructurados.tumores.length > 0 && (
                     <div style={{marginTop:6}}>
-                      <div style={{fontSize:11,fontWeight:600,color:"var(--primario)",marginBottom:3}}>🎯 Tumor</div>
+                      <div style={{fontSize:"var(--fs-0)",fontWeight:600,color:"var(--primario)",marginBottom:3}}>🎯 Tumor</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                         {ex.datos_estructurados.tumores.map((t,i) => (
-                          <span key={i} style={{fontSize:11,background:"var(--peligro-bg)",color:"var(--peligro)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
+                          <span key={i} style={{fontSize:"var(--fs-0)",background:"var(--peligro-bg)",color:"var(--peligro)",padding:"2px 8px",borderRadius:8,fontWeight:500}}>
                             {[t.organo,t.sublocalizacion,t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · ")}
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
-                  {ex.resultado && <div style={{fontSize:12,color:"var(--texto)",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
+                  {ex.resultado && <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",marginTop:6,whiteSpace:"pre-wrap"}}>{ex.resultado}</div>}
                 </div>
             );
             return (
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {fechasVisibles.map(fecha => (
                   <div key={fecha}>
-                    <div style={{fontSize:11,fontWeight:700,color:"var(--texto-sec)",marginBottom:5,padding:"3px 10px",background:"var(--fondo-suave)",borderRadius:6,display:"inline-block"}}>
+                    <div style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--texto-sec)",marginBottom:5,padding:"3px 10px",background:"var(--fondo-suave)",borderRadius:6,display:"inline-block"}}>
                       📅 {fecha === "s/f" ? "Sin fecha" : fecha} · {porDia[fecha].length} examen{porDia[fecha].length===1?"":"es"}
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -8085,7 +8277,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   </div>
                 ))}
                 {fechas.length > 1 && (
-                  <button onClick={()=>setMostrarExAntiguos(!mostrarExAntiguos)} style={{padding:"8px",fontSize:12,background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                  <button onClick={()=>setMostrarExAntiguos(!mostrarExAntiguos)} style={{padding:"8px",fontSize:"var(--fs-1)",background:"var(--fondo-suave)",border:"0.5px dashed var(--borde)",color:"var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
                     {mostrarExAntiguos ? "▴ Ver menos exámenes" : "▾ Ver más exámenes"}
                   </button>
                 )}
@@ -8097,8 +8289,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* PENDIENTES DEL PACIENTE */}
         <div style={{order:6,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormPendiente||pendientesPaciente.length>0?10:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>✅ Pendientes del paciente</div>
-            <button onClick={()=>setAbrirFormPendiente(!abrirFormPendiente)} style={{padding:"5px 12px",fontSize:12,background:abrirFormPendiente?"var(--superficie)":"var(--primario)",color:abrirFormPendiente?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormPendiente?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormPendiente?"Cancelar":"+ Agregar pendiente"}</button>
+            <div style={ST_TITULO_SEC}>✅ Pendientes del paciente</div>
+            <button onClick={()=>setAbrirFormPendiente(!abrirFormPendiente)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",background:abrirFormPendiente?"var(--superficie)":"var(--primario)",color:abrirFormPendiente?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormPendiente?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormPendiente?"Cancelar":"+ Agregar pendiente"}</button>
           </div>
           {abrirFormPendiente && (
           <div style={{marginBottom:pendientesPaciente.length>0?10:0}}>
@@ -8113,7 +8305,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </div>
           {esEquipo && miembrosEquipo.length > 0 && (
             <div style={{marginBottom:8}}>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:4}}>Agregar encargado:</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:4}}>Agregar encargado:</div>
               <select value="" onChange={e=>{const uid=e.target.value; if(uid && !nuevoPendientePac.encargados.includes(uid)) setNuevoPendientePac({...nuevoPendientePac,encargados:[...nuevoPendientePac.encargados,uid]});}} style={{...inputStyle,marginBottom:6}}>
                 <option value="">Seleccionar miembro…</option>
                 {miembrosEquipo.filter(m=>m.perfiles?.id && !nuevoPendientePac.encargados.includes(m.perfiles.id)).map(m => (
@@ -8125,7 +8317,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   {nuevoPendientePac.encargados.map(uid => {
                     const m = miembrosEquipo.find(x=>x.perfiles?.id===uid);
                     return (
-                      <span key={uid} onClick={()=>setNuevoPendientePac({...nuevoPendientePac,encargados:nuevoPendientePac.encargados.filter(x=>x!==uid)})} style={{padding:"4px 11px",fontSize:11,borderRadius:14,cursor:"pointer",background:"var(--primario)",color:"var(--texto-inv)",fontWeight:600}}>{m?.perfiles?.nombre||"?"} ✕</span>
+                      <span key={uid} onClick={()=>setNuevoPendientePac({...nuevoPendientePac,encargados:nuevoPendientePac.encargados.filter(x=>x!==uid)})} style={{padding:"4px 11px",fontSize:"var(--fs-0)",borderRadius:14,cursor:"pointer",background:"var(--primario)",color:"var(--texto-inv)",fontWeight:600}}>{m?.perfiles?.nombre||"?"} ✕</span>
                     );
                   })}
                 </div>
@@ -8137,10 +8329,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
           {pendientesPaciente.map(p => (
             <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:"var(--fondo-suave)",borderRadius:6,marginBottom:4,opacity:p.estado==="completado"?0.55:1}}>
-              <button onClick={()=>togglePendientePacCompletado(p)} style={{width:17,height:17,borderRadius:4,border:"1px solid var(--borde)",background:p.estado==="completado"?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}}>{p.estado==="completado"?"✓":""}</button>
+              <button onClick={()=>togglePendientePacCompletado(p)} style={{width:17,height:17,borderRadius:4,border:"1px solid var(--borde)",background:p.estado==="completado"?"var(--exito)":"var(--superficie)",color:"var(--texto-inv)",cursor:"pointer",fontSize:"var(--fs-0)",padding:0,flexShrink:0}}>{p.estado==="completado"?"✓":""}</button>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,color:"var(--texto)",textDecoration:p.estado==="completado"?"line-through":"none"}}>{p.texto.replace(/^\[[^\]]*\]\s*/,"")}</div>
-                <div style={{fontSize:10,color:"var(--texto-ter)"}}>{p.prioridad==="alta"?"🔴":p.prioridad==="baja"?"🟢":"🟡"}{p.fecha_objetivo?` · para el ${p.fecha_objetivo}`:""}</div>
+                <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",textDecoration:p.estado==="completado"?"line-through":"none"}}>{p.texto.replace(/^\[[^\]]*\]\s*/,"")}</div>
+                <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>{p.prioridad==="alta"?"🔴":p.prioridad==="baja"?"🟢":"🟡"}{p.fecha_objetivo?` · para el ${p.fecha_objetivo}`:""}</div>
               </div>
             </div>
           ))}
@@ -8149,14 +8341,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* NUEVA EVOLUCIÓN (formulario) */}
         <div ref={formEvoRef} style={abrirFormEvo?{order:1,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}:{order:1}}>
           {abrirFormEvo && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nueva evolución</div>
-            <button onClick={()=>setAbrirFormEvo(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>➕ Nueva evolución</div>
+            <button onClick={()=>setAbrirFormEvo(false)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
           </div>}
           {abrirFormEvo && (<>
           {/* Selector tipo */}
           <div style={{display:"flex",gap:8,marginBottom:10}}>
-            <button onClick={()=>setTipoEvo("estructurada")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="estructurada"?"var(--primario)":"var(--superficie)",color:tipoEvo==="estructurada"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="estructurada"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Estructurada (SOAP)</button>
-            <button onClick={()=>setTipoEvo("libre")} style={{flex:1,padding:"11px 14px",fontSize:14,background:tipoEvo==="libre"?"var(--primario)":"var(--superficie)",color:tipoEvo==="libre"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="libre"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Libre</button>
+            <button onClick={()=>setTipoEvo("estructurada")} style={{flex:1,padding:"11px 14px",fontSize:"var(--fs-2)",background:tipoEvo==="estructurada"?"var(--primario)":"var(--superficie)",color:tipoEvo==="estructurada"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="estructurada"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Estructurada (SOAP)</button>
+            <button onClick={()=>setTipoEvo("libre")} style={{flex:1,padding:"11px 14px",fontSize:"var(--fs-2)",background:tipoEvo==="libre"?"var(--primario)":"var(--superficie)",color:tipoEvo==="libre"?"var(--texto-inv)":"var(--texto-sec)",border:tipoEvo==="libre"?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>Libre</button>
           </div>
 
           {tipoEvo === "libre" ? (
@@ -8166,13 +8358,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   
   {/* PLANTILLAS COMPLETAS - desplegable */}
   <div style={{border:"0.5px solid var(--borde)",borderRadius:6,overflow:"hidden"}}>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="plantillas"?null:"plantillas")} style={{width:"100%",padding:"9px 12px",background:"var(--fondo-suave)",border:"none",cursor:"pointer",fontSize:12,fontWeight:600,color:"var(--primario)",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="plantillas"?null:"plantillas")} style={{width:"100%",padding:"9px 12px",background:"var(--fondo-suave)",border:"none",cursor:"pointer",fontSize:"var(--fs-1)",fontWeight:600,color:"var(--primario)",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       📋 Plantillas completas <span>{seccionAbierta==="plantillas"?"▴":"▾"}</span>
     </button>
     {seccionAbierta==="plantillas" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:5,padding:"8px 12px"}}>
         {Object.keys(PLANTILLAS_SOAP).map(nombre => (
-          <button key={nombre} onClick={()=>setEvoEstructurada(PLANTILLAS_SOAP[nombre])} style={{padding:"5px 11px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--primario)",borderRadius:10,cursor:"pointer"}}>{nombre}</button>
+          <button key={nombre} onClick={()=>setEvoEstructurada(PLANTILLAS_SOAP[nombre])} style={{padding:"5px 11px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--primario)",borderRadius:10,cursor:"pointer"}}>{nombre}</button>
         ))}
       </div>
     )}
@@ -8181,11 +8373,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* SUBJETIVO */}
   <div>
     <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo (lo que refiere el paciente)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
     {seccionAbierta==="subjetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.subjetivo.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -8194,11 +8386,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* OBJETIVO */}
   <div>
     <textarea value={evoEstructurada.objetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,objetivo:e.target.value})} placeholder="O - Objetivo (signos vitales, laboratorio)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
     {seccionAbierta==="objetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.objetivo.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -8206,10 +8398,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
   {/* DIURESIS */}
   <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)"}}>
-    <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:6}}>💧 Diuresis</div>
+    <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--primario)",marginBottom:6}}>💧 Diuresis</div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       <input type="number" value={diuresis.cantidad} onChange={e=>setDiuresis({...diuresis,cantidad:e.target.value})} placeholder="Cantidad" style={{...inputStyle,marginBottom:0,width:100,flex:"0 0 auto"}}/>
-      <span style={{alignSelf:"center",fontSize:12,color:"var(--texto-ter)"}}>ml</span>
+      <span style={{alignSelf:"center",fontSize:"var(--fs-1)",color:"var(--texto-ter)"}}>ml</span>
       <select value={diuresis.via} onChange={e=>setDiuresis({...diuresis,via:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1,minWidth:120}}>
         <option value="">Vía...</option>
         <option value="Diuresis espontánea">Espontánea</option>
@@ -8232,7 +8424,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* DRENAJE */}
   <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)"}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-      <div style={{fontSize:12,fontWeight:600,color:"var(--primario)"}}>🩸 Drenaje</div>
+      <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--primario)"}}>🩸 Drenaje</div>
       <button onClick={()=>setDrenaje({...drenaje, activo: !drenaje.activo})} style={{width:46,height:26,borderRadius:13,border:"none",cursor:"pointer",background:drenaje.activo?"var(--exito)":"var(--borde-suave)",position:"relative",transition:"background 0.2s",padding:0}}>
         <span style={{position:"absolute",top:3,left:drenaje.activo?23:3,width:20,height:20,borderRadius:"50%",background:"var(--superficie)",transition:"left 0.2s",boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}/>
       </button>
@@ -8266,7 +8458,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </select>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <input type="number" value={drenaje.cantidad} onChange={e=>setDrenaje({...drenaje,cantidad:e.target.value})} placeholder="Cantidad" style={{...inputStyle,marginBottom:0,width:100,flex:"0 0 auto"}}/>
-          <span style={{fontSize:12,color:"var(--texto-ter)"}}>ml</span>
+          <span style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)"}}>ml</span>
           <select value={drenaje.caracteristicas} onChange={e=>setDrenaje({...drenaje,caracteristicas:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1}}>
             <option value="">Características...</option>
             <option value="Hemático">Hemático</option>
@@ -8283,11 +8475,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* EXAMEN FÍSICO */}
   <div>
     <textarea value={evoEstructurada.examen} onChange={e=>setEvoEstructurada({...evoEstructurada,examen:e.target.value})} placeholder="A - Examen físico/análisis" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
     {seccionAbierta==="examen" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.examen.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -8296,11 +8488,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   {/* INDICACIONES */}
   <div>
     <textarea value={evoEstructurada.indicaciones} onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})} placeholder="P - Plan/indicaciones" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
-    <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:11,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
+    <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
     {seccionAbierta==="indicaciones" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
         {SUGERENCIAS_SOAP.indicaciones.map(s => (
-          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:11,background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
+          <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
     )}
@@ -8316,8 +8508,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* NUEVO EXAMEN (formulario) */}
         <div ref={formExamenRef} style={abrirFormExamen?{order:3,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}:{order:3}}>
           {abrirFormExamen && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
-            <button onClick={()=>setAbrirFormExamen(false)} style={{padding:"5px 12px",fontSize:12,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
+            <button onClick={()=>setAbrirFormExamen(false)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
           </div>}
           {abrirFormExamen && (<>
 
@@ -8343,13 +8535,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {/* Panel de parámetros numéricos para exámenes con set definido */}
           {nuevoEx.tipo === "Laboratorio" && PARAMETROS_LAB[nuevoEx.nombre] && (
             <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginBottom:8}}>Completa solo los parámetros que tengas (los vacíos se omiten):</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8}}>Completa solo los parámetros que tengas (los vacíos se omiten):</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
                 {PARAMETROS_LAB[nuevoEx.nombre].map(param => (
                   <div key={param.key} style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{fontSize:11,color:"var(--texto)",fontWeight:500,minWidth:74}}>{param.label}</span>
-                    <input type="number" value={paramsLab[param.key] || ""} onChange={e=>setParamsLab({...paramsLab,[param.key]:e.target.value})} style={{...inputStyle,marginBottom:0,padding:"6px 8px",fontSize:12}}/>
-                    {param.unidad && <span style={{fontSize:10,color:"var(--texto-ter)",minWidth:38}}>{param.unidad}</span>}
+                    <span style={{fontSize:"var(--fs-0)",color:"var(--texto)",fontWeight:500,minWidth:74}}>{param.label}</span>
+                    <input type="number" value={paramsLab[param.key] || ""} onChange={e=>setParamsLab({...paramsLab,[param.key]:e.target.value})} style={{...inputStyle,marginBottom:0,padding:"6px 8px",fontSize:"var(--fs-1)"}}/>
+                    {param.unidad && <span style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",minWidth:38}}>{param.unidad}</span>}
                   </div>
                 ))}
               </div>
@@ -8376,7 +8568,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {/* GERMEN + ANTIBIOGRAMA (cultivo) */}
           {nuevoEx.tipo === "Cultivo" && nuevoEx.tipoCultivo && (
             <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🦠 Germen y antibiograma</div>
+              <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--primario)",marginBottom:8}}>🦠 Germen y antibiograma</div>
               <select value={nuevoEx.germen} onChange={e=>setNuevoEx({...nuevoEx,germen:e.target.value,germenOtro:""})} style={{...inputStyle,marginBottom:6}}>
                 <option value="">Germen aislado...</option>
                 {UROPATOGENOS.map(o => <option key={o} value={o}>{o}</option>)}
@@ -8393,9 +8585,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       {antibiograma.map((a, idx) => {
                         const col = a.sens === "Sensible" ? "var(--exito)" : a.sens === "Resistente" ? "var(--peligro)" : "var(--texto-ter)";
                         return (
-                          <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
+                          <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:"var(--fs-1)",color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
                             <span>{a.atb} · <strong style={{color:col}}>{a.sens}</strong></span>
-                            <button onClick={()=>setAntibiograma(antibiograma.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                            <button onClick={()=>setAntibiograma(antibiograma.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>✕</button>
                           </div>
                         );
                       })}
@@ -8416,7 +8608,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       if (!atb || !formAtb.sens) return;
                       setAntibiograma([...antibiograma, { atb, sens: formAtb.sens }]);
                       setFormAtb({ atb: "", sens: "" });
-                    }} style={{padding:"7px 12px",fontSize:12,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",flexShrink:0}}>+</button>
+                    }} style={{padding:"7px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",flexShrink:0}}>+</button>
                   </div>
                   {formAtb.atb === "__otro" && (
                     <input value={formAtb.atbOtro || ""} onChange={e=>setFormAtb({...formAtb,atbOtro:e.target.value})} placeholder="Nombre del antibiótico" style={{...inputStyle,marginTop:6,marginBottom:0}}/>
@@ -8433,7 +8625,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {(nuevoEx.nombre === "RM próstata" || nuevoEx.nombre === "Eco VP") && (
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
               <input type="number" value={nuevoEx.pesoProstatico} onChange={e=>setNuevoEx({...nuevoEx,pesoProstatico:e.target.value})} placeholder="Peso prostático" style={{...inputStyle,marginBottom:0,flex:1}}/>
-              <span style={{fontSize:12,color:"var(--texto-ter)"}}>g</span>
+              <span style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)"}}>g</span>
             </div>
           )}
           {nuevoEx.nombre === "RM próstata" && (
@@ -8446,13 +8638,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {/* CONSTRUCTOR DE LITIASIS (Pielotac) */}
           {nuevoEx.nombre === "Pielotac" && (
             <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🪨 Litiasis</div>
+              <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--primario)",marginBottom:8}}>🪨 Litiasis</div>
               {litiasis.length > 0 && (
                 <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
                   {litiasis.map((l, idx) => (
-                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
+                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:"var(--fs-1)",color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
                       <span>{[l.ubicacion, l.tercio, l.lateralidad, l.tamano?`${l.tamano} mm`:"", l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · ")}</span>
-                      <button onClick={()=>setLitiasis(litiasis.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                      <button onClick={()=>setLitiasis(litiasis.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -8475,18 +8667,18 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 <div style={{display:"flex",gap:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:4,flex:1}}>
                     <input type="number" value={formLitiasis.tamano} onChange={e=>setFormLitiasis({...formLitiasis,tamano:e.target.value})} placeholder="Tamaño" style={{...inputStyle,marginBottom:0}}/>
-                    <span style={{fontSize:11,color:"var(--texto-ter)"}}>mm</span>
+                    <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>mm</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:4,flex:1}}>
                     <input type="number" value={formLitiasis.uh} onChange={e=>setFormLitiasis({...formLitiasis,uh:e.target.value})} placeholder="Densidad" style={{...inputStyle,marginBottom:0}}/>
-                    <span style={{fontSize:11,color:"var(--texto-ter)"}}>UH</span>
+                    <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>UH</span>
                   </div>
                 </div>
                 <button onClick={()=>{
                   if (!formLitiasis.ubicacion) return alert("Selecciona la ubicación");
                   setLitiasis([...litiasis, formLitiasis]);
                   setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
-                }} style={{padding:"7px 12px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar litiasis</button>
+                }} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar litiasis</button>
               </div>
             </div>
           )}
@@ -8494,13 +8686,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {/* CONSTRUCTOR DE TUMOR (UROTAC, TAC TAP, Eco renal) */}
           {(nuevoEx.nombre === "UROTAC" || nuevoEx.nombre === "TAC" || nuevoEx.nombre === "Eco renal") && (
             <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
-              <div style={{fontSize:12,fontWeight:600,color:"var(--primario)",marginBottom:8}}>🎯 Tumor</div>
+              <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--primario)",marginBottom:8}}>🎯 Tumor</div>
               {tumores.length > 0 && (
                 <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
                   {tumores.map((t, idx) => (
-                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
+                    <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:"var(--fs-1)",color:"var(--texto)",background:"var(--superficie)",padding:"5px 9px",borderRadius:6}}>
                       <span>{[t.organo, t.sublocalizacion, t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · ")}</span>
-                      <button onClick={()=>setTumores(tumores.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:13,padding:0}}>✕</button>
+                      <button onClick={()=>setTumores(tumores.filter((_,i)=>i!==idx))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>✕</button>
                     </div>
                   ))}
                 </div>
@@ -8530,13 +8722,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 )}
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <input type="number" value={formTumor.tamano} onChange={e=>setFormTumor({...formTumor,tamano:e.target.value})} placeholder="Tamaño" style={{...inputStyle,marginBottom:0}}/>
-                  <span style={{fontSize:11,color:"var(--texto-ter)"}}>cm</span>
+                  <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>cm</span>
                 </div>
                 <button onClick={()=>{
                   if (!formTumor.organo) return alert("Selecciona el órgano");
                   setTumores([...tumores, formTumor]);
                   setFormTumor({ organo: "", sublocalizacion: "", tamano: "" });
-                }} style={{padding:"7px 12px",fontSize:12,background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar tumor</button>
+                }} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar tumor</button>
               </div>
             </div>
           )}
@@ -8559,11 +8751,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {!soloLectura && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap",position:"relative"}}>
-            <button ref={servBtnRef} onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <button ref={servBtnRef} onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
               {filtroServicio==="todos" ? "Todos los servicios" : filtroServicio}{filtroEstado!=="activo" ? ` · ${ETIQUETA_ESTADO[filtroEstado]||filtroEstado}` : ""} {serviciosMenuOpen?"▴":"▾"}
             </button>
-            <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
-            <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:12.5,fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
+            <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
+            <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
 
             {/* Menú desplegable de servicios + estado (estilo Hospital) */}
             {serviciosMenuOpen && (
@@ -8576,7 +8768,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   zIndex:41,minWidth:240,maxWidth:300,
                   maxHeight: `calc(100dvh - ${(servBtnRef.current?.getBoundingClientRect().bottom || 100) + 16}px)`,
                   overflowY:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 12px 32px rgba(15,23,42,0.22)",padding:"6px"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"6px 10px 4px"}}>SERVICIOS</div>
+                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"6px 10px 4px"}}>SERVICIOS</div>
                   <button onClick={()=>{ setFiltroServicio("todos"); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio==="todos")}>
                     Todos los servicios {filtroServicio==="todos" ? "✓" : ""}
                   </button>
@@ -8587,7 +8779,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   ))}
 
                   <div style={{height:"0.5px",background:"var(--borde)",margin:"6px 8px"}}/>
-                  <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"4px 10px"}}>ESTADO</div>
+                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"4px 10px"}}>ESTADO</div>
                   {ESTADOS_PACIENTE.map(([val,lbl]) => (
                     <button key={val} onClick={()=>{ setFiltroEstado(val); setServiciosMenuOpen(false); }} style={itemMenu(filtroEstado===val)}>
                       {lbl} {filtroEstado===val ? "✓" : ""}
@@ -8595,7 +8787,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   ))}
 
                   <div style={{height:"0.5px",background:"var(--borde)",margin:"6px 8px"}}/>
-                  <div style={{fontSize:10,fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"4px 10px"}}>
+                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",letterSpacing:0.5,padding:"4px 10px"}}>
                     VIENDO: {(esEquipo ? (equipoActual?.nombre||"EQUIPO") : "MIS PACIENTES").toUpperCase()}
                   </div>
                   <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{...itemMenu(false),color:"var(--primario)"}}>
@@ -8606,7 +8798,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             )}
           </div>
         )}
-        <div style={{fontSize:11,color:"var(--texto-ter)",marginLeft:soloLectura?0:"auto"}}>
+        <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:soloLectura?0:"auto"}}>
           {pacientesFiltrados.length} pacientes
         </div>
       </div>
@@ -8622,40 +8814,40 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <div onClick={()=>setMoverPaciente(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:65}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"70vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
               <div style={{width:36,height:4,background:"var(--borde)",borderRadius:2,margin:"0 auto 12px"}}/>
-              <div style={{fontSize:14,fontWeight:700,color:"var(--texto)",marginBottom:2}}>Mover a otro servicio</div>
-              <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:12}}>{moverPaciente.iniciales} · actualmente en <b>{moverPaciente.servicio}</b></div>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)",marginBottom:2}}>Mover a otro servicio</div>
+              <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",marginBottom:12}}>{moverPaciente.iniciales} · actualmente en <b>{moverPaciente.servicio}</b></div>
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {destinos.filter(s => s !== moverPaciente.servicio).map(s => (
-                  <button key={s} onClick={()=>moverAServicio(s)} style={{textAlign:"left",padding:"11px 13px",fontSize:13.5,fontWeight:600,background:"var(--fondo-suave)",color:"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{s}</button>
+                  <button key={s} onClick={()=>moverAServicio(s)} style={{textAlign:"left",padding:"11px 13px",fontSize:"var(--fs-2)",fontWeight:600,background:"var(--fondo-suave)",color:"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{s}</button>
                 ))}
                 {destinos.filter(s => s !== moverPaciente.servicio).length === 0 && (
-                  <div style={{fontSize:12.5,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay otros servicios configurados.</div>
+                  <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay otros servicios configurados.</div>
                 )}
               </div>
-              <button onClick={()=>setMoverPaciente(null)} style={{width:"100%",marginTop:12,padding:11,fontSize:13,background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
+              <button onClick={()=>setMoverPaciente(null)} style={{width:"100%",marginTop:12,padding:11,fontSize:"var(--fs-2)",background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
             </div>
           </div>
         );
       })()}
 
       {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
-      {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:12.5,fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
+      {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:"var(--fs-1)",fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
       {opcionesPaciente && (() => {
         const p = opcionesPaciente; const cerrar = () => setOpcionesPaciente(null);
-        const item = (label, fn, color) => (<button onClick={()=>{ cerrar(); fn(); }} style={{textAlign:"left",padding:"12px 14px",fontSize:14,fontWeight:600,background:"var(--fondo-suave)",color:color||"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{label}</button>);
+        const item = (label, fn, color) => (<button onClick={()=>{ cerrar(); fn(); }} style={{textAlign:"left",padding:"12px 14px",fontSize:"var(--fs-2)",fontWeight:600,background:"var(--fondo-suave)",color:color||"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{label}</button>);
         return (
           <div onClick={cerrar} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:66}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480}}>
               <div style={{width:36,height:4,background:"var(--borde)",borderRadius:2,margin:"0 auto 12px"}}/>
-              <div style={{fontSize:14,fontWeight:700,color:"var(--texto)"}}>{p.iniciales}</div>
-              <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:12}}>Cama {p.cama||"—"} · {p.servicio}</div>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)"}}>{p.iniciales}</div>
+              <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",marginBottom:12}}>Cama {p.cama||"—"} · {p.servicio}</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {item("📋 Abrir ficha", ()=>abrirFicha(p))}
                 {item(p.estado==="alta"?"↩️ Reactivar (marcar activo)":"✅ Dar de alta", ()=>cambiarEstado(p, p.estado==="alta"?"activo":"alta"), p.estado==="alta"?"var(--primario)":"var(--exito)")}
                 {item("🔀 Cambiar de servicio", ()=>setMoverPaciente(p))}
                 {item("🛏️ Cambiar cama", ()=>{ setCamaInput(p.cama||""); setMoverInfo({ pacienteId:p.id, iniciales:p.iniciales, servicio:p.servicio, prevServicio:p.servicio, prevCama:p.cama, soloCama:true }); })}
               </div>
-              <button onClick={cerrar} style={{width:"100%",marginTop:12,padding:11,fontSize:13,background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
+              <button onClick={cerrar} style={{width:"100%",marginTop:12,padding:11,fontSize:"var(--fs-2)",background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
             </div>
           </div>
         );
@@ -8663,13 +8855,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {moverInfo && (
         <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:66,display:"flex",justifyContent:"center",padding:12,pointerEvents:"none"}}>
           <div style={{pointerEvents:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,0.28)",padding:"12px 14px",width:"100%",maxWidth:440}}>
-            <div style={{fontSize:12.5,color:"var(--texto-sec)",marginBottom:8}}>{moverInfo.soloCama ? <>Cambiar cama de <b>{moverInfo.iniciales}</b></> : <><b>{moverInfo.iniciales}</b> pasó a <b>{moverInfo.servicio}</b>. ¿Nueva cama?</>}</div>
+            <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginBottom:8}}>{moverInfo.soloCama ? <>Cambiar cama de <b>{moverInfo.iniciales}</b></> : <><b>{moverInfo.iniciales}</b> pasó a <b>{moverInfo.servicio}</b>. ¿Nueva cama?</>}</div>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
-              <input value={camaInput} onChange={e=>setCamaInput(e.target.value)} placeholder="Cama" style={{flex:1,minWidth:0,padding:"9px 11px",fontSize:13,border:"0.5px solid var(--borde)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box"}} onKeyDown={e=>{if(e.key==="Enter")guardarCamaMovido();}} />
-              <button onClick={guardarCamaMovido} style={{flexShrink:0,padding:"9px 12px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Guardar</button>
-              <button onClick={()=>{setMoverInfo(null);setCamaInput("");}} style={{flexShrink:0,padding:"9px 12px",fontSize:13,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Omitir</button>
+              <input value={camaInput} onChange={e=>setCamaInput(e.target.value)} placeholder="Cama" style={{flex:1,minWidth:0,padding:"9px 11px",fontSize:"var(--fs-2)",border:"0.5px solid var(--borde)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box"}} onKeyDown={e=>{if(e.key==="Enter")guardarCamaMovido();}} />
+              <button onClick={guardarCamaMovido} style={{flexShrink:0,padding:"9px 12px",fontSize:"var(--fs-2)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Guardar</button>
+              <button onClick={()=>{setMoverInfo(null);setCamaInput("");}} style={{flexShrink:0,padding:"9px 12px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Omitir</button>
             </div>
-            {!moverInfo.soloCama && <button onClick={deshacerMovimiento} style={{marginTop:8,background:"none",border:"none",color:"var(--peligro)",fontSize:12,cursor:"pointer",padding:0,fontWeight:600}}>↩️ Deshacer movimiento</button>}
+            {!moverInfo.soloCama && <button onClick={deshacerMovimiento} style={{marginTop:8,background:"none",border:"none",color:"var(--peligro)",fontSize:"var(--fs-1)",cursor:"pointer",padding:0,fontWeight:600}}>↩️ Deshacer movimiento</button>}
           </div>
         </div>
       )}
@@ -8678,20 +8870,20 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:14,padding:"18px",width:"100%",maxWidth:360,maxHeight:"80vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <div style={{fontSize:15,fontWeight:700,color:"var(--texto)"}}>👥 Distribución de pacientes</div>
+              <div style={{fontSize:"var(--fs-3)",fontWeight:700,color:"var(--texto)"}}>👥 Distribución de pacientes</div>
               <button onClick={()=>setShowDistribucion(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"var(--texto-ter)",lineHeight:1}}>✕</button>
             </div>
             {cargaPorMedico.length === 0 ? (
-              <div style={{fontSize:12.5,color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>Aún no hay pacientes activos con encargados asignados.</div>
+              <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>Aún no hay pacientes activos con encargados asignados.</div>
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {cargaPorMedico.map((c,i)=>(
                   <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:`4px solid ${colorMedico(c.id)}`}}>
-                    <span style={{fontSize:13,color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}><span style={{width:11,height:11,borderRadius:"50%",background:colorMedico(c.id),flexShrink:0}}/>{c.nombre}</span>
-                    <span style={{fontSize:13,fontWeight:700,color:"#fff",background:colorMedico(c.id),padding:"2px 10px",borderRadius:10}}>{c.n}</span>
+                    <span style={{fontSize:"var(--fs-2)",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}><span style={{width:11,height:11,borderRadius:"50%",background:colorMedico(c.id),flexShrink:0}}/>{c.nombre}</span>
+                    <span style={{fontSize:"var(--fs-2)",fontWeight:700,color:"#fff",background:colorMedico(c.id),padding:"2px 10px",borderRadius:10}}>{c.n}</span>
                   </div>
                 ))}
-                <div style={{fontSize:10.5,color:"var(--texto-ter)",marginTop:4,textAlign:"right"}}>Un paciente con varios encargados se cuenta en cada uno.</div>
+                <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:4,textAlign:"right"}}>Un paciente con varios encargados se cuenta en cada uno.</div>
               </div>
             )}
           </div>
@@ -8699,11 +8891,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       )}
 
       {loadingPacientes && (
-        <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:13}}>Cargando pacientes...</div>
+        <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Cargando pacientes...</div>
       )}
 
       {!loadingPacientes && pacientesFiltrados.length === 0 && (
-        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}>
+        <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
           No hay pacientes en este contexto.<br/>
           {soloLectura ? "" : (esEquipo ? "Toca de nuevo la pestaña para agregar con + Nuevo" : "Toca de nuevo la pestaña y crea tu primer paciente con + Nuevo")}
         </div>
@@ -8746,10 +8938,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     onPointerCancel={cancelarLongPress}
                     onPointerLeave={cancelarLongPress}
                     title={soloLectura ? undefined : "Deja presionado y arrastra para reordenar"}
-                    style={{fontSize:13,fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
-                    {!soloLectura && <span style={{fontSize:13,color:"var(--texto-ter)",flexShrink:0}}>☰</span>}
+                    style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
+                    {!soloLectura && <span style={{fontSize:"var(--fs-2)",color:"var(--texto-ter)",flexShrink:0}}>☰</span>}
                     <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{servicio}</span>
-                    <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:11.5,flexShrink:0}}>({porServicio[servicio].length})</span>
+                    <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:"var(--fs-0)",flexShrink:0}}>({porServicio[servicio].length})</span>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {porServicio[servicio].map(p => (
@@ -8763,24 +8955,24 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                         onPointerLeave={()=>clearTimeout(pressTimerPac.current)}
                         style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",opacity:dragPos&&dragPacRef.current?.id===p.id?0.4:1}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                          <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
-                            {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
+                          <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>
+                            {p.iniciales} <span style={{fontSize:"var(--fs-3)",fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:"var(--fs-2)"}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6}}>
                             {!soloLectura && <div
                               onClick={(e)=>e.stopPropagation()}
                               onPointerDown={(e)=>iniciarDragPac(e,p)}
                               title="Arrastra para reordenar o cambiar de servicio" style={{cursor:"grab",fontSize:16,color:"var(--texto-ter)",padding:"0 3px",touchAction:"none",lineHeight:1,userSelect:"none"}}>⠿</div>}
-                            <div style={{fontSize:11.5,fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
+                            <div style={{fontSize:"var(--fs-0)",fontWeight:600,color:"var(--primario)",background:"var(--chip-azul-bg)",padding:"2px 8px",borderRadius:8,whiteSpace:"nowrap"}}>Cama {p.cama || "—"}</div>
                           </div>
                         </div>
-                        <div style={{fontSize:12,fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
+                        <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--texto-sec)",marginBottom:3}}>{p.edad} años</div>
                         {(p.ficha_clinica || p.rut) && (
-                          <div style={{fontSize:10.5,color:"var(--texto-ter)",marginBottom:3}}>
+                          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:3}}>
                             {p.ficha_clinica ? `FC ${p.ficha_clinica}` : ""}{p.ficha_clinica && p.rut ? " · " : ""}{p.rut || ""}
                           </div>
                         )}
-                        <div style={{fontSize:11,color:"var(--texto)",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
+                        <div style={{fontSize:"var(--fs-0)",color:"var(--texto)",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{p.diagnostico}</div>
                         {p.estado === "alta" && <div style={{fontSize:9,color:"var(--neutro)",marginTop:4,fontStyle:"italic"}}>DADO DE ALTA</div>}
                         {esEquipo && <EncargadosPaciente paciente={p} miembros={miembrosEquipo} currentUser={currentUser} onActualizar={asignarEncargados} />}
                       </div>
@@ -8792,13 +8984,27 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               );
             })}
             {dragPos && serviciosVacios.map(servicio => (
-              <div key={"vacio-"+servicio} data-serv={servicio} data-empty="1" style={{border:"1.5px dashed var(--primario)",borderRadius:10,padding:"20px 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:600,color:"var(--primario)",minHeight:64,opacity:gapId===("__"+servicio)?1:0.5,background:gapId===("__"+servicio)?"var(--chip-azul-bg)":"transparent",transition:"opacity .1s"}}>Soltar en {servicio}</div>
+              <div key={"vacio-"+servicio} data-serv={servicio} data-empty="1" style={{border:"1.5px dashed var(--primario)",borderRadius:10,padding:"20px 12px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--primario)",minHeight:64,opacity:gapId===("__"+servicio)?1:0.5,background:gapId===("__"+servicio)?"var(--chip-azul-bg)":"transparent",transition:"opacity .1s"}}>Soltar en {servicio}</div>
             ))}
           </div>
         </>
       )}
     </div>
   );
+}
+
+// Estilos unificados (tokens) para encabezados de sección y botones de ícono.
+const ST_TITULO_SEC = { fontSize: "var(--fs-3)", fontWeight: 600, color: "var(--texto)" };
+const ST_BTN_ICO = { width: "var(--icon-sm)", height: "var(--icon-sm)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--icon-fs)", lineHeight: 1, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 7, cursor: "pointer", padding: 0 };
+const ST_BTN_MAS = { ...ST_BTN_ICO, background: "var(--primario)", color: "var(--texto-inv)", border: "none", fontWeight: 600 };
+
+function scrollParent(el) {
+  while (el && el !== document.body) {
+    const oy = getComputedStyle(el).overflowY;
+    if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) return el;
+    el = el.parentElement;
+  }
+  return document.scrollingElement || document.documentElement;
 }
 
 // Color estable por médico desde paleta fija (usado en Distribución y en la ficha).
@@ -8832,12 +9038,12 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
         {encargados.map(id => {
   const c = colorDeEncargado(id);
   return (
-    <span key={id} style={{fontSize:12,background:c.bg,color:c.text,padding:"3px 9px",borderRadius:10,fontWeight:600}}>
+    <span key={id} style={{fontSize:"var(--fs-1)",background:c.bg,color:c.text,padding:"3px 9px",borderRadius:10,fontWeight:600}}>
       {nombreDe(id)}
     </span>
   );
 })}
-        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:15,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
+        <button onClick={()=>setAbierto(!abierto)} style={{fontSize:"var(--fs-3)",background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>
           {abierto ? "×" : "+"}
         </button>
       </div>
@@ -8847,8 +9053,8 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
             const id = m.perfiles?.id;
             const asignado = encargados.includes(id);
             return (
-              <div key={id} onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",cursor:"pointer",fontSize:11,color:"var(--texto)"}}>
-                <span style={{width:14,height:14,borderRadius:3,border:"1px solid var(--borde)",background:asignado?"var(--primario)":"var(--superficie)",color:"var(--texto-inv)",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
+              <div key={id} onClick={()=>toggle(id)} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",cursor:"pointer",fontSize:"var(--fs-0)",color:"var(--texto)"}}>
+                <span style={{width:14,height:14,borderRadius:3,border:"1px solid var(--borde)",background:asignado?"var(--primario)":"var(--superficie)",color:"var(--texto-inv)",fontSize:"var(--fs-xs)",display:"flex",alignItems:"center",justifyContent:"center"}}>{asignado?"✓":""}</span>
                 {m.perfiles?.nombre}
               </div>
             );
@@ -8867,7 +9073,7 @@ function VideoPlayer({ video, onClose }) {
     <div onClick={onClose} style={{position:"absolute",inset:0,background:"rgba(26,58,92,0.85)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",borderRadius:"var(--border-radius-lg)"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"var(--superficie)",borderRadius:12,maxWidth:720,width:"100%",overflow:"hidden"}}>
         <div style={{padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"0.5px solid var(--borde)"}}>
-          <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{video.titulo}</div>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)"}}>{video.titulo}</div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,color:"var(--texto-ter)",cursor:"pointer",padding:0}}>✕</button>
         </div>
         <div style={{aspectRatio:"16/9",background:"#000"}}>
@@ -8923,9 +9129,9 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,gap:10}}>
-        <div>          <div style={{fontSize:13,color:"var(--texto-sec)"}}>{videos.length} videos</div>
+        <div>          <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>{videos.length} videos</div>
         </div>
-        {isAdmin && <button onClick={()=>setAgregando(!agregando)} style={{padding:"7px 12px",fontSize:12,fontWeight:500,background: agregando?"var(--superficie)":"var(--primario)",color: agregando?"var(--primario)":"var(--texto-inv)",border: agregando?"1px solid var(--primario)":"none",borderRadius:8,cursor:"pointer"}}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
+        {isAdmin && <button onClick={()=>setAgregando(!agregando)} style={{padding:"7px 12px",fontSize:"var(--fs-1)",fontWeight:500,background: agregando?"var(--superficie)":"var(--primario)",color: agregando?"var(--primario)":"var(--texto-inv)",border: agregando?"1px solid var(--primario)":"none",borderRadius:8,cursor:"pointer"}}>{agregando ? "Cancelar" : "+ Agregar"}</button>}
       </div>
       {agregando && isAdmin && (
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
@@ -8934,16 +9140,16 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
           <input value={nuevo.url} onChange={e=>setNuevo({...nuevo,url:e.target.value})} placeholder="URL YouTube" style={inputStyle}/>
           <input value={nuevo.autor} onChange={e=>setNuevo({...nuevo,autor:e.target.value})} placeholder="Autor (opcional)" style={inputStyle}/>
           <textarea value={nuevo.descripcion} onChange={e=>setNuevo({...nuevo,descripcion:e.target.value})} placeholder="Descripción" rows={2} style={{...inputStyle,resize:"none"}}/>
-          {errorAdd && <div style={{fontSize:12,color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorAdd}</div>}
+          {errorAdd && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:8}}>{errorAdd}</div>}
           <button onClick={agregarVideo} style={{...btnPrimary, marginTop:0}}>Guardar video</button>
         </div>
       )}
       <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...inputStyle, marginBottom:8}}/>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-        {CATEGORIAS_VIDEO.map(c => <button key={c} onClick={()=>setFiltro(c)} style={{padding:"5px 10px",fontSize:11,fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid var(--borde)",background:filtro===c?"var(--primario)":"var(--superficie)",color:filtro===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>)}
+        {CATEGORIAS_VIDEO.map(c => <button key={c} onClick={()=>setFiltro(c)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",fontWeight:filtro===c?500:400,borderRadius:14,cursor:"pointer",border:filtro===c?"none":"0.5px solid var(--borde)",background:filtro===c?"var(--primario)":"var(--superficie)",color:filtro===c?"var(--texto-inv)":"var(--texto-sec)"}}>{c}</button>)}
       </div>
       {filtrados.length === 0 ? (
-        <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:13}}>No hay videos</div>
+        <div style={{textAlign:"center",padding:"40px 0",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>No hay videos</div>
       ) : (
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:12}}>
           {filtrados.map(v => {
@@ -8956,10 +9162,10 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
                   </div>
                 </div>
                 <div style={{padding:"10px 12px",flex:1,display:"flex",flexDirection:"column"}}>
-                  <div style={{fontSize:13,fontWeight:500,color:"var(--texto)",marginBottom:3,lineHeight:1.3}}>{v.titulo}</div>
-                  <div style={{fontSize:11,color:"var(--texto-sec)",marginBottom:6}}>{v.categoria} · {v.autor}</div>
-                  <div style={{fontSize:11,color:"var(--texto-ter)",lineHeight:1.4,flex:1}}>{v.descripcion}</div>
-                  {isAdmin && <button onClick={()=>eliminarVideo(v.id)} style={{marginTop:8,padding:"5px 8px",fontSize:11,background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer",alignSelf:"flex-start"}}>Eliminar</button>}
+                  <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)",marginBottom:3,lineHeight:1.3}}>{v.titulo}</div>
+                  <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginBottom:6}}>{v.categoria} · {v.autor}</div>
+                  <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",lineHeight:1.4,flex:1}}>{v.descripcion}</div>
+                  {isAdmin && <button onClick={()=>eliminarVideo(v.id)} style={{marginTop:8,padding:"5px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer",alignSelf:"flex-start"}}>Eliminar</button>}
                 </div>
               </div>
             );
@@ -9001,21 +9207,21 @@ function NotificationBell({ currentUser }) {
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
           <path d="M13.73 21a2 2 0 0 1-3.46 0" fill="none"/>
         </svg>
-        {noLeidas > 0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,borderRadius:9,background:"var(--peligro)",color:"var(--texto-inv)",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{noLeidas}</span>}
+        {noLeidas > 0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:17,height:17,borderRadius:9,background:"var(--peligro)",color:"var(--texto-inv)",fontSize:"var(--fs-xs)",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px"}}>{noLeidas}</span>}
       </button>
       {abierto && (
         <>
           <div onClick={()=>setAbierto(false)} style={{position:"fixed",inset:0,zIndex:70}}/>
           <div style={{position:"fixed",top,right:8,left:"auto",zIndex:71,width:"min(340px, calc(100vw - 16px))",maxHeight:"calc(100dvh - 120px)",overflowY:"auto",WebkitOverflowScrolling:"touch",background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 10px 28px rgba(0,0,0,0.28)"}}>
-            <div style={{position:"sticky",top:0,background:"var(--superficie)",padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",fontSize:13,fontWeight:600,color:"var(--texto)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{position:"sticky",top:0,background:"var(--superficie)",padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span>Notificaciones</span>
               <button onClick={()=>setAbierto(false)} style={{background:"none",border:"none",fontSize:16,color:"var(--texto-ter)",cursor:"pointer",lineHeight:1,padding:0}}>✕</button>
             </div>
-            {notifs.length === 0 && <div style={{padding:"18px 14px",fontSize:12,color:"var(--texto-ter)",fontStyle:"italic"}}>Sin notificaciones</div>}
+            {notifs.length === 0 && <div style={{padding:"18px 14px",fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic"}}>Sin notificaciones</div>}
             {notifs.map(n => (
               <div key={n.id} style={{padding:"10px 14px",borderBottom:"0.5px solid var(--borde-suave)",background:n.leida?"transparent":"var(--fondo-suave)"}}>
-                <div style={{fontSize:12,color:"var(--texto)",lineHeight:1.45,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{iconoTipo[n.tipo]||"🔔"} {n.texto}</div>
-                <div style={{fontSize:10,color:"var(--texto-ter)",marginTop:3}}>{new Date(n.created_at).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+                <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",lineHeight:1.45,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{iconoTipo[n.tipo]||"🔔"} {n.texto}</div>
+                <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:3}}>{new Date(n.created_at).toLocaleString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
               </div>
             ))}
           </div>
@@ -9064,7 +9270,7 @@ function OfflineBanner() {
   return (
     <div style={{
       background: "var(--alerta-bg, #FEF3C7)", color: "var(--alerta, #92400E)",
-      fontSize: 12, fontWeight: 600, textAlign: "center", padding: "5px 12px",
+      fontSize: "var(--fs-1)", fontWeight: 600, textAlign: "center", padding: "5px 12px",
       borderBottom: "0.5px solid var(--alerta-borde, #FCD34D)", flexShrink: 0,
     }}>
       Sin conexión · mostrando datos guardados
@@ -9092,6 +9298,16 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [playingVideo, setPlayingVideo] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [mostrarOnboardingPush, setMostrarOnboardingPush] = useState(false);
+  const [bloqueado, setBloqueado] = useState(() => leerLock().enabled);
+  useEffect(() => {
+    let ocultoEn = 0;
+    const onVis = () => {
+      if (document.visibilityState === "hidden") ocultoEn = Date.now();
+      else if (leerLock().enabled && ocultoEn && Date.now() - ocultoEn > 120000) setBloqueado(true);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   const [tab, setTab] = useState(() => {
   try { return localStorage.getItem("uro_tab") || "chat"; }
   catch { return "chat"; }
@@ -10059,7 +10275,7 @@ const cargarMapaGuardado = async (mapa) => {
 if (loadingSession) {
   return (
     <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{textAlign:"center",color:"var(--texto-sec)",fontSize:14}}>
+      <div style={{textAlign:"center",color:"var(--texto-sec)",fontSize:"var(--fs-2)"}}>
         <LogoUroSearch size={60}/>
         <div style={{marginTop:16}}>Cargando UroSearch...</div>
       </div>
@@ -10204,6 +10420,7 @@ if (!currentUser) {
   return (
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
       <OfflineBanner/>
+      {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
       {mostrarOnboardingPush && <OnboardingPushModal currentUser={currentUser} onClose={()=>setMostrarOnboardingPush(false)} />}
       <style>{`
         html, body, #root { background: var(--fondo); overscroll-behavior: none; }
@@ -10235,15 +10452,15 @@ if (!currentUser) {
                   <span style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:18,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</span>
                   {isAdmin && <span style={{fontSize:9,fontWeight:600,padding:"1px 5px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,flexShrink:0}}>ADMIN</span>}
                 </div>
-                <div style={{fontSize:11,color:"var(--texto-sec)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>Asistente Clínico de Urología</div>
+                <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>Asistente Clínico de Urología</div>
               </div>
             ) : (
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:21,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
-                  {isAdmin && <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
+                  {isAdmin && <span style={{fontSize:"var(--fs-xs)",fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
                 </div>
-                <div style={{fontSize:14,color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
+                <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
               </div>
             )}
           </div>
@@ -10251,7 +10468,7 @@ if (!currentUser) {
             <NotificationBell currentUser={currentUser}/>
             <button onClick={()=>setMenuOpen(!menuOpen)} style={{display:"flex",alignItems:"center",gap:8,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:24,padding:appMovil?"4px 10px 4px 4px":"5px 14px 5px 5px",cursor:"pointer"}}>
               <div style={{width:appMovil?34:38,height:appMovil?34:38,borderRadius:"50%",background:isAdmin?"var(--navy-fijo)":"var(--primario)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:appMovil?13:15,fontWeight:600,color:"var(--texto-inv)"}}>{userInitials}</div>
-              <span style={{fontSize:14,color:"var(--texto)",fontWeight:500}}>▾</span>
+              <span style={{fontSize:"var(--fs-2)",color:"var(--texto)",fontWeight:500}}>▾</span>
             </button>
           </div>
         </div>
@@ -10260,26 +10477,26 @@ if (!currentUser) {
           <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:70}}/>
           <div style={{position:"fixed",top:72,right:8,zIndex:71,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:12,padding:"8px 0",width:"min(260px, calc(100vw - 16px))",maxHeight:"calc(100dvh - 96px)",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:"0 10px 28px rgba(0,0,0,0.28)"}}>
             <div style={{padding:"8px 14px",borderBottom:"0.5px solid var(--fondo)"}}>
-              <div style={{fontSize:13,fontWeight:500,color:"var(--texto)"}}>{currentUser.nombre}</div>
-              <div style={{fontSize:11,color:"var(--texto-sec)"}}>{currentUser.correo}</div>
-              <div style={{fontSize:11,color:"var(--texto-ter)",marginTop:2}}>{currentUser.especialidad}{isAdmin?" · Administrador":""}</div>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--texto)"}}>{currentUser.nombre}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)"}}>{currentUser.correo}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>{currentUser.especialidad}{isAdmin?" · Administrador":""}</div>
             </div>
-            <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
             </button>
-            <button onClick={()=>{ setMenuOpen(false); setConfigOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>{ setMenuOpen(false); setConfigOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               ⚙️ Configuración
             </button>
-            <button onClick={()=>{ setMenuOpen(false); setPerfilOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>{ setMenuOpen(false); setPerfilOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               👤 Mi perfil
             </button>
-            <button onClick={()=>{ setMenuOpen(false); setEquiposOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>{ setMenuOpen(false); setEquiposOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🤝 Equipos{invitacionesPendientes.length > 0 ? ` (${invitacionesPendientes.length})` : ""}
             </button>
-            <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🧭 Ver tutorial
             </button>
-            <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:13,textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
+            <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
           </>
         )}
@@ -10288,7 +10505,7 @@ if (!currentUser) {
             <button key={id} data-tour={"tab-"+id} onClick={() => {
               if (tab === id) setSubmenuOpen(o => !o); // 2º toque: despliega las secciones
               else { setTab(id); setSubmenuOpen(false); }
-            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:12.5,fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            }} style={{flex:"1 1 0",minWidth:0,padding:"12px 4px",fontSize:"var(--fs-1)",fontWeight:tab===id?600:500,background:"transparent",border:"none",borderBottom:tab===id?"3px solid var(--primario)":"3px solid transparent",color:tab===id?"var(--primario)":"var(--texto-sec)",cursor:"pointer",whiteSpace:"nowrap",letterSpacing:"-0.2px",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
               <IconoTab tipo={id} activo={tab===id}/>
               {label}{tab===id && submenu ? (submenuOpen ? " ▴" : " ▾") : ""}
             </button>
@@ -10309,29 +10526,29 @@ if (!currentUser) {
             padding:5, boxShadow:"0 10px 28px rgba(0,0,0,0.28)",
             display:"flex", flexDirection:"column", gap:2,
           }}>
-            <div style={{fontSize:10.5,fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>{submenu.titulo}</div>
+            <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>{submenu.titulo}</div>
             {submenu.secciones.map(([id,label]) => {
               const activo = submenu.activo === id;
               return (
-                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:13.5,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
+                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
                   {label}{activo ? "  ✓" : ""}
                 </button>
               );
             })}
             {submenu.extras.length > 0 && <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>}
             {submenu.extras.map(([label,fn]) => (
-              <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:13.5,textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+              <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
                 {label}
               </button>
             ))}
             {submenu.contexto && (
               <>
                 <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>
-                <div style={{fontSize:10.5,fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>Viendo: {equipoActualNombre}</div>
+                <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>Viendo: {equipoActualNombre}</div>
                 {submenu.contexto.opciones.map(([id,label]) => {
                   const activo = submenu.contexto.actual === id;
                   return (
-                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:13,textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
+                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
                       {label}{activo ? "  ✓" : ""}
                     </button>
                   );
@@ -10371,7 +10588,7 @@ if (!currentUser) {
         background:"var(--superficie)",
         border:"0.5px solid var(--borde)",
         color:"var(--primario)",
-        fontSize:12,
+        fontSize:"var(--fs-1)",
         padding:"5px 12px",
         borderRadius:6,
         cursor:"pointer",
@@ -10391,7 +10608,7 @@ if (!currentUser) {
           background:"var(--superficie)",
           border:"0.5px solid var(--borde)",
           color:"var(--primario)",
-          fontSize:11,
+          fontSize:"var(--fs-0)",
           padding:"5px 10px",
           borderRadius:6,
           cursor:"pointer",
@@ -10403,11 +10620,11 @@ if (!currentUser) {
 )}
 <div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:0}}>
   {loadingConversaciones && (
-    <div style={{textAlign:"center",padding:"40px 16px",color:"var(--texto-ter)",fontSize:13}}>
+    <div style={{textAlign:"center",padding:"40px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>
       Cargando conversación...
     </div>
   )}
-{!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:13,lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
+{!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
 
 {!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
   <PortadaChat nombre={currentUser?.nombre} />
@@ -10422,7 +10639,7 @@ if (!currentUser) {
             {loading && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:14,color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:"var(--fs-2)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
                   <Uros expresion="pensando" size={26}/> Consultando...
                 </div>
               </div>
@@ -10431,14 +10648,14 @@ if (!currentUser) {
           </div>
           <div style={{padding:"8px 12px 12px",borderTop:"0.5px solid var(--borde)"}}>
             <div data-tour="modo-respuesta" style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
-              {[["precisa","⚡ Precisa"],["explicativa","📖 Explicativa"]].map(([id,label])=><button key={id} onClick={()=>setModo(id)} style={{padding:"5px 12px",fontSize:12,fontWeight:modo===id?500:400,borderRadius:8,cursor:"pointer",border:modo===id?"none":"0.5px solid var(--borde)",background:modo===id?"var(--primario)":"var(--superficie)",color:modo===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>)}
-              <span style={{fontSize:11,color:"var(--texto-ter)",marginLeft:4}}>{modo==="precisa" ? "Definición breve" : "Explicación completa"}</span>
+              {[["precisa","⚡ Precisa"],["explicativa","📖 Explicativa"]].map(([id,label])=><button key={id} onClick={()=>setModo(id)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",fontWeight:modo===id?500:400,borderRadius:8,cursor:"pointer",border:modo===id?"none":"0.5px solid var(--borde)",background:modo===id?"var(--primario)":"var(--superficie)",color:modo===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>)}
+              <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:4}}>{modo==="precisa" ? "Definición breve" : "Explicación completa"}</span>
             </div>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-              <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:14,borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
-              <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:14,cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
+              <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
+              <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:"var(--fs-2)",cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
             </div>
-            <div style={{fontSize:10.5,color:"var(--texto-ter)",lineHeight:1.4,marginTop:8,textAlign:"center"}}>
+            <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",lineHeight:1.4,marginTop:8,textAlign:"center"}}>
               ⚠️ Información de apoyo clínico. No reemplaza el juicio médico.
             </div>
           </div>
