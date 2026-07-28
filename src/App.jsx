@@ -6630,14 +6630,6 @@ const cargarMiembrosEquipo = async () => {
       .sort((a,b) => b.n - a.n);
   }, [pacientes, miembrosEquipo]);
 
-  // Color por médico desde una paleta fija (estable por id), más legible que HSL crudo.
-  const PALETA_MEDICOS = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5", "#0d9488", "#b45309"];
-  const colorMedico = (id) => {
-    const s = String(id || "");
-    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
-    return PALETA_MEDICOS[h % PALETA_MEDICOS.length];
-  };
-
   // Estilo de cada ítem del menú desplegable
   const itemMenu = (activo) => ({
     display:"block", width:"100%", textAlign:"left",
@@ -6674,6 +6666,7 @@ const cargarMiembrosEquipo = async () => {
     return () => window.removeEventListener("uro-submenu-accion", h);
   }, []);
   const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
+  const [opcionesPaciente, setOpcionesPaciente] = useState(null); // hoja de opciones (mantener presionado)
   const [moverInfo, setMoverInfo] = useState(null); // { pacienteId, iniciales, servicio, prevServicio, prevCama } tras un movimiento
   const [camaInput, setCamaInput] = useState("");
   const guardarCamaMovido = async () => {
@@ -6714,6 +6707,7 @@ const cargarMiembrosEquipo = async () => {
   };
   const dragPacRef = useRef(null);
   const overRef = useRef(null);
+  const arrastreRecienteRef = useRef(0);
   const [dragPos, setDragPos] = useState(null); // clon flotante {x,y}
   const [gapId, setGapId] = useState(null);      // tarjeta ante la que se insertará
   const iniciarDragPac = (e, p) => {
@@ -6737,6 +6731,7 @@ const cargarMiembrosEquipo = async () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
       const over = overRef.current, dp = dragPacRef.current;
       dragPacRef.current = null; overRef.current = null; setDragPos(null); setGapId(null);
+      arrastreRecienteRef.current = Date.now();
       if (!over || !dp) return;
       const destServ = over.serv || dp.servicio;
       const col = (porServicio[destServ] || []).map(x => x.id).filter(id => id !== dp.id);
@@ -7103,6 +7098,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   };
 
   const descargarEvolucionesPDF = async () => {
+    if (!evoluciones || evoluciones.length === 0) { alert("Este paciente aún no tiene evoluciones para exportar."); return; }
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
     const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
@@ -7920,7 +7916,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>📝 Evoluciones</div>
             <div style={{display:"flex",gap:6}}>
-              {evoluciones.length>0 && <button onClick={descargarEvolucionesPDF} title="Descargar en PDF" aria-label="Descargar evoluciones en PDF" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📄</button>}
+              <button onClick={descargarEvolucionesPDF} title="Descargar evoluciones en PDF" aria-label="Descargar evoluciones en PDF" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",padding:0}}>📄</button>
               {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,lineHeight:1,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600,padding:0}}>+</button>}
             </div>
           </div>
@@ -8099,7 +8095,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* PENDIENTES DEL PACIENTE */}
-        <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+        <div style={{order:6,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:abrirFormPendiente||pendientesPaciente.length>0?10:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>✅ Pendientes del paciente</div>
             <button onClick={()=>setAbrirFormPendiente(!abrirFormPendiente)} style={{padding:"5px 12px",fontSize:12,background:abrirFormPendiente?"var(--superficie)":"var(--primario)",color:abrirFormPendiente?"var(--texto-sec)":"var(--texto-inv)",border:abrirFormPendiente?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>{abrirFormPendiente?"Cancelar":"+ Agregar pendiente"}</button>
@@ -8605,23 +8601,6 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   <button onClick={()=>{ setServiciosMenuOpen(false); setVista("servicios"); }} style={{...itemMenu(false),color:"var(--primario)"}}>
                     🗂️ {esEquipo ? "Administrar servicios del equipo" : "Administrar mis servicios"}
                   </button>
-                  {esEquipo && (
-                    <button onClick={()=>setVerCargaMedicos(v=>!v)} style={{...itemMenu(false),color:"var(--primario)"}}>
-                      👥 Pacientes por médico {verCargaMedicos?"▴":"▾"}
-                    </button>
-                  )}
-                  {esEquipo && verCargaMedicos && (
-                    <div style={{padding:"2px 10px 8px"}}>
-                      {cargaPorMedico.length === 0 ? (
-                        <div style={{fontSize:11,color:"var(--texto-ter)",padding:"4px 0"}}>Nadie tiene pacientes asignados.</div>
-                      ) : cargaPorMedico.map(({id,nombre,n}) => (
-                        <div key={id||nombre} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11.5,padding:"3px 0",color:"var(--texto-sec)"}}>
-                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}><span style={{width:9,height:9,borderRadius:"50%",background:colorMedico(id),flexShrink:0}}/>{nombre}</span>
-                          <b style={{color:colorMedico(id),flexShrink:0}}>{n}</b>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -8661,16 +8640,36 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
       {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
       {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:12.5,fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
+      {opcionesPaciente && (() => {
+        const p = opcionesPaciente; const cerrar = () => setOpcionesPaciente(null);
+        const item = (label, fn, color) => (<button onClick={()=>{ cerrar(); fn(); }} style={{textAlign:"left",padding:"12px 14px",fontSize:14,fontWeight:600,background:"var(--fondo-suave)",color:color||"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{label}</button>);
+        return (
+          <div onClick={cerrar} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:66}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480}}>
+              <div style={{width:36,height:4,background:"var(--borde)",borderRadius:2,margin:"0 auto 12px"}}/>
+              <div style={{fontSize:14,fontWeight:700,color:"var(--texto)"}}>{p.iniciales}</div>
+              <div style={{fontSize:12,color:"var(--texto-ter)",marginBottom:12}}>Cama {p.cama||"—"} · {p.servicio}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {item("📋 Abrir ficha", ()=>abrirFicha(p))}
+                {item(p.estado==="alta"?"↩️ Reactivar (marcar activo)":"✅ Dar de alta", ()=>cambiarEstado(p, p.estado==="alta"?"activo":"alta"), p.estado==="alta"?"var(--primario)":"var(--exito)")}
+                {item("🔀 Cambiar de servicio", ()=>setMoverPaciente(p))}
+                {item("🛏️ Cambiar cama", ()=>{ setCamaInput(p.cama||""); setMoverInfo({ pacienteId:p.id, iniciales:p.iniciales, servicio:p.servicio, prevServicio:p.servicio, prevCama:p.cama, soloCama:true }); })}
+              </div>
+              <button onClick={cerrar} style={{width:"100%",marginTop:12,padding:11,fontSize:13,background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
+            </div>
+          </div>
+        );
+      })()}
       {moverInfo && (
         <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:66,display:"flex",justifyContent:"center",padding:12,pointerEvents:"none"}}>
-          <div style={{pointerEvents:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,0.28)",padding:"12px 14px",width:"100%",maxWidth:420}}>
-            <div style={{fontSize:12.5,color:"var(--texto-sec)",marginBottom:8}}><b>{moverInfo.iniciales}</b> pasó a <b>{moverInfo.servicio}</b>. ¿Nueva cama?</div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <input value={camaInput} onChange={e=>setCamaInput(e.target.value)} placeholder="Cama" style={{flex:1,padding:"9px 11px",fontSize:13,border:"0.5px solid var(--borde)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)"}} onKeyDown={e=>{if(e.key==="Enter")guardarCamaMovido();}} />
-              <button onClick={guardarCamaMovido} style={{padding:"9px 14px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer"}}>Guardar</button>
-              <button onClick={()=>{setMoverInfo(null);setCamaInput("");}} style={{padding:"9px 12px",fontSize:13,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer"}}>Omitir</button>
+          <div style={{pointerEvents:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,0.28)",padding:"12px 14px",width:"100%",maxWidth:440}}>
+            <div style={{fontSize:12.5,color:"var(--texto-sec)",marginBottom:8}}>{moverInfo.soloCama ? <>Cambiar cama de <b>{moverInfo.iniciales}</b></> : <><b>{moverInfo.iniciales}</b> pasó a <b>{moverInfo.servicio}</b>. ¿Nueva cama?</>}</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input value={camaInput} onChange={e=>setCamaInput(e.target.value)} placeholder="Cama" style={{flex:1,minWidth:0,padding:"9px 11px",fontSize:13,border:"0.5px solid var(--borde)",borderRadius:7,background:"var(--superficie)",color:"var(--texto)",boxSizing:"border-box"}} onKeyDown={e=>{if(e.key==="Enter")guardarCamaMovido();}} />
+              <button onClick={guardarCamaMovido} style={{flexShrink:0,padding:"9px 12px",fontSize:13,fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Guardar</button>
+              <button onClick={()=>{setMoverInfo(null);setCamaInput("");}} style={{flexShrink:0,padding:"9px 12px",fontSize:13,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Omitir</button>
             </div>
-            <button onClick={deshacerMovimiento} style={{marginTop:8,background:"none",border:"none",color:"var(--peligro)",fontSize:12,cursor:"pointer",padding:0,fontWeight:600}}>↩ Deshacer movimiento</button>
+            {!moverInfo.soloCama && <button onClick={deshacerMovimiento} style={{marginTop:8,background:"none",border:"none",color:"var(--peligro)",fontSize:12,cursor:"pointer",padding:0,fontWeight:600}}>↩️ Deshacer movimiento</button>}
           </div>
         </div>
       )}
@@ -8757,12 +8756,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       <Fragment key={p.id}>
                       {gapId===p.id && <div style={{height:2,background:"var(--primario)",borderRadius:2,margin:"3px 0"}}/>}
                       <div data-pac-id={p.id} data-serv={servicio}
-                        onClick={()=>{ if (longPressPacRef.current) { longPressPacRef.current = false; return; } abrirFicha(p); }}
-                        onPointerDown={(e)=>{ if (soloLectura) return; pressPosPac.current={x:e.clientX,y:e.clientY}; longPressPacRef.current=false; clearTimeout(pressTimerPac.current); pressTimerPac.current=setTimeout(()=>{ longPressPacRef.current=true; try{navigator.vibrate?.(20);}catch{} setMoverPaciente(p); }, 500); }}
+                        onClick={()=>{ if (Date.now()-arrastreRecienteRef.current < 400) return; if (longPressPacRef.current) { longPressPacRef.current = false; return; } abrirFicha(p); }}
+                        onPointerDown={(e)=>{ if (soloLectura) return; pressPosPac.current={x:e.clientX,y:e.clientY}; longPressPacRef.current=false; clearTimeout(pressTimerPac.current); pressTimerPac.current=setTimeout(()=>{ longPressPacRef.current=true; try{navigator.vibrate?.(20);}catch{} setOpcionesPaciente(p); }, 500); }}
                         onPointerMove={(e)=>{ if (pressPosPac.current && (Math.abs(e.clientX-pressPosPac.current.x)>10||Math.abs(e.clientY-pressPosPac.current.y)>10)) clearTimeout(pressTimerPac.current); }}
                         onPointerUp={()=>clearTimeout(pressTimerPac.current)}
                         onPointerLeave={()=>clearTimeout(pressTimerPac.current)}
-                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y",opacity:dragPos&&dragPacRef.current?.id===p.id?0.4:1}}>
+                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",opacity:dragPos&&dragPacRef.current?.id===p.id?0.4:1}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <div style={{fontSize:13,fontWeight:600,color:"var(--texto)"}}>
                             {p.iniciales} <span style={{fontSize:15,fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:13}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
@@ -8787,6 +8786,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       </div>
                       </Fragment>
                     ))}
+                    {dragPos && gapId===("__"+servicio) && <div style={{height:2,background:"var(--primario)",borderRadius:2,margin:"3px 0"}}/>}
                   </div>
                 </div>
               );
@@ -8799,6 +8799,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       )}
     </div>
   );
+}
+
+// Color estable por médico desde paleta fija (usado en Distribución y en la ficha).
+const PALETA_MEDICOS = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#ea580c", "#4f46e5", "#0d9488", "#b45309"];
+function colorMedico(id) {
+  const s = String(id || "");
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
+  return PALETA_MEDICOS[h % PALETA_MEDICOS.length];
 }
 
 function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
@@ -8816,22 +8824,7 @@ function EncargadosPaciente({ paciente, miembros, currentUser, onActualizar }) {
     const m = miembros.find(x => x.perfiles?.id === id);
     return m?.perfiles?.nombre || "?";
   };
-  const colorDeEncargado = (id) => {
-    const paleta = [
-      { bg: "var(--chip-azul-bg)", text: "var(--chip-azul)" },
-      { bg: "var(--exito-bg)", text: "var(--exito)" },
-      { bg: "var(--peligro-bg)", text: "var(--peligro)" },
-      { bg: "var(--alerta-bg)", text: "var(--alerta)" },
-      { bg: "var(--ccv-bg)", text: "var(--ccv)" },
-      { bg: "var(--exito-bg)", text: "var(--exito)" },
-      { bg: "var(--peligro-bg)", text: "var(--peligro)" },
-      { bg: "var(--alerta-bg)", text: "var(--alerta)" },
-      { bg: "var(--chip-indigo-bg)", text: "var(--chip-indigo)" },
-      { bg: "var(--exito-bg)", text: "var(--exito)" },
-    ];
-    const idx = miembros.findIndex(x => x.perfiles?.id === id);
-    return paleta[(idx < 0 ? 0 : idx) % paleta.length];
-  };
+  const colorDeEncargado = (id) => { const c = colorMedico(id); return { bg: c + "22", text: c }; };
 
   return (
     <div onClick={(e)=>e.stopPropagation()} style={{marginTop:6}}>
@@ -10108,22 +10101,22 @@ if (!currentUser) {
     if (!s0) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
-    if (Date.now() - s0.t > 700) return;
+    if (Date.now() - s0.t > 600) return;
 
     // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
-    // Gesto deliberado: harta distancia y claramente vertical, para que no salte solo.
-    if (dy > 60 && Math.abs(dy) > Math.abs(dx) * 1.8) {
+    // Gesto MUY deliberado: gran distancia y claramente vertical, para que no salte con roces.
+    if (dy > 100 && Math.abs(dy) > Math.abs(dx) * 2.4) {
       let el = s0.target, arriba = true;
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
-        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 2; break; }
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) { arriba = el.scrollTop <= 1; break; }
         el = el.parentElement;
       }
       if (arriba && submenu) { setSubmenuOpen(true); try { navigator.vibrate?.(15); } catch {} }
       return;
     }
     // Deslizar hacia arriba estando el menú abierto: lo cierra
-    if (dy < -55 && Math.abs(dy) > Math.abs(dx) * 1.6 && submenuOpen) {
+    if (dy < -100 && Math.abs(dy) > Math.abs(dx) * 2.4 && submenuOpen) {
       setSubmenuOpen(false);
       return;
     }
@@ -10168,16 +10161,15 @@ if (!currentUser) {
       secciones: [
         ["pacientes", "👥 Pacientes"],
         ...(!fnOculta(config, "hosp:tabla") ? [["tabla", "📋 Tabla"]] : []),
-        ...(!fnOculta(config, "hosp:notas") ? [["notas", "🗒️ Notas"]] : []),
-        ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
+        ["ingresos", "📋 Ingresos"],
         ...(!fnOculta(config, "hosp:interconsultas") ? [["interconsultas", "📄 Interconsultas"]] : []),
         ...(!fnOculta(config, "hosp:seguimiento") ? [["seguimiento", "🔄 Seguimiento"]] : []),
-        ["ingresos", "📋 Ingresos"],
+        ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
+        ...(!fnOculta(config, "hosp:notas") ? [["notas", "🗒️ Notas"]] : []),
       ],
       activo: subTabHospital,
       elegir: setSubTabHospital,
       extras: [
-        ...(subTabHospital === "pacientes" ? [["📋 Nuevo ingreso", () => accion("ingreso")]] : []),
         ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
