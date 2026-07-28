@@ -6077,7 +6077,8 @@ function IngresosPanel({ currentUser, contexto }) {
     const ruta = (padre ? padre + "/" : "") + n.trim().replace(/\//g, "-");
     const hermanos = carpetas.filter(c => c.ruta.split("/").slice(0, -1).join("/") === (padre || ""));
     const orden = hermanos.length ? Math.max(...hermanos.map(h => h.orden || 0)) + 1 : 0;
-    await supabase.from("carpetas_ingresos").insert({ user_id: currentUser.id, equipo_id: equipoId, ruta, orden });
+    const { error } = await supabase.from("carpetas_ingresos").insert({ user_id: currentUser.id, equipo_id: equipoId, ruta, orden });
+    if (error) { alert("No se pudo crear la carpeta.\n\nProbablemente falta ejecutar la migración 'migracion_carpetas_ingresos.sql' en Supabase → SQL Editor.\n\nDetalle: " + error.message); return; }
     await cargar();
   };
   const eliminarCarpeta = async (ruta) => {
