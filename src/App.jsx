@@ -6441,6 +6441,17 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
   );
 }
 
+// Ordena camas "de arriba hacia abajo": numérico natural (2 antes que 10) con
+// respaldo alfabético; las camas vacías/sin asignar quedan al final.
+function compararCama(a, b) {
+  const ca = (a?.cama ?? "").toString().trim();
+  const cb = (b?.cama ?? "").toString().trim();
+  if (!ca && !cb) return 0;
+  if (!ca) return 1;
+  if (!cb) return -1;
+  return ca.localeCompare(cb, "es", { numeric: true, sensitivity: "base" });
+}
+
 function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
   // Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
@@ -6600,6 +6611,9 @@ const SUGERENCIAS_SOAP = {
   const [abrirFormExamen, setAbrirFormExamen] = useState(false);
   const inputFotoIngresoRef = useRef(null);          // input de foto para "nuevo por foto"
   const inputFotoFichaRef = useRef(null);            // input de foto para "agregar ingreso" en la ficha
+  const inputFotoMenuRef = useRef(null);             // input de foto para "agregar ingreso" desde el menú (mantener presionado)
+  const fotoMenuTargetRef = useRef(null);            // paciente destino cuando el ingreso se agrega desde el menú
+  const [fotoMenuCargando, setFotoMenuCargando] = useState(false);
   const [extrayendoIngreso, setExtrayendoIngreso] = useState(false);
   const [extraccionMsg, setExtraccionMsg] = useState("");
 const [editForm, setEditForm] = useState({});
@@ -6895,6 +6909,7 @@ const cargarMiembrosEquipo = async () => {
     if (!info || !nc) return;
     await actualizarPaciente(info.pacienteId, { cama: nc });
     setPacientes(prev => prev.map(x => x.id === info.pacienteId ? { ...x, cama: nc } : x));
+    if (info.servicio) resortCamasServicio(info.servicio);
   };
   const deshacerMovimiento = async () => {
     const info = moverInfo; setMoverInfo(null); setCamaInput("");
@@ -6905,6 +6920,19 @@ const cargarMiembrosEquipo = async () => {
   const longPressPacRef = useRef(false);
   const pressTimerPac = useRef(null);
   const pressPosPac = useRef(null);
+  // Reordena las camas de un servicio de arriba hacia abajo (numérico/alfabético) y persiste el orden.
+  const resortCamasServicio = async (servicio) => {
+    let ordenados = [];
+    setPacientes(prev => {
+      const enServicio = prev.filter(x => x.servicio === servicio).slice().sort(compararCama);
+      const ordenMap = {}; enServicio.forEach((x, idx) => { ordenMap[x.id] = idx; });
+      ordenados = enServicio;
+      return prev.map(x => ordenMap[x.id] !== undefined ? { ...x, orden: ordenMap[x.id] } : x);
+    });
+    for (let idx = 0; idx < ordenados.length; idx++) {
+      try { await actualizarPaciente(ordenados[idx].id, { orden: idx }); } catch {}
+    }
+  };
   const moverAServicio = async (nuevoServicio) => {
     const pac = moverPaciente;
     setMoverPaciente(null);
@@ -6913,6 +6941,7 @@ const cargarMiembrosEquipo = async () => {
     if (r.ok) {
       setPacientes(prev => prev.map(x => x.id === pac.id ? { ...x, servicio: nuevoServicio } : x));
       setCamaInput(""); setMoverInfo({ pacienteId: pac.id, iniciales: pac.iniciales, servicio: nuevoServicio, prevServicio: pac.servicio, prevCama: pac.cama });
+      resortCamasServicio(nuevoServicio);
     }
     else alert("No se pudo mover el paciente: " + r.error);
   };
@@ -7119,32 +7148,52 @@ const cargarMiembrosEquipo = async () => {
   };
 
   // ── Extracción por foto: AGREGAR ingreso a un paciente existente ──
-  const onFotoFichaIngreso = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 3);
-    e.target.value = "";
-    if (!files.length || !seleccionado) return;
-    setExtraccionMsg(""); setExtrayendoIngreso(true);
+  // Procesa 1-3 fotos/PDF de un ingreso y lo agrega a la historia del paciente `target`.
+  // Sirve tanto para la ficha abierta como para el menú de "mantener presionado".
+  const aplicarFotoIngreso = async (files, target) => {
+    if (!files.length || !target) return;
+    const enFicha = seleccionado?.id === target.id;
+    if (enFicha) { setExtraccionMsg(""); setExtrayendoIngreso(true); }
+    else setFotoMenuCargando(target.iniciales || true);
     try {
       const b64s = [];
       for (const f of files) b64s.push(await comprimirImagenPac(f));
       const x = await extraerIngresoPaciente(b64s);
       const textoNuevo = componerHistoriaIngreso(x);
-      const historiaFinal = [seleccionado.historia, textoNuevo].filter(Boolean).join("\n\n");
+      const historiaFinal = [target.historia, textoNuevo].filter(Boolean).join("\n\n");
       const patch = { historia: historiaFinal };
-      if (x.diagnostico && !seleccionado.diagnostico) patch.diagnostico = x.diagnostico;
+      if (x.diagnostico && !target.diagnostico) patch.diagnostico = x.diagnostico;
       // Completa ficha clínica y RUT si el paciente aún no los tiene
-      if (x.ficha_clinica && !seleccionado.ficha_clinica) patch.ficha_clinica = String(x.ficha_clinica).slice(0, 30);
-      if (x.rut && !seleccionado.rut) patch.rut = String(x.rut).slice(0, 15);
-      const result = await actualizarPaciente(seleccionado.id, patch);
-      if (!result.ok) { setExtraccionMsg("⚠️ Error al guardar: " + result.error); return; }
-      setSeleccionado(result.paciente);
+      if (x.ficha_clinica && !target.ficha_clinica) patch.ficha_clinica = String(x.ficha_clinica).slice(0, 30);
+      if (x.rut && !target.rut) patch.rut = String(x.rut).slice(0, 15);
+      const result = await actualizarPaciente(target.id, patch);
+      if (!result.ok) {
+        if (enFicha) setExtraccionMsg("⚠️ Error al guardar: " + result.error);
+        else alert("⚠️ Error al guardar el ingreso: " + result.error);
+        return;
+      }
+      if (seleccionado?.id === result.paciente.id) setSeleccionado(result.paciente);
       setPacientes(prev => prev.map(p => p.id === result.paciente.id ? result.paciente : p));
-      setExtraccionMsg("✓ Ingreso agregado a la historia desde la foto.");
+      if (enFicha) setExtraccionMsg("✓ Ingreso agregado a la historia desde la foto.");
+      else alert("✓ Ingreso agregado a la historia de " + (result.paciente.iniciales || "el paciente") + ".");
     } catch (err) {
-      setExtraccionMsg("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
+      if (enFicha) setExtraccionMsg("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
+      else alert("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
     } finally {
-      setExtrayendoIngreso(false);
+      if (enFicha) setExtrayendoIngreso(false);
+      else setFotoMenuCargando(false);
     }
+  };
+  const onFotoFichaIngreso = (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3);
+    e.target.value = "";
+    if (seleccionado) aplicarFotoIngreso(files, seleccionado);
+  };
+  const onFotoMenuIngreso = (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 3);
+    e.target.value = "";
+    const target = fotoMenuTargetRef.current;
+    if (target) aplicarFotoIngreso(files, target);
   };
 
   const guardarNuevo = async () => {
@@ -8038,15 +8087,6 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
           <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:"var(--fs-2)",lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,display:"none"}}>✏️</button>
           {!soloLectura && <button onClick={()=>setOrdenTxAbierta(true)} title="Orden de transfusión" aria-label="Orden de transfusión" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,display:"none"}}>🩸 Transfusión</button>}
-          {!soloLectura && <>
-            <input ref={inputFotoFichaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoFichaIngreso}/>
-            <button onClick={()=>inputFotoFichaRef.current?.click()} disabled={extrayendoIngreso} title="Agregar ingreso desde foto" aria-label="Agregar ingreso desde foto" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoIngreso?"default":"pointer",fontWeight:500,opacity:extrayendoIngreso?0.6:1}}>{extrayendoIngreso?"🔍 Leyendo…":"📷 Ingreso"}</button>
-          </>}
-          {seleccionado.estado === "activo" ? (
-            <button onClick={()=>cambiarEstado(seleccionado, "alta")} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>✓ Dar alta</button>
-          ) : (
-            <button onClick={()=>cambiarEstado(seleccionado, "activo")} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer"}}>↺ Reactivar</button>
-          )}
           {esCreador && (
             <button onClick={()=>eliminarPacienteHandler(seleccionado)} style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--peligro-borde)",borderRadius:6,cursor:"pointer"}}>🗑</button>
           )}
@@ -8858,9 +8898,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* HOJA: mover paciente de servicio (mantén presionado una tarjeta) */}
       {moverPaciente && (() => {
         const destinos = Array.from(new Set([
-          ...(esEquipo ? serviciosEquipo : misServiciosLista).map(s => s.nombre),
+          ...misServiciosLista.map(s => s.nombre),
+          ...serviciosEquipo.map(s => s.nombre),
           ...Object.keys(porServicio),
-        ])).filter(Boolean);
+        ])).filter(Boolean).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
         return (
           <div onClick={()=>setMoverPaciente(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:65}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"70vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -8883,6 +8924,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
       {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
       {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:"var(--fs-1)",fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
+      <input ref={inputFotoMenuRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoMenuIngreso}/>
+      {fotoMenuCargando && (
+        <div style={{position:"fixed",left:0,right:0,bottom:16,zIndex:210,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+          <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"9px 14px",fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.28)"}}>🔍 Leyendo ingreso{typeof fotoMenuCargando === "string" ? ` de ${fotoMenuCargando}` : ""}…</div>
+        </div>
+      )}
       {opcionesPaciente && (() => {
         const p = opcionesPaciente; const cerrar = () => setOpcionesPaciente(null);
         const item = (label, fn, color) => (<button onClick={()=>{ cerrar(); fn(); }} style={{textAlign:"left",padding:"12px 14px",fontSize:"var(--fs-2)",fontWeight:600,background:"var(--fondo-suave)",color:color||"var(--texto)",border:"0.5px solid var(--borde)",borderRadius:9,cursor:"pointer"}}>{label}</button>);
@@ -8895,6 +8942,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {item(p.estado==="alta"?"↩️ Reactivar (marcar activo)":"✅ Dar de alta", ()=>cambiarEstado(p, p.estado==="alta"?"activo":"alta"), p.estado==="alta"?"var(--primario)":"var(--exito)")}
                 {item("📄 Adjuntar ingreso", ()=>setIngresoPacienteMenu(p))}
+                {item("📷 Ingreso desde foto", ()=>{ fotoMenuTargetRef.current = p; inputFotoMenuRef.current?.click(); })}
                 {item("🔀 Cambiar de servicio", ()=>setMoverPaciente(p))}
                 {item("🛏️ Cambiar cama", ()=>{ setCamaInput(p.cama||""); setMoverInfo({ pacienteId:p.id, iniciales:p.iniciales, servicio:p.servicio, prevServicio:p.servicio, prevCama:p.cama, soloCama:true }); })}
                 {item("🩸 Transfusión", ()=>setTxPacienteMenu(p), "var(--peligro)")}
@@ -10390,8 +10438,11 @@ if (!currentUser) {
     if (Date.now() - s0.t > 600) return;
 
     // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
-    // Gesto MUY deliberado: gran distancia y claramente vertical, para que no salte con roces.
-    if (dy > 100 && Math.abs(dy) > Math.abs(dx) * 2.4) {
+    // Gesto MUY deliberado (Safari es especialmente sensible): debe empezar cerca del
+    // borde superior de la pantalla, recorrer bastante, ser claramente vertical y no ser
+    // un "flick" instantáneo de scroll con inercia.
+    const durGesto = Date.now() - s0.t;
+    if (dy > 145 && Math.abs(dy) > Math.abs(dx) * 3 && s0.y < 170 && durGesto > 130) {
       let el = s0.target, arriba = true;
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
