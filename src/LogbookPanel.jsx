@@ -127,6 +127,10 @@ const REGISTRO_VACIO = {
 
 // ─── Comprime la foto en el navegador antes de enviarla (máx 1568 px, JPEG) ───
 async function comprimirImagen(file, maxDim = 1568, calidad = 0.85) {
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")) {
+    const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = () => rej(new Error("No se pudo leer el PDF")); r.readAsDataURL(file); });
+    return { base64, mime: "application/pdf" };
+  }
   const img = await new Promise((res, rej) => {
     const i = new Image();
     i.onload = () => res(i);
@@ -141,7 +145,7 @@ async function comprimirImagen(file, maxDim = 1568, calidad = 0.85) {
   URL.revokeObjectURL(img.src);
   const dataUrl = canvas.toDataURL("image/jpeg", calidad);
   const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", calidad));
-  return { base64: dataUrl.split(",")[1], dataUrl, blob };
+  return { base64: dataUrl.split(",")[1], dataUrl, blob, mime: "image/jpeg" };
 }
 
 // ─── Detecta el rol del usuario según su nombre en el protocolo ───
@@ -157,7 +161,7 @@ function detectarRol(nombreUsuario, cirujano, ayudantes) {
 }
 
 // ─── Extracción con IA (visión) vía la misma edge function del chat ───
-async function extraerDeFotos(imagenesBase64) {
+async function extraerDeFotos(items) {
   const instrucciones = `Analiza la(s) foto(s) de este protocolo operatorio de urología y extrae los datos en JSON.
 Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
 Si un dato no aparece en el documento, usa null. NO inventes datos.
@@ -190,10 +194,9 @@ Esquema exacto:
 }
 IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes ni completes datos que no estén.`;
 
-  const content = imagenesBase64.map((b64) => ({
-    type: "image",
-    source: { type: "base64", media_type: "image/jpeg", data: b64 },
-  }));
+  const content = items.map((it) => it.mime === "application/pdf"
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: it.base64 } }
+    : { type: "image", source: { type: "base64", media_type: "image/jpeg", data: it.base64 } });
   content.push({ type: "text", text: instrucciones });
 
   const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
@@ -356,7 +359,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const comprimidas = [];
       for (const f of files) comprimidas.push(await comprimirImagen(f));
       setFotos(comprimidas);
-      const datos = await extraerDeFotos(comprimidas.map((c) => c.base64));
+      const datos = await extraerDeFotos(comprimidas);
       const rolDetectado = detectarRol(currentUser?.nombre, datos.cirujano, datos.ayudantes);
       setReg((prev) => ({
         ...prev,
@@ -740,7 +743,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           {/* Captura */}
           {!editId && (
             <div style={{ ...card, textAlign: "center", borderStyle: "dashed", borderWidth: 1.5, padding: "18px 14px" }}>
-              <input ref={inputFotoRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onFotos} />
+              <input ref={inputFotoRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={onFotos} />
               <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFotos} />
               {extrayendo ? (
                 <div style={{ fontSize: 14, color: "var(--texto-sec)" }}>

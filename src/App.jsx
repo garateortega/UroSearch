@@ -133,6 +133,9 @@ function fmtFecha(f) {
 
 // ─── Compresión de imagen para envío a la IA (mismo patrón que el Logbook) ───
 async function comprimirImagenPac(file, maxDim = 1568, calidad = 0.85) {
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")) {
+    return await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error("No se pudo leer el PDF")); r.readAsDataURL(file); });
+  }
   const img = await new Promise((res, rej) => {
     const i = new Image();
     i.onload = () => res(i);
@@ -5177,7 +5180,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
             <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
           </label>
           <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
-          <input ref={inputFotoTablaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoTabla}/>
+          <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
           <div style={{position:"relative",marginLeft:"auto"}}>
             <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
             {vistaMenuOpen && (
@@ -5554,7 +5557,7 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
 
-        <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }} onChange={onFiles} />
+        <input ref={inputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={onFiles} />
 
         {fase === "capturar" && (
           <>
@@ -6071,7 +6074,8 @@ function IngresosPanel({ currentUser, contexto }) {
   const [cargando, setCargando] = useState(true);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState(null);
-  const [colapsadas, setColapsadas] = useState({});
+  const [colapsadas, setColapsadas] = useState(() => { try { return JSON.parse(localStorage.getItem("uro_ing_colapsadas")||"{}"); } catch { return {}; } });
+  useEffect(() => { try { localStorage.setItem("uro_ing_colapsadas", JSON.stringify(colapsadas)); } catch {} }, [colapsadas]);
   const equipoId = contexto !== "personal" ? contexto : null;
 
   const cargar = async () => {
@@ -6866,6 +6870,7 @@ const cargarMiembrosEquipo = async () => {
   const formEvoRef = useRef(null);          // tarjeta del formulario "Nueva evolución"
   const formExamenRef = useRef(null);       // tarjeta del formulario "Nuevo examen"
   const [showDistribucion, setShowDistribucion] = useState(false);
+  const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
   useEffect(() => {
     const h = (e) => { if (e.detail?.accion === "ingreso") setIngresoAbierto(true); };
@@ -6874,6 +6879,15 @@ const cargarMiembrosEquipo = async () => {
   }, []);
   const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
   const [opcionesPaciente, setOpcionesPaciente] = useState(null); // hoja de opciones (mantener presionado)
+  const [txPacienteMenu, setTxPacienteMenu] = useState(null);     // Transfusión desde el menú
+  const [ingresoPacienteMenu, setIngresoPacienteMenu] = useState(null); // Adjuntar ingreso desde el menú
+  const [autoEditId, setAutoEditId] = useState(null);
+  const eliminarPacienteDirecto = async (p) => {
+    if (!confirm(`¿Eliminar a ${p.iniciales}? Esta acción no se puede deshacer.`)) return;
+    const r = await eliminarPaciente(p.id);
+    if (r.ok) setPacientes(prev => prev.filter(x => x.id !== p.id));
+    else alert("No se pudo eliminar: " + (r.error || ""));
+  };
   const [moverInfo, setMoverInfo] = useState(null); // { pacienteId, iniciales, servicio, prevServicio, prevCama } tras un movimiento
   const [camaInput, setCamaInput] = useState("");
   const guardarCamaMovido = async () => {
@@ -7195,6 +7209,7 @@ const cargarMiembrosEquipo = async () => {
   });
   setEditandoFicha(true);
 };
+  useEffect(() => { if (autoEditId && vista === "ficha" && seleccionado?.id === autoEditId) { iniciarEdicion(); setAutoEditId(null); } }, [autoEditId, vista, seleccionado]);
 
 const guardarEdicion = async () => {
   const datos = {
@@ -7686,7 +7701,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
         {/* Captura por foto: autocompleta desde la hoja de ingreso */}
         <div style={{textAlign:"center",border:"1.5px dashed var(--borde)",borderRadius:12,padding:"14px",marginBottom:14,background:"var(--fondo-suave)"}}>
-          <input ref={inputFotoIngresoRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoNuevoIngreso}/>
+          <input ref={inputFotoIngresoRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoNuevoIngreso}/>
           {extrayendoIngreso ? (
             <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>🔍 Leyendo la hoja de ingreso…</div>
           ) : (
@@ -8021,10 +8036,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           <div style={{fontSize:"var(--fs-2)",color:"var(--texto-ter)",marginTop:4}}>Ingreso: {fmtFecha(seleccionado.fecha_ingreso)}</div>
         </div>
         <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:"var(--fs-2)",lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>✏️</button>
-          {!soloLectura && <button onClick={()=>setOrdenTxAbierta(true)} title="Orden de transfusión" aria-label="Orden de transfusión" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>🩸 Transfusión</button>}
+          <button onClick={iniciarEdicion} title="Editar paciente" aria-label="Editar paciente" style={{padding:"5px 9px",fontSize:"var(--fs-2)",lineHeight:1,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,display:"none"}}>✏️</button>
+          {!soloLectura && <button onClick={()=>setOrdenTxAbierta(true)} title="Orden de transfusión" aria-label="Orden de transfusión" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--peligro)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500,display:"none"}}>🩸 Transfusión</button>}
           {!soloLectura && <>
-            <input ref={inputFotoFichaRef} type="file" accept="image/*" capture="environment" multiple style={{display:"none"}} onChange={onFotoFichaIngreso}/>
+            <input ref={inputFotoFichaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoFichaIngreso}/>
             <button onClick={()=>inputFotoFichaRef.current?.click()} disabled={extrayendoIngreso} title="Agregar ingreso desde foto" aria-label="Agregar ingreso desde foto" style={{padding:"5px 10px",fontSize:"var(--fs-0)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoIngreso?"default":"pointer",fontWeight:500,opacity:extrayendoIngreso?0.6:1}}>{extrayendoIngreso?"🔍 Leyendo…":"📷 Ingreso"}</button>
           </>}
           {seleccionado.estado === "activo" ? (
@@ -8878,16 +8893,21 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)"}}>{p.iniciales}</div>
               <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",marginBottom:12}}>Cama {p.cama||"—"} · {p.servicio}</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {item("📋 Abrir ficha", ()=>abrirFicha(p))}
                 {item(p.estado==="alta"?"↩️ Reactivar (marcar activo)":"✅ Dar de alta", ()=>cambiarEstado(p, p.estado==="alta"?"activo":"alta"), p.estado==="alta"?"var(--primario)":"var(--exito)")}
+                {item("📄 Adjuntar ingreso", ()=>setIngresoPacienteMenu(p))}
                 {item("🔀 Cambiar de servicio", ()=>setMoverPaciente(p))}
                 {item("🛏️ Cambiar cama", ()=>{ setCamaInput(p.cama||""); setMoverInfo({ pacienteId:p.id, iniciales:p.iniciales, servicio:p.servicio, prevServicio:p.servicio, prevCama:p.cama, soloCama:true }); })}
+                {item("🩸 Transfusión", ()=>setTxPacienteMenu(p), "var(--peligro)")}
+                {item("✏️ Editar", ()=>{ abrirFicha(p); setAutoEditId(p.id); })}
+                {item("🗑 Eliminar", ()=>eliminarPacienteDirecto(p), "var(--peligro)")}
               </div>
               <button onClick={cerrar} style={{width:"100%",marginTop:12,padding:11,fontSize:"var(--fs-2)",background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Cancelar</button>
             </div>
           </div>
         );
       })()}
+      {txPacienteMenu && <OrdenTransfusionModal paciente={txPacienteMenu} currentUser={currentUser} examenes={[]} onClose={()=>setTxPacienteMenu(null)} />}
+      {ingresoPacienteMenu && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={{ datos: { nombre: ingresoPacienteMenu.iniciales, ficha: ingresoPacienteMenu.ficha_clinica || "", rut: ingresoPacienteMenu.rut || "", edad: String(ingresoPacienteMenu.edad || ""), sexo: ingresoPacienteMenu.sexo || "", hipotesis: ingresoPacienteMenu.diagnostico || "" } }} onCreado={()=>{}} onClose={()=>setIngresoPacienteMenu(null)} />}
       {moverInfo && (
         <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:66,display:"flex",justifyContent:"center",padding:12,pointerEvents:"none"}}>
           <div style={{pointerEvents:"auto",background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,0.28)",padding:"12px 14px",width:"100%",maxWidth:440}}>
@@ -8913,13 +8933,27 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>Aún no hay pacientes activos con encargados asignados.</div>
             ) : (
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {cargaPorMedico.map((c,i)=>(
-                  <div key={c.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"var(--fondo-suave)",borderRadius:8,borderLeft:`4px solid ${colorMedico(c.id)}`}}>
-                    <span style={{fontSize:"var(--fs-2)",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}><span style={{width:11,height:11,borderRadius:"50%",background:colorMedico(c.id),flexShrink:0}}/>{c.nombre}</span>
-                    <span style={{fontSize:"var(--fs-2)",fontWeight:700,color:"#fff",background:colorMedico(c.id),padding:"2px 10px",borderRadius:10}}>{c.n}</span>
+                {cargaPorMedico.map((c,i)=>{
+                  const abierto = distDoctor===c.id;
+                  const suyos = abierto ? pacientes.filter(p=>p.estado==="activo" && (p.encargados||[]).includes(c.id)) : [];
+                  return (
+                  <div key={c.id||i} style={{background:"var(--fondo-suave)",borderRadius:8,borderLeft:`4px solid ${colorMedico(c.id)}`,overflow:"hidden"}}>
+                    <div onClick={()=>setDistDoctor(abierto?null:c.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",cursor:"pointer"}}>
+                      <span style={{fontSize:"var(--fs-2)",color:"var(--texto)",display:"flex",alignItems:"center",gap:8}}><span style={{width:11,height:11,borderRadius:"50%",background:colorMedico(c.id),flexShrink:0}}/>{abierto?"▾":"▸"} {c.nombre}</span>
+                      <span style={{fontSize:"var(--fs-2)",fontWeight:700,color:"#fff",background:colorMedico(c.id),padding:"2px 10px",borderRadius:10}}>{c.n}</span>
+                    </div>
+                    {abierto && <div style={{padding:"0 12px 10px 30px",display:"flex",flexDirection:"column",gap:4}}>
+                      {suyos.length===0 ? <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic"}}>Sin pacientes activos.</div> :
+                       suyos.map(p=>(
+                        <div key={p.id} onClick={()=>{setShowDistribucion(false);setDistDoctor(null);abrirFicha(p);}} style={{fontSize:"var(--fs-1)",color:"var(--texto)",cursor:"pointer",display:"flex",justifyContent:"space-between",gap:8,padding:"2px 0"}}>
+                          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.iniciales}</span>
+                          <span style={{color:"var(--texto-ter)",flexShrink:0}}>Cama {p.cama||"—"} · {p.servicio}</span>
+                        </div>
+                      ))}
+                    </div>}
                   </div>
-                ))}
-                <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:4,textAlign:"right"}}>Un paciente con varios encargados se cuenta en cada uno.</div>
+                  );
+                })}
               </div>
             )}
           </div>
