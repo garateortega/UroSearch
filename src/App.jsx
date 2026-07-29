@@ -6884,6 +6884,15 @@ const cargarMiembrosEquipo = async () => {
   const formEvoRef = useRef(null);          // tarjeta del formulario "Nueva evolución"
   const formExamenRef = useRef(null);       // tarjeta del formulario "Nuevo examen"
   const [showDistribucion, setShowDistribucion] = useState(false);
+  // Vista de servicios: "vertical" (por defecto, apilada/grilla) u "horizontal" (fila deslizable).
+  const [orientacionPac, setOrientacionPac] = useState(() => {
+    try { return localStorage.getItem("uro_orient_pac") === "horizontal" ? "horizontal" : "vertical"; } catch { return "vertical"; }
+  });
+  const toggleOrientacionPac = () => setOrientacionPac(o => {
+    const nv = o === "horizontal" ? "vertical" : "horizontal";
+    try { localStorage.setItem("uro_orient_pac", nv); } catch {}
+    return nv;
+  });
   const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
   useEffect(() => {
@@ -6964,24 +6973,45 @@ const cargarMiembrosEquipo = async () => {
     if (soloLectura) return;
     e.stopPropagation();
     const startX = e.clientX, startY = e.clientY;
-    let activo = false, autoDir = 0, scEl = null, autoTimer = null;
-    const move = (ev) => {
-      if (ev.cancelable) ev.preventDefault();
-      setDragPos({ x: ev.clientX, y: ev.clientY });
-      const vh = window.innerHeight;
-      autoDir = ev.clientY < 95 ? -1 : ev.clientY > vh - 95 ? 1 : 0;
-      const el = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-serv]");
+    let activo = false, autoDir = 0, scEl = null, rafId = 0;
+    let lastX = startX, lastY = startY, lastGap = null;
+    // Calcula sobre qué tarjeta/servicio se soltaría, con la posición actual del dedo.
+    // Solo actualiza el estado de React cuando el objetivo cambia (evita re-render por frame → tirones).
+    const evalObjetivo = (cx, cy) => {
+      const el = document.elementFromPoint(cx, cy)?.closest("[data-serv]");
+      let g = null, o = null;
       if (el) {
         const serv = el.getAttribute("data-serv");
         const id = el.getAttribute("data-pac-id");
-        if (id && id !== p.id) { overRef.current = { id, serv }; setGapId(id); }
-        else if (!id && serv) { overRef.current = { id: null, serv }; setGapId("__" + serv); }
-        else { overRef.current = null; setGapId(null); }
-      } else { overRef.current = null; setGapId(null); }
+        if (id && id !== p.id) { o = { id, serv }; g = id; }
+        else if (!id && serv) { o = { id: null, serv }; g = "__" + serv; }
+      }
+      overRef.current = o;
+      if (g !== lastGap) { lastGap = g; setGapId(g); }
+    };
+    const move = (ev) => {
+      if (ev.cancelable) ev.preventDefault();
+      lastX = ev.clientX; lastY = ev.clientY;
+      setDragPos({ x: ev.clientX, y: ev.clientY });
+      const vh = window.innerHeight;
+      autoDir = ev.clientY < 95 ? -1 : ev.clientY > vh - 95 ? 1 : 0;
+      evalObjetivo(ev.clientX, ev.clientY);
+    };
+    // Auto-scroll alineado al frame (rAF): velocidad proporcional a la cercanía al borde,
+    // sin el "temblor" que producía el setInterval de 16 ms desincronizado con el repintado.
+    const autoScroll = () => {
+      if (autoDir !== 0 && scEl) {
+        const vh = window.innerHeight;
+        const dist = autoDir < 0 ? Math.max(0, 95 - lastY) : Math.max(0, lastY - (vh - 95));
+        const speed = Math.min(16, 4 + dist * 0.16);
+        scEl.scrollBy(0, autoDir * speed);
+        evalObjetivo(lastX, lastY); // el hueco de destino sigue a la lista mientras se desplaza
+      }
+      rafId = requestAnimationFrame(autoScroll);
     };
     const up = async () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
-      clearInterval(autoTimer);
+      if (rafId) cancelAnimationFrame(rafId);
       const over = overRef.current, dp = dragPacRef.current;
       dragPacRef.current = null; overRef.current = null; setDragPos(null); setGapId(null);
       arrastreRecienteRef.current = Date.now();
@@ -7004,7 +7034,7 @@ const cargarMiembrosEquipo = async () => {
       dragPacRef.current = p; overRef.current = null; setGapId(null); setDragPos({ x: startX, y: startY });
       try { navigator.vibrate?.(15); } catch {}
       scEl = scrollParent(kanbanRef.current || document.body);
-      autoTimer = setInterval(() => { if (autoDir !== 0 && scEl) scEl.scrollBy(0, autoDir * 16); }, 16);
+      rafId = requestAnimationFrame(autoScroll);
       window.addEventListener("pointermove", move, { passive: false });
       window.addEventListener("pointerup", up);
     };
@@ -7407,6 +7437,35 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       y += 3;
     });
     doc.save(`evoluciones_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}.pdf`);
+  };
+  // Imprime SOLO las evoluciones de hoy, ordenadas cronológicamente, con el logo de UroSearch en la esquina.
+  const imprimirEvolucionesDelDiaPDF = async () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const delDia = (evoluciones || [])
+      .filter(e => (e.fecha_evolucion || "") === hoy)
+      .sort((a, b) => (a.hora_evolucion || "").localeCompare(b.hora_evolucion || ""));
+    if (delDia.length === 0) { alert("No hay evoluciones registradas hoy para este paciente."); return; }
+    let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { alert("No se pudo cargar el generador de PDF."); return; }
+    const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 18;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, 12, 16, 16); } catch {}
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(20, 20, 20);
+    doc.text("EVOLUCIONES DEL DÍA", M, y); y += 6;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(90, 90, 90);
+    const fechaLarga = new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    doc.text(fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1), M, y); y += 6;
+    doc.setTextColor(20, 20, 20);
+    doc.text(`Paciente: ${seleccionado.iniciales || ""}    Edad: ${seleccionado.edad || "—"}`, M, y); y += 4.8;
+    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || "—"}    Servicio: ${seleccionado.servicio || "—"}    Cama: ${seleccionado.cama || "—"}`, M, y); y += 5;
+    doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 7;
+    delDia.forEach(e => {
+      if (y > 280) { doc.addPage(); y = 18; }
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      doc.text(`${e.hora_evolucion?.slice(0, 5) || ""}  ·  ${e.autor?.nombre || ""}${e.tipo && e.tipo !== "libre" ? "  [" + e.tipo + "]" : ""}`, M, y); y += 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+      doc.splitTextToSize(e.texto || "", W - 2 * M).forEach(p => { if (y > 286) { doc.addPage(); y = 18; } doc.text(p, M, y); y += 5; });
+      y += 4;
+    });
+    doc.save(`evoluciones_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}_${hoy.replace(/-/g, "")}.pdf`);
   };
 
   // ============================================================
@@ -8199,6 +8258,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             <div style={ST_TITULO_SEC}>📝 Evoluciones</div>
             <div style={{display:"flex",gap:6}}>
               <button onClick={descargarEvolucionesPDF} title="Descargar evoluciones en PDF" aria-label="Descargar evoluciones en PDF" style={ST_BTN_ICO}>📄</button>
+              <button onClick={imprimirEvolucionesDelDiaPDF} title="Imprimir evoluciones de hoy" aria-label="Imprimir evoluciones de hoy" style={ST_BTN_ICO}>🖨️</button>
               {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={ST_BTN_MAS}>+</button>}
             </div>
           </div>
@@ -8840,6 +8900,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <div ref={listaScrollElRef} onScroll={e=>{listaScrollPosRef.current = e.currentTarget.scrollTop;}} style={{padding:"16px",overflowY:"auto"}}>
 
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        <button onClick={toggleOrientacionPac} title="Cambiar entre vista vertical y horizontal" aria-label="Cambiar orientación de la vista" style={{padding:"6px 10px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>{orientacionPac==="horizontal"?"↔ Horizontal":"↕ Vertical"}</button>
         {!soloLectura && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap",position:"relative"}}>
             <button ref={servBtnRef} onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
@@ -9022,7 +9083,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* Vista kanban por servicio: se reordena dejando presionado el título y arrastrando */}
       {!loadingPacientes && pacientesFiltrados.length > 0 && (
         <>
-          <div ref={kanbanRef} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12,position:"relative",touchAction:dragCol?"none":"auto"}}>
+          <div ref={kanbanRef} style={orientacionPac==="horizontal"
+            ? {display:"flex",flexDirection:"row",flexWrap:"nowrap",gap:12,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:8,position:"relative",touchAction:dragCol?"none":"auto"}
+            : {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:12,position:"relative",touchAction:dragCol?"none":"auto"}}>
             {nombresServicioOrdenados.map((servicio, idx) => {
               const arrastrando = dragCol?.nombre === servicio;
               // Las columnas vecinas se corren para abrir el hueco donde caerá la que se arrastra
@@ -9040,6 +9103,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               }
               return (
                 <div key={servicio} data-serv={servicio} style={{
+                  ...(orientacionPac==="horizontal" ? {flex:"0 0 300px",width:300,minWidth:300} : {}),
                   background:"var(--superficie)",
                   border: arrastrando ? "1px solid var(--primario)" : "0.5px solid var(--borde)",
                   borderRadius:10, padding:"12px",
