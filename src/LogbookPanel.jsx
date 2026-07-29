@@ -116,7 +116,7 @@ const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
 const REGISTRO_VACIO = {
   fecha: new Date().toISOString().slice(0, 10),
   iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "", diagnostico_pre: "", diagnostico_post: "",
-  procedimiento: "", categoria: "", lateralidad: "", rol: "cirujano",
+  procedimiento: "", intervencion: "", categoria: "", lateralidad: "", rol: "cirujano",
   cirujano: "", ayudantes: "", anestesia: "", hora_inicio: "", hora_termino: "",
   duracion_min: "", sangrado_ml: "", tamano_litiasis_mm: "", tamano_prostata_cc: "",
   hallazgos: "", tecnica: "",
@@ -308,6 +308,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [extraidoOk, setExtraidoOk] = useState(false);
   const [fotos, setFotos] = useState([]); // [{dataUrl, blob, base64}]
   const [guardando, setGuardando] = useState(false);
+  // Subida múltiple: cada foto es una CIRUGÍA DISTINTA. `cola` guarda las que faltan
+  // por revisar (después de la que está en el formulario); `colaTotal` es el total del lote.
+  const [cola, setCola] = useState([]);          // [{ reg, foto }]
+  const [colaTotal, setColaTotal] = useState(0);
+  const [extractProgreso, setExtractProgreso] = useState(null); // { i, n } mientras la IA lee cada foto
   const [complementoOpen, setComplementoOpen] = useState(false); // sección biopsia/control colapsable
   const inputFotoRef = useRef(null);   // galería / archivos
   const inputCamaraRef = useRef(null); // cámara directa
@@ -348,9 +353,46 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   const set = (campo, valor) => setReg((prev) => ({ ...prev, [campo]: valor }));
 
-  // ─── Foto → extracción ───
+  // Convierte la respuesta de la IA en un objeto de formulario. El "Nombre de
+  // intervención" se autocompleta con el procedimiento detectado (editable).
+  const datosAReg = (datos) => {
+    const rolDetectado = detectarRol(currentUser?.nombre, datos.cirujano, datos.ayudantes);
+    const proc = datos.procedimiento || "";
+    return {
+      fecha: datos.fecha || new Date().toISOString().slice(0, 10),
+      iniciales: datos.iniciales || "",
+      ficha_clinica: datos.ficha_clinica || "",
+      rut: datos.rut || "",
+      edad: datos.edad != null ? String(datos.edad) : "",
+      sexo: datos.sexo || "",
+      diagnostico_pre: datos.diagnostico_pre || "",
+      diagnostico_post: datos.diagnostico_post || "",
+      procedimiento: proc,
+      intervencion: proc, // autocompletado; el usuario puede cambiarlo
+      categoria: CATEGORIAS_LOGBOOK.includes(datos.categoria) ? datos.categoria : "Otro",
+      lateralidad: datos.lateralidad || "",
+      rol: rolDetectado,
+      cirujano: datos.cirujano || "",
+      ayudantes: datos.ayudantes || "",
+      anestesia: datos.anestesia || "",
+      hora_inicio: datos.hora_inicio || "",
+      hora_termino: datos.hora_termino || "",
+      duracion_min: datos.duracion_min != null ? String(datos.duracion_min) : "",
+      sangrado_ml: datos.sangrado_ml != null ? String(datos.sangrado_ml) : "",
+      hallazgos: datos.hallazgos || "",
+      tecnica: datos.tecnica || "",
+      complicacion: !!datos.complicacion,
+      detalles_complicacion: datos.detalles_complicacion || "",
+      observaciones: datos.observaciones || "",
+    };
+  };
+
+  // ─── Fotos → extracción ───
+  // Cada imagen se trata como una CIRUGÍA DISTINTA: se extrae por separado y se
+  // arma una cola. La primera se carga en el formulario; el resto queda pendiente
+  // y se revisa/guarda una tras otra con "Guardar y siguiente".
   const onFotos = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 3);
+    const files = Array.from(e.target.files || []).slice(0, 6); // hasta 6 cirugías por lote
     if (files.length === 0) return;
     setError("");
     setExtrayendo(true);
@@ -358,38 +400,32 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     try {
       const comprimidas = [];
       for (const f of files) comprimidas.push(await comprimirImagen(f));
-      setFotos(comprimidas);
-      const datos = await extraerDeFotos(comprimidas);
-      const rolDetectado = detectarRol(currentUser?.nombre, datos.cirujano, datos.ayudantes);
-      setReg((prev) => ({
-        ...prev,
-        fecha: datos.fecha || prev.fecha,
-        iniciales: datos.iniciales || "",
-        ficha_clinica: datos.ficha_clinica || "",
-        rut: datos.rut || "",
-        edad: datos.edad != null ? String(datos.edad) : "",
-        sexo: datos.sexo || "",
-        diagnostico_pre: datos.diagnostico_pre || "",
-        diagnostico_post: datos.diagnostico_post || "",
-        procedimiento: datos.procedimiento || "",
-        categoria: CATEGORIAS_LOGBOOK.includes(datos.categoria) ? datos.categoria : "Otro",
-        lateralidad: datos.lateralidad || "",
-        rol: rolDetectado,
-        cirujano: datos.cirujano || "",
-        ayudantes: datos.ayudantes || "",
-        anestesia: datos.anestesia || "",
-        hora_inicio: datos.hora_inicio || "",
-        hora_termino: datos.hora_termino || "",
-        duracion_min: datos.duracion_min != null ? String(datos.duracion_min) : "",
-        sangrado_ml: datos.sangrado_ml != null ? String(datos.sangrado_ml) : "",
-        hallazgos: datos.hallazgos || "",
-        tecnica: datos.tecnica || "",
-        complicacion: !!datos.complicacion,
-        detalles_complicacion: datos.detalles_complicacion || "",
-        observaciones: datos.observaciones || "",
-      }));
+
+      if (comprimidas.length === 1) {
+        // Una sola cirugía (comportamiento clásico).
+        setExtractProgreso(null);
+        const datos = await extraerDeFotos(comprimidas);
+        setReg((prev) => ({ ...prev, ...datosAReg(datos) }));
+        setFotos(comprimidas);
+        setCola([]); setColaTotal(0);
+      } else {
+        // Varias cirugías distintas: se extrae cada foto por separado.
+        const drafts = [];
+        for (let i = 0; i < comprimidas.length; i++) {
+          setExtractProgreso({ i: i + 1, n: comprimidas.length });
+          let datos = {};
+          try { datos = await extraerDeFotos([comprimidas[i]]); } catch { datos = {}; }
+          drafts.push({ reg: { ...REGISTRO_VACIO, ...datosAReg(datos) }, foto: comprimidas[i] });
+        }
+        setExtractProgreso(null);
+        setReg({ ...REGISTRO_VACIO, ...drafts[0].reg }); // primera cirugía al formulario
+        setFotos([drafts[0].foto]);
+        setCola(drafts.slice(1));                        // el resto, en cola
+        setColaTotal(drafts.length);
+      }
       setExtraidoOk(true);
     } catch (err) {
+      setExtractProgreso(null);
       setError("No se pudo extraer el protocolo automáticamente. Puedes ingresar los datos a mano. (" + (err.message || "error") + ")");
     }
     setExtrayendo(false);
@@ -432,6 +468,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       diagnostico_pre: reg.diagnostico_pre.trim() || null,
       diagnostico_post: reg.diagnostico_post.trim() || null,
       procedimiento: reg.procedimiento.trim(),
+      intervencion: (reg.intervencion?.trim() || reg.procedimiento.trim()) || null,
       categoria: reg.categoria || "Otro",
       lateralidad: reg.lateralidad || null,
       rol: reg.rol,
@@ -487,6 +524,19 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         }
       } catch { /* no bloquea el guardado del logbook */ }
     }
+    // Subida múltiple: si quedan cirugías en la cola, carga la siguiente y se queda en el formulario.
+    if (!editId && cola.length > 0) {
+      const [siguiente, ...resto] = cola;
+      setCola(resto);
+      setReg({ ...REGISTRO_VACIO, ...siguiente.reg });
+      setFotos([siguiente.foto]);
+      setEditId(null);
+      setExtraidoOk(true);
+      setComplementoOpen(false);
+      setError("");
+      try { window.scrollTo?.({ top: 0, behavior: "smooth" }); } catch {}
+      return;
+    }
     resetForm();
     setVista("lista");
   };
@@ -497,6 +547,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     setEditId(null);
     setExtraidoOk(false);
     setError("");
+    setCola([]); setColaTotal(0);
+    setExtractProgreso(null);
   };
 
   const empezarEdicion = (r) => {
@@ -507,7 +559,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       fecha: r.fecha || new Date().toISOString().slice(0, 10),
       iniciales: r.iniciales || "", ficha_clinica: r.ficha_clinica || "", rut: r.rut || "", edad: r.edad != null ? String(r.edad) : "", sexo: r.sexo || "",
       diagnostico_pre: r.diagnostico_pre || "", diagnostico_post: r.diagnostico_post || "",
-      procedimiento: r.procedimiento || "", categoria: r.categoria || "Otro", lateralidad: r.lateralidad || "",
+      procedimiento: r.procedimiento || "", intervencion: r.intervencion || r.procedimiento || "", categoria: r.categoria || "Otro", lateralidad: r.lateralidad || "",
       rol: r.rol || "cirujano", cirujano: r.cirujano || "", ayudantes: r.ayudantes || "",
       anestesia: r.anestesia || "", hora_inicio: (r.hora_inicio || "").slice(0, 5), hora_termino: (r.hora_termino || "").slice(0, 5),
       duracion_min: r.duracion_min != null ? String(r.duracion_min) : "", sangrado_ml: r.sangrado_ml != null ? String(r.sangrado_ml) : "",
@@ -748,13 +800,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               {extrayendo ? (
                 <div style={{ fontSize: 14, color: "var(--texto-sec)" }}>
                   <div style={{ fontSize: 26, marginBottom: 6 }}>🔍</div>
-                  Leyendo el protocolo operatorio…
+                  {extractProgreso ? `Leyendo cirugía ${extractProgreso.i} de ${extractProgreso.n}…` : "Leyendo el protocolo operatorio…"}
                 </div>
               ) : (
                 <>
                   <div style={{ fontSize: 30, marginBottom: 6 }}>📷</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Fotografía o sube el protocolo operatorio</div>
-                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente. Puedes subir hasta 3 imágenes si el protocolo tiene varias páginas.</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Fotografía o sube los protocolos operatorios</div>
+                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente. Sube varias imágenes: <b>cada foto se guarda como una cirugía distinta</b> (hasta 6). Las revisas y guardas una por una.</div>
                   <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                     <button onClick={() => inputCamaraRef.current?.click()} style={btnPrim}>📸 Tomar foto</button>
                     <button onClick={() => inputFotoRef.current?.click()} style={btnSec}>🖼 Galería / archivos</button>
@@ -774,6 +826,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               ✓ Datos extraídos del protocolo. Revísalos y corrige lo que falte antes de guardar.
             </div>
           )}
+          {colaTotal > 1 && (
+            <div style={{ padding: "9px 12px", fontSize: 13, background: "var(--primario-bg, var(--superficie))", border: "1px solid var(--primario)", borderRadius: 8, color: "var(--primario)", fontWeight: 600 }}>
+              🗂 Cirugía {colaTotal - cola.length} de {colaTotal} · al guardar pasas a la siguiente.
+            </div>
+          )}
 
           {/* Formulario */}
           <div style={{ ...card, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
@@ -788,6 +845,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               </select>
             ))}
             <div style={{ gridColumn: "1 / -1" }}>{campo("Procedimiento *", <input style={inp} value={reg.procedimiento} onChange={(e) => set("procedimiento", e.target.value)} placeholder="Ej: Ureterolitectomía endoscópica láser" />)}</div>
+            <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre de intervención", <input style={inp} value={reg.intervencion} onChange={(e) => set("intervencion", e.target.value)} placeholder="Se autocompleta con el procedimiento; puedes cambiarlo" />)}</div>
             {campo("Categoría", (
               <select style={inp} value={reg.categoria} onChange={(e) => set("categoria", e.target.value)}>
                 <option value="">—</option>
@@ -869,7 +927,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={guardar} disabled={guardando || extrayendo} style={{ ...btnPrim, opacity: guardando ? 0.6 : 1 }}>
-              {guardando ? "Guardando…" : editId ? "Guardar cambios" : "Guardar en mi logbook"}
+              {guardando ? "Guardando…" : editId ? "Guardar cambios" : (cola.length > 0 ? `Guardar y siguiente (${colaTotal - cola.length}/${colaTotal})` : "Guardar en mi logbook")}
             </button>
             <button onClick={() => { resetForm(); setVista("lista"); }} style={btnSec}>Cancelar</button>
           </div>

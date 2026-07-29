@@ -42,20 +42,49 @@ export async function register({ nombre, correo, password, especialidad, documen
 }
 
 /**
- * Inicia sesión con email y contraseña.
+ * Normaliza un RUT chileno: quita puntos, guion y espacios; deja los dígitos
+ * y el dígito verificador (K en mayúscula). Ej: "12.345.678-9" → "123456789".
+ */
+export function normalizarRut(rut) {
+  return String(rut || '').replace(/[.\-\s]/g, '').toUpperCase();
+}
+
+/**
+ * Inicia sesión con correo O RUT (más contraseña).
+ * - Si el identificador contiene "@", se trata como correo y entra directo.
+ * - Si no, se asume RUT: se resuelve el correo de inicio de sesión asociado
+ *   mediante la función RPC `email_por_rut` (SECURITY DEFINER en Supabase) y
+ *   luego se inicia sesión con ese correo.
  *
+ * Acepta `identificador` (correo o RUT) y, por compatibilidad, también `correo`.
  * @returns { ok: true, user } | { ok: false, error: string }
  */
-export async function login({ correo, password }) {
+export async function login({ identificador, correo, password }) {
   try {
+    let email = (identificador ?? correo ?? '').trim();
+    if (!email) return { ok: false, error: 'Ingresa tu correo o RUT' };
+
+    // Si NO parece un correo, se asume RUT y se busca el correo asociado.
+    if (!email.includes('@')) {
+      const rut = normalizarRut(email);
+      const { data: correoRut, error: rpcError } = await supabase.rpc('email_por_rut', { p_rut: rut });
+      if (rpcError) {
+        return { ok: false, error: 'No se pudo verificar el RUT. Intenta con tu correo.' };
+      }
+      if (!correoRut) {
+        return { ok: false, error: 'No hay ninguna cuenta con ese RUT. Regístralo en “Mi perfil” o inicia sesión con tu correo.' };
+      }
+      email = correoRut;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: correo,
+      email: email,
       password: password,
     });
 
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
-        return { ok: false, error: 'Correo o contraseña incorrectos' };
+        return { ok: false, error: 'Correo/RUT o contraseña incorrectos' };
       }
       if (error.message.includes('Email not confirmed')) {
         return { ok: false, error: 'Tu correo aún no ha sido confirmado' };

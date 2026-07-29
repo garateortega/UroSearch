@@ -2562,12 +2562,13 @@ function AuthScreen({ onLogin }) {
 
   const handleLogin = async () => {
     setError(""); setInfo("");
-    if (!form.correo.trim() || !form.correo.includes("@")) return setError("Ingresa un correo válido");
+    const id = form.correo.trim();
+    if (!id) return setError("Ingresa tu correo o RUT");
     if (!form.password) return setError("Ingresa tu contraseña");
 
     setLoading(true);
     const result = await loginUser({
-      correo: form.correo,
+      identificador: id,
       password: form.password,
     });
     setLoading(false);
@@ -2606,8 +2607,8 @@ function AuthScreen({ onLogin }) {
           <LogoUroSearch size={36}/>
           <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Iniciar sesión</div>
         </div>
-        <label style={labelStyle}>Correo electrónico</label>
-        <input type="email" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl" style={inputStyle} disabled={loading}/>
+        <label style={labelStyle}>Correo o RUT</label>
+        <input type="text" autoCapitalize="none" autoCorrect="off" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl  o  12.345.678-9" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Contraseña</label>
         <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" style={inputStyle} disabled={loading}/>
         {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
