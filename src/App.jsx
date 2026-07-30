@@ -2517,12 +2517,56 @@ if (typeof document !== "undefined" && !document.getElementById("uro-theme-css")
 }
 const btnSecondary = { width:"100%", padding:"11px", fontSize:"var(--fs-2)", fontWeight:500, background:"var(--superficie)", color:"var(--primario)", border:"1px solid var(--primario)", borderRadius:8, cursor:"pointer", marginTop:8 };
 
+// ── Tutorial de instalación de la app (Android / iPhone / Windows) ──
+// Las imágenes son tarjetas por paso ya diseñadas; van en public/tutorial/.
+const TUTO_BASE = `${import.meta.env.BASE_URL || "/"}tutorial/`;
+const TUTORIALES = {
+  android: { label: "Android", pasos: ["android-1","android-2","android-3","android-4","android-5","android-6"] },
+  ios:     { label: "iPhone",  pasos: ["ios-1","ios-2","ios-3","ios-4","ios-5","ios-6"] },
+  windows: { label: "Windows", pasos: ["windows-0","windows-1","windows-2","windows-3","windows-4","windows-5","windows-6"] },
+};
+function detectarPlataforma() {
+  if (typeof navigator === "undefined") return "android";
+  const ua = navigator.userAgent || "";
+  if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "ios";
+  if (/Android/.test(ua)) return "android";
+  if (/Windows|Macintosh|Linux/.test(ua)) return "windows";
+  return "android";
+}
+function TutorialInstalacion({ onClose }) {
+  const [plat, setPlat] = useState(detectarPlataforma());
+  const tuto = TUTORIALES[plat];
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",flexDirection:"column",alignItems:"center",padding:"0",overflowY:"auto"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:560,minHeight:"100%",display:"flex",flexDirection:"column"}}>
+        <div style={{position:"sticky",top:0,zIndex:2,background:"var(--fondo)",borderBottom:"0.5px solid var(--borde)",padding:"14px 16px 0"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{fontSize:"var(--fs-4)",fontWeight:700,color:"var(--texto)"}}>Cómo instalar la app</div>
+            <button onClick={onClose} aria-label="Cerrar" style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:34,height:34,fontSize:18,cursor:"pointer",color:"var(--texto-sec)"}}>✕</button>
+          </div>
+          <div style={{display:"flex",gap:6,paddingBottom:12}}>
+            {Object.entries(TUTORIALES).map(([k,v])=>(
+              <button key={k} onClick={()=>setPlat(k)} style={{flex:1,padding:"9px 6px",fontSize:"var(--fs-2)",fontWeight:600,borderRadius:8,cursor:"pointer",border:"0.5px solid var(--borde)",background:plat===k?"var(--primario)":"var(--superficie)",color:plat===k?"var(--texto-inv)":"var(--texto-sec)"}}>{v.label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{padding:"14px 12px 40px",display:"flex",flexDirection:"column",gap:12}}>
+          {tuto.pasos.map((p)=>(
+            <img key={p} src={`${TUTO_BASE}${p}.jpg`} alt={`Paso ${p}`} loading="lazy" style={{width:"100%",height:"auto",borderRadius:12,display:"block"}}/>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AuthScreen({ onLogin }) {
   const [view, setView] = useState("welcome");
   const [form, setForm] = useState({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   const fileRef = useRef(null);
 
   const handleFile = (e) => {
@@ -2593,6 +2637,8 @@ function AuthScreen({ onLogin }) {
           <button onClick={()=>{setView("register"); setError(""); setInfo("");}} style={{...btnSecondary, padding:"14px", fontSize:16}}>Solicitar cuenta</button>
         </div>
         <div style={{fontSize:"var(--fs-1)", color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
+        <button onClick={()=>setTutorialOpen(true)} style={{marginTop:20,background:"transparent",border:"0.5px solid var(--borde)",borderRadius:9,padding:"10px 16px",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--primario)",cursor:"pointer"}}>📲 Cómo instalar la app</button>
+        {tutorialOpen && <TutorialInstalacion onClose={()=>setTutorialOpen(false)}/>}
         <div style={{fontSize:"var(--fs-1)", fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
