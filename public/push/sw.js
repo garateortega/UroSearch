@@ -25,8 +25,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(titulo, {
       body: cuerpo,
-      icon: "/uros/hero.webp",
-      badge: "/icons/badge-72.png",
+      icon: "/uros/cabeza.webp",       // imagen grande: SOLO la cara de Uros
+      badge: "/icons/badge-72.png",    // ícono chico monocromo (logo UroSearch) — ver nota
       tag: datos.tipo || "general",   // agrupa las del mismo tipo
       renotify: true,
       data: { url: datos.url || "/" },

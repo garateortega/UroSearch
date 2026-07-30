@@ -207,15 +207,30 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
     },
     body: JSON.stringify({
       model: "claude-sonnet-5",
-      max_tokens: 1500,
+      max_tokens: 2048,
       system: "Eres un extractor de datos clínicos de protocolos quirúrgicos de urología. Respondes exclusivamente con JSON válido.",
       messages: [{ role: "user", content }],
     }),
   });
-  const data = await res.json();
-  const txt = data.content?.find((b) => b.type === "text")?.text || "";
-  const clean = txt.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  if (!res.ok) {
+    let detalle = "";
+    try { detalle = (await res.text()).slice(0, 160); } catch {}
+    throw new Error(`el servidor de IA respondió ${res.status}${detalle ? " — " + detalle : ""}`);
+  }
+  let data;
+  try { data = await res.json(); } catch { throw new Error("respuesta vacía del servidor de IA"); }
+  const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+  if (!txt) throw new Error("la IA no devolvió texto (imagen ilegible o límite alcanzado)");
+  // Aísla el objeto JSON aunque venga con backticks o texto alrededor, y tolera
+  // respuestas cortadas quedándose con lo que haya entre la primera { y la última }.
+  let clean = txt.replace(/```json|```/g, "").trim();
+  const i0 = clean.indexOf("{"), i1 = clean.lastIndexOf("}");
+  if (i0 >= 0 && i1 > i0) clean = clean.slice(i0, i1 + 1);
+  try {
+    return JSON.parse(clean);
+  } catch {
+    throw new Error("no se pudo interpretar la respuesta de la IA");
+  }
 }
 
 // ─── Utilitarios de métricas ───
@@ -402,11 +417,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       for (const f of files) comprimidas.push(await comprimirImagen(f));
 
       if (comprimidas.length === 1) {
-        // Una sola cirugía (comportamiento clásico).
+        // Una sola cirugía (comportamiento clásico). La foto queda cargada aunque
+        // la extracción falle, para poder completar los datos a mano.
         setExtractProgreso(null);
-        const datos = await extraerDeFotos(comprimidas);
-        setReg((prev) => ({ ...prev, ...datosAReg(datos) }));
         setFotos(comprimidas);
+        try {
+          const datos = await extraerDeFotos(comprimidas);
+          setReg((prev) => ({ ...prev, ...datosAReg(datos) }));
+          setExtraidoOk(true);
+        } catch (err) {
+          setError("No se pudo leer la foto automáticamente. Completa los datos a mano. (" + (err.message || "error") + ")");
+        }
         setCola([]); setColaTotal(0);
       } else {
         // Varias cirugías distintas: se extrae cada foto por separado.
@@ -422,8 +443,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         setFotos([drafts[0].foto]);
         setCola(drafts.slice(1));                        // el resto, en cola
         setColaTotal(drafts.length);
+        setExtraidoOk(true);
       }
-      setExtraidoOk(true);
     } catch (err) {
       setExtractProgreso(null);
       setError("No se pudo extraer el protocolo automáticamente. Puedes ingresar los datos a mano. (" + (err.message || "error") + ")");

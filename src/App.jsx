@@ -10502,12 +10502,12 @@ if (!currentUser) {
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
     if (Date.now() - s0.t > 600) return;
 
-    // ── Deslizar hacia ABAJO desde arriba del todo: abre el submenú de la pestaña ──
-    // Gesto MUY deliberado (Safari es especialmente sensible): debe empezar cerca del
-    // borde superior de la pantalla, recorrer bastante, ser claramente vertical y no ser
-    // un "flick" instantáneo de scroll con inercia.
+    // ── Deslizar hacia ABAJO estando arriba del todo: abre el submenú de la pestaña ──
+    // Menos sensible que antes (Safari dispara con el rebote elástico): pide más
+    // recorrido, que sea claramente vertical y que no sea un "flick" instantáneo.
+    // La condición de "estar arriba del todo" (scrollTop <= 1) se valida más abajo.
     const durGesto = Date.now() - s0.t;
-    if (dy > 145 && Math.abs(dy) > Math.abs(dx) * 3 && s0.y < 170 && durGesto > 130) {
+    if (dy > 130 && Math.abs(dy) > Math.abs(dx) * 2.8 && durGesto > 120) {
       let el = s0.target, arriba = true;
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
