@@ -4496,6 +4496,34 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   });
   const [editId, setEditId] = useState(null); // id de la cirugía en edición (null = crear)
   const [miembrosEquipo, setMiembrosEquipo] = useState([]);
+  const [ingresoVinculado, setIngresoVinculado] = useState(null);   // #15: ingreso ligado a la cirugía abierta
+  const [ingresoModalCirugia, setIngresoModalCirugia] = useState(false); // #14: adjuntar ingreso desde la tabla
+
+  // Al abrir una cirugía, carga su ingreso vinculado (si tiene).
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      if (vista === "ficha" && seleccionado?.ingreso_id) {
+        const { data } = await supabase.from("ingresos").select("*").eq("id", seleccionado.ingreso_id).maybeSingle();
+        if (vivo) setIngresoVinculado(data || null);
+      } else if (vivo) setIngresoVinculado(null);
+    })();
+    return () => { vivo = false; };
+  }, [vista, seleccionado?.id, seleccionado?.ingreso_id]);
+
+  // #14: guarda un ingreso creado desde la cirugía y lo enlaza.
+  const adjuntarIngresoACirugia = async (cir, f) => {
+    const eqId = esEquipo ? contexto : null;
+    const fila = { user_id: currentUser.id, equipo_id: eqId, carpeta: null, nombre: f.nombre || null, ficha: f.ficha || null, datos: f, updated_at: new Date().toISOString() };
+    const { data: nuevo, error } = await supabase.from("ingresos").insert(fila).select().single();
+    if (error || !nuevo) { alert("No se pudo guardar el ingreso: " + (error?.message || "")); return; }
+    const rc = await actualizarCirugia(cir.id, { ingreso_id: nuevo.id });
+    if (rc.ok) {
+      setTablaCirugias(prev => prev.map(c => c.id === cir.id ? rc.cirugia : c));
+      if (seleccionado?.id === cir.id) setSeleccionado(rc.cirugia);
+    }
+    setIngresoVinculado(nuevo);
+  };
 
   const esEquipo = contexto !== "personal";
   const equipoActual = esEquipo ? equipos.find(e => e.id === contexto) : null;
@@ -4713,15 +4741,23 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         } catch {}
       }
       if (!confirm(`¿Crear a ${cirugia.iniciales} como paciente hospitalizado en la pestaña Pacientes?`)) return;
+      // #15: si la cirugía tiene un ingreso vinculado, su historia pasa a la ficha del paciente.
+      let ingresoLink = null;
+      if (cirugia.ingreso_id) {
+        try { const { data } = await supabase.from("ingresos").select("*").eq("id", cirugia.ingreso_id).maybeSingle(); ingresoLink = data || null; } catch {}
+      }
       const datosPaciente = {
         medico_id: currentUser.id,
         equipo_id: esEquipo ? contexto : null,
         iniciales: (cirugia.iniciales || "").toUpperCase(),
-        edad: cirugia.edad || null,
-        sexo: "M", // editable después en la ficha
+        edad: cirugia.edad || (ingresoLink?.datos?.edad ? parseInt(ingresoLink.datos.edad) : null),
+        sexo: ingresoLink?.datos?.sexo || "M", // editable después en la ficha
         cama: "",
         servicio: "Urología",
+        ficha_clinica: cirugia.ficha_clinica || ingresoLink?.ficha || ingresoLink?.datos?.ficha || null,
+        rut: cirugia.rut || ingresoLink?.datos?.rut || null,
         diagnostico: `Post-operado: ${cirugia.procedimiento}${cirugia.lateralidad ? ` (${cirugia.lateralidad})` : ""}`,
+        historia: ingresoLink?.datos?.historia_compuesta || null,
         plan_manejo: null,
         fecha_ingreso: cirugia.fecha || new Date().toISOString().slice(0, 10),
         estado: "activo",
@@ -4731,7 +4767,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       const rp = await crearPaciente(datosPaciente);
       if (!rp.ok) return alert("Cirugía completada, pero no se pudo crear el paciente: " + rp.error);
       if (setPacientes) setPacientes(prev => [rp.paciente, ...prev]);
-      alert(`✓ ${cirugia.iniciales} creado como paciente hospitalizado. Edítalo en Pacientes para asignar cama y encargados.`);
+      // El ingreso queda ligado al paciente y desaparece de la lista de Ingresos (para ahorrar espacio).
+      if (ingresoLink) { try { await supabase.from("ingresos").update({ paciente_id: rp.paciente.id }).eq("id", ingresoLink.id); } catch {} }
+      alert(`✓ ${cirugia.iniciales} creado como paciente hospitalizado${ingresoLink ? " con su historia de ingreso" : ""}. Edítalo en Pacientes para asignar cama y encargados.`);
     }
   };
 
@@ -5191,6 +5229,27 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
             <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",marginBottom:10,padding:"8px 10px",background:"var(--alerta-bg)",borderRadius:6}}>
               <strong>Observaciones:</strong> {seleccionado.observaciones}
             </div>
+          )}
+
+          {/* #15: ingreso vinculado (por coincidencia o adjuntado a mano) */}
+          {ingresoVinculado && (
+            <div style={{marginBottom:10,padding:"8px 10px",background:"var(--exito-bg)",border:"0.5px solid var(--exito)",borderRadius:6}}>
+              <div style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--exito)",marginBottom:4}}>📄 Ingreso vinculado</div>
+              <div style={{fontSize:"var(--fs-1)",color:"var(--texto)",whiteSpace:"pre-wrap",maxHeight:180,overflowY:"auto"}}>{ingresoVinculado.datos?.historia_compuesta || "Ingreso adjunto (sin resumen de historia)."}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:6}}>Al completar la cirugía, esta historia pasa a la ficha del paciente hospitalizado.</div>
+            </div>
+          )}
+          {/* #14: adjuntar un ingreso desde la tabla quirúrgica */}
+          {!ingresoVinculado && !soloLectura && (
+            <button onClick={()=>setIngresoModalCirugia(true)} style={{marginBottom:10,width:"100%",padding:"9px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>📄 Adjuntar ingreso a este paciente</button>
+          )}
+          {ingresoModalCirugia && (
+            <IngresoModal
+              currentUser={currentUser} contexto={contexto} carpetas={[]}
+              ingresoExistente={{ datos: { nombre: seleccionado.iniciales || "", ficha: seleccionado.ficha_clinica || "", rut: seleccionado.rut || "", edad: seleccionado.edad ? String(seleccionado.edad) : "" } }}
+              onGuardarIngreso={async (f) => { await adjuntarIngresoACirugia(seleccionado, f); }}
+              onClose={()=>setIngresoModalCirugia(false)}
+            />
           )}
 
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14}}>
@@ -5674,6 +5733,22 @@ Pruebas de compatibilidad y Rh · Reserva de 2 U de GR
 CSV + MAT · Kinesioterapia motora/ventilatoria
 Pabellón el día ____ en horario ____`;
 
+// ── #15: emparejar un ingreso con una cirugía de la tabla quirúrgica ──
+function _normTxt(s) { return (s ?? "").toString().trim().toLowerCase(); }
+function _normRut(s) { return (s ?? "").toString().replace(/[.\-\s]/g, "").toUpperCase(); }
+function ingresoMatcheaCirugia(ing, cir) {
+  const iNombre = _normTxt(ing?.nombre ?? ing?.datos?.nombre);
+  const iFicha  = _normTxt(ing?.ficha  ?? ing?.datos?.ficha);
+  const iRut    = _normRut(ing?.datos?.rut);
+  const cNombre = _normTxt(cir?.iniciales);
+  const cFicha  = _normTxt(cir?.ficha_clinica);
+  const cRut    = _normRut(cir?.rut);
+  if (iFicha && cFicha && iFicha === cFicha) return true;
+  if (iRut && cRut && iRut === cRut) return true;
+  if (iNombre && cNombre && iNombre === cNombre) return true;
+  return false;
+}
+
 function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const DEFAULTS = {
@@ -6086,7 +6161,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
               <input list="carpetas-list" value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="(sin carpeta)" style={inp} />
               <datalist id="carpetas-list">{carpetas.map(c => <option key={c} value={c} />)}</datalist>
             </div>
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso(f, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -6128,10 +6203,10 @@ function IngresosPanel({ currentUser, contexto }) {
   const cargar = async () => {
     setCargando(true);
     const scope = (q) => equipoId ? q.eq("equipo_id", equipoId) : q.eq("user_id", currentUser.id).is("equipo_id", null);
-    const [ri, rc] = await Promise.all([
-      scope(supabase.from("ingresos").select("*").order("updated_at", { ascending: false })),
-      scope(supabase.from("carpetas_ingresos").select("*").order("orden", { ascending: true })),
-    ]);
+    // Los ingresos que ya se convirtieron en paciente hospitalizado (paciente_id != null) se ocultan.
+    let ri = await scope(supabase.from("ingresos").select("*").is("paciente_id", null).order("updated_at", { ascending: false }));
+    if (ri.error) ri = await scope(supabase.from("ingresos").select("*").order("updated_at", { ascending: false })); // por si aún no existe la columna
+    const rc = await scope(supabase.from("carpetas_ingresos").select("*").order("orden", { ascending: true }));
     setIngresos(ri.data || []); setCarpetas(rc.data || []);
     setCargando(false);
   };
@@ -6180,9 +6255,28 @@ function IngresosPanel({ currentUser, contexto }) {
     if (c === null) return;
     await supabase.from("ingresos").update({ carpeta: c.trim() || null }).eq("id", ing.id); await cargar();
   };
+  const [avisoVinculo, setAvisoVinculo] = useState("");
   const guardarIngreso = async (datos, carpeta, id) => {
     const fila = { user_id: currentUser.id, equipo_id: equipoId, carpeta: carpeta || null, nombre: datos.nombre || null, ficha: datos.ficha || null, datos, updated_at: new Date().toISOString() };
-    if (id) await supabase.from("ingresos").update(fila).eq("id", id); else await supabase.from("ingresos").insert(fila);
+    if (id) { await supabase.from("ingresos").update(fila).eq("id", id); }
+    else {
+      const { data: nuevo } = await supabase.from("ingresos").insert(fila).select().single();
+      // #15: si el ingreso coincide con una cirugía de la tabla (ficha / RUT / nombre), enlazarlos.
+      if (nuevo) {
+        try {
+          const sc = (q) => equipoId ? q.eq("equipo_id", equipoId) : q.eq("cirujano_id", currentUser.id).is("equipo_id", null);
+          const { data: cirs, error } = await sc(supabase.from("cirugias").select("id,iniciales,ficha_clinica,rut,ingreso_id,estado"));
+          if (!error) {
+            const cir = (cirs || []).find(c => !c.ingreso_id && c.estado !== "completada" && ingresoMatcheaCirugia(nuevo, c));
+            if (cir) {
+              await supabase.from("cirugias").update({ ingreso_id: nuevo.id }).eq("id", cir.id);
+              setAvisoVinculo(`🔗 Vinculado a la cirugía de ${cir.iniciales} en la tabla quirúrgica.`);
+              setTimeout(() => setAvisoVinculo(""), 6000);
+            }
+          }
+        } catch {}
+      }
+    }
     await cargar();
   };
   const eliminar = async (id) => { if (!confirm("¿Eliminar este ingreso?")) return; await supabase.from("ingresos").delete().eq("id", id); await cargar(); };
@@ -6217,6 +6311,7 @@ function IngresosPanel({ currentUser, contexto }) {
 
   return (
     <div style={{ padding: 16 }}>
+      {avisoVinculo && <div style={{ marginBottom: 10, padding: "9px 12px", background: "var(--exito-bg)", border: "0.5px solid var(--exito)", borderRadius: 8, color: "var(--exito)", fontSize: "var(--fs-1)", fontWeight: 600 }}>{avisoVinculo}</div>}
       {modalAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={editando} carpetas={todasRutas} onGuardarIngreso={guardarIngreso} onCreado={() => {}} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo ingreso</button>
