@@ -2533,27 +2533,73 @@ function detectarPlataforma() {
   if (/Windows|Macintosh|Linux/.test(ua)) return "windows";
   return "android";
 }
+// ── Visor web dentro de UroSearch (iframe) ──
+// URL del sistema CORE. ⚠️ CÁMBIALA por la dirección real de tu CORE.
+const CORE_URL = "https://www.hbvaldivia.cl/core/";
+function VistaWebModal({ url, titulo = "Sitio", onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "0.5px solid var(--borde)", background: "var(--superficie)" }}>
+        <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: "var(--fs-2)", color: "var(--primario)", cursor: "pointer", fontWeight: 600 }}>← Volver</button>
+        <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
+        <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "var(--fs-1)", color: "var(--primario)", textDecoration: "none", fontWeight: 600 }}>Abrir afuera ↗</a>
+      </div>
+      <iframe src={url} title={titulo} style={{ flex: 1, width: "100%", border: "none" }} sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads" />
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", textAlign: "center", padding: "6px 10px", borderTop: "0.5px solid var(--borde)" }}>Si la página aparece en blanco, ese sitio no permite abrirse dentro de otra app. Usa “Abrir afuera”.</div>
+    </div>
+  );
+}
+
 function TutorialInstalacion({ onClose }) {
   const [plat, setPlat] = useState(detectarPlataforma());
+  const [i, setI] = useState(0);
   const tuto = TUTORIALES[plat];
+  const n = tuto.pasos.length;
+  const swipe = useRef(null);
+  const cambiarPlat = (k) => { setPlat(k); setI(0); };
+  const ir = (d) => setI(v => Math.min(n - 1, Math.max(0, v + d)));
+  const onTS = (e) => { swipe.current = e.touches[0].clientX; };
+  const onTE = (e) => {
+    if (swipe.current == null) return;
+    const dx = e.changedTouches[0].clientX - swipe.current; swipe.current = null;
+    if (Math.abs(dx) > 45) ir(dx < 0 ? 1 : -1);
+  };
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",flexDirection:"column",alignItems:"center",padding:"0",overflowY:"auto"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:560,minHeight:"100%",display:"flex",flexDirection:"column"}}>
-        <div style={{position:"sticky",top:0,zIndex:2,background:"var(--fondo)",borderBottom:"0.5px solid var(--borde)",padding:"14px 16px 0"}}>
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:560,borderRadius:16,display:"flex",flexDirection:"column",maxHeight:"92vh",overflow:"hidden"}}>
+        {/* Encabezado + pestañas de plataforma */}
+        <div style={{padding:"14px 16px 12px",borderBottom:"0.5px solid var(--borde)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div style={{fontSize:"var(--fs-4)",fontWeight:700,color:"var(--texto)"}}>Cómo instalar la app</div>
             <button onClick={onClose} aria-label="Cerrar" style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:34,height:34,fontSize:18,cursor:"pointer",color:"var(--texto-sec)"}}>✕</button>
           </div>
-          <div style={{display:"flex",gap:6,paddingBottom:12}}>
+          <div style={{display:"flex",gap:6}}>
             {Object.entries(TUTORIALES).map(([k,v])=>(
-              <button key={k} onClick={()=>setPlat(k)} style={{flex:1,padding:"9px 6px",fontSize:"var(--fs-2)",fontWeight:600,borderRadius:8,cursor:"pointer",border:"0.5px solid var(--borde)",background:plat===k?"var(--primario)":"var(--superficie)",color:plat===k?"var(--texto-inv)":"var(--texto-sec)"}}>{v.label}</button>
+              <button key={k} onClick={()=>cambiarPlat(k)} style={{flex:1,padding:"9px 6px",fontSize:"var(--fs-2)",fontWeight:600,borderRadius:8,cursor:"pointer",border:"0.5px solid var(--borde)",background:plat===k?"var(--primario)":"var(--superficie)",color:plat===k?"var(--texto-inv)":"var(--texto-sec)"}}>{v.label}</button>
             ))}
           </div>
         </div>
-        <div style={{padding:"14px 12px 40px",display:"flex",flexDirection:"column",gap:12}}>
-          {tuto.pasos.map((p)=>(
-            <img key={p} src={`${TUTO_BASE}${p}.jpg`} alt={`Paso ${p}`} loading="lazy" style={{width:"100%",height:"auto",borderRadius:12,display:"block"}}/>
-          ))}
+        {/* Carrusel horizontal */}
+        <div style={{flex:1,minHeight:0,position:"relative",overflow:"hidden"}} onTouchStart={onTS} onTouchEnd={onTE}>
+          <div style={{display:"flex",height:"100%",transition:"transform 0.32s cubic-bezier(0.22,0.61,0.36,1)",transform:`translateX(-${i*100}%)`}}>
+            {tuto.pasos.map((p)=>(
+              <div key={p} style={{flex:"0 0 100%",height:"100%",overflowY:"auto",padding:"14px 16px",boxSizing:"border-box",display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
+                <img src={`${TUTO_BASE}${p}.jpg`} alt={p} loading="lazy" style={{width:"100%",maxWidth:420,height:"auto",borderRadius:12,display:"block"}}/>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Controles */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"12px 16px",borderTop:"0.5px solid var(--borde)"}}>
+          <button onClick={()=>ir(-1)} disabled={i===0} style={{padding:"10px 16px",fontSize:"var(--fs-3)",fontWeight:700,borderRadius:9,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:i===0?"var(--texto-ter)":"var(--primario)",cursor:i===0?"default":"pointer",opacity:i===0?0.5:1}}>‹</button>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {tuto.pasos.map((_,k)=>(
+              <span key={k} onClick={()=>setI(k)} style={{width:k===i?18:7,height:7,borderRadius:4,background:k===i?"var(--primario)":"var(--borde)",cursor:"pointer",transition:"width 0.2s"}}/>
+            ))}
+          </div>
+          {i < n - 1
+            ? <button onClick={()=>ir(1)} style={{padding:"10px 18px",fontSize:"var(--fs-2)",fontWeight:700,borderRadius:9,border:"none",background:"var(--primario)",color:"var(--texto-inv)",cursor:"pointer"}}>Siguiente ›</button>
+            : <button onClick={onClose} style={{padding:"10px 18px",fontSize:"var(--fs-2)",fontWeight:700,borderRadius:9,border:"none",background:"var(--exito)",color:"#fff",cursor:"pointer"}}>Listo ✓</button>}
         </div>
       </div>
     </div>
@@ -2859,6 +2905,10 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   const [filtroCat, setFiltroCat] = useState("Todas");
   const [form, setForm] = useState({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
   const [errorForm, setErrorForm] = useState("");
+  // #13: importar preguntas desde Word / PDF / imagen / texto (solo admin)
+  const [importando, setImportando] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const [importPreview, setImportPreview] = useState([]);
   const [historial, setHistorial] = useState(() => leerHistorialQuiz(currentUser.id)); // respuestas previas
   const metricasQuiz = useMemo(() => {
     const total = historial.length;
@@ -2945,12 +2995,127 @@ function PreguntasPanel({ currentUser, isAdmin }) {
     setPreguntas(preguntas.filter(p => p.id !== id));
   };
 
+  // ── #13: importar preguntas desde un archivo ──
+  const fileABase64 = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(file); });
+  const INSTR_PREGUNTAS = `Extrae TODAS las preguntas de opción múltiple del documento.
+Responde SOLO con un array JSON válido (sin markdown, sin backticks, sin texto extra).
+Cada elemento debe tener exactamente:
+{
+  "enunciado": "texto de la pregunta",
+  "alternativas": ["A","B","C","D"],   // EXACTAMENTE 4 alternativas, sin la letra/número al inicio
+  "correcta": 0,                        // índice (0-3) de la alternativa correcta
+  "feedback": "explicación de por qué es correcta (o vacío si no aparece)",
+  "categoria": "tema si se puede inferir, o 'General'"
+}
+Reglas: transcribe el texto tal cual; si una pregunta tiene menos de 4 alternativas, complétalas con "—"; si tiene más de 4, deja las 4 principales. No inventes preguntas que no estén.`;
+  const extraerPreguntas = async (file) => {
+    let content;
+    const esPDF = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+    const esImg = /^image\//.test(file.type);
+    if (esPDF) {
+      content = [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: await fileABase64(file) } }, { type: "text", text: INSTR_PREGUNTAS }];
+    } else if (esImg) {
+      content = [{ type: "image", source: { type: "base64", media_type: file.type, data: await fileABase64(file) } }, { type: "text", text: INSTR_PREGUNTAS }];
+    } else if (/\.docx$/i.test(file.name || "")) {
+      // Carga el lector de Word desde CDN en tiempo de ejecución (no requiere dependencia npm).
+      const mammoth = await new Promise((resolve, reject) => {
+        if (window.mammoth) return resolve(window.mammoth);
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js";
+        s.onload = () => window.mammoth ? resolve(window.mammoth) : reject(new Error("no se pudo iniciar el lector de Word"));
+        s.onerror = () => reject(new Error("no se pudo cargar el lector de Word (revisa tu conexión) — o sube el archivo como PDF"));
+        document.head.appendChild(s);
+      });
+      const { value: texto } = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+      content = [{ type: "text", text: INSTR_PREGUNTAS + "\n\nTEXTO DEL DOCUMENTO:\n" + (texto || "").slice(0, 60000) }];
+    } else {
+      const texto = await file.text();
+      content = [{ type: "text", text: INSTR_PREGUNTAS + "\n\nTEXTO:\n" + (texto || "").slice(0, 60000) }];
+    }
+    const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 8000, system: "Extraes preguntas de opción múltiple de documentos clínicos. Respondes exclusivamente con un array JSON válido.", messages: [{ role: "user", content }] }),
+    });
+    if (!res.ok) throw new Error("el servidor de IA respondió " + res.status);
+    const data = await res.json();
+    const txt = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    if (!txt) throw new Error("la IA no devolvió contenido (archivo ilegible o límite alcanzado)");
+    let clean = txt.replace(/```json|```/g, "").trim();
+    const i0 = clean.indexOf("["), i1 = clean.lastIndexOf("]");
+    if (i0 >= 0 && i1 > i0) clean = clean.slice(i0, i1 + 1);
+    const arr = JSON.parse(clean);
+    return Array.isArray(arr) ? arr : [];
+  };
+  const normalizarPregunta = (q) => {
+    let alts = Array.isArray(q.alternativas) ? q.alternativas.map(a => String(a ?? "").trim()) : [];
+    alts = alts.filter(Boolean);
+    if (!String(q.enunciado || "").trim() || alts.length < 2) return null;
+    while (alts.length < 4) alts.push("—");
+    alts = alts.slice(0, 4);
+    let correcta = Number.isInteger(q.correcta) ? q.correcta : parseInt(q.correcta);
+    if (!(correcta >= 0 && correcta <= 3)) correcta = 0;
+    return { enunciado: String(q.enunciado).trim(), alternativas: alts, correcta, feedback: String(q.feedback || q.explicacion || "").trim(), categoria: String(q.categoria || "General").trim() || "General" };
+  };
+  const onArchivoPreguntas = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setImportMsg(""); setImportPreview([]); setImportando(true);
+    try {
+      const norm = (await extraerPreguntas(file)).map(normalizarPregunta).filter(Boolean);
+      setImportPreview(norm);
+      if (norm.length === 0) setImportMsg("No se detectaron preguntas en el archivo.");
+    } catch (err) {
+      setImportMsg("⚠️ " + (err.message || "No se pudo procesar el archivo."));
+    }
+    setImportando(false);
+  };
+  const confirmarImport = async () => {
+    setImportando(true);
+    let ok = 0, fail = 0; const creadas = [];
+    for (const q of importPreview) {
+      const r = await crearPregunta(currentUser.id, q);
+      if (r.ok) { ok++; creadas.push(r.pregunta); } else fail++;
+    }
+    setPreguntas(prev => [...creadas, ...prev]);
+    setImportPreview([]); setImportando(false);
+    setImportMsg(`✓ ${ok} pregunta(s) agregada(s) a la base${fail ? `, ${fail} con error` : ""}.`);
+  };
+
   // VISTA: crear pregunta (admin)
   if (vista === "nueva" && isAdmin) {
     return (
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
         <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nueva pregunta</div>
+
+        {/* #13: importar preguntas desde Word / PDF / imagen */}
+        <div style={{border:"0.5px dashed var(--borde)",borderRadius:10,padding:12,marginBottom:18,background:"var(--fondo-suave)"}}>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)",marginBottom:4}}>📄 Importar desde Word / PDF</div>
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8,lineHeight:1.4}}>Sube un archivo con preguntas de alternativas y sus respuestas correctas; la IA las extrae para llenar la base.</div>
+          <label style={{display:"inline-block",cursor:importando?"default":"pointer",padding:"9px 14px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--primario)",borderRadius:8,opacity:importando?0.6:1}}>
+            {importando ? "Procesando…" : "Elegir archivo (.pdf, .docx, imagen, .txt)"}
+            <input type="file" accept=".pdf,.docx,.txt,image/*" onChange={onArchivoPreguntas} disabled={importando} style={{display:"none"}}/>
+          </label>
+          {importMsg && <div style={{marginTop:8,fontSize:"var(--fs-1)",fontWeight:500,color:importMsg.startsWith("✓")?"var(--exito)":"var(--peligro)"}}>{importMsg}</div>}
+          {importPreview.length > 0 && (
+            <div style={{marginTop:10}}>
+              <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",marginBottom:6}}>Se detectaron {importPreview.length} pregunta(s). Revísalas:</div>
+              <div style={{maxHeight:240,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
+                {importPreview.map((q,i)=>(
+                  <div key={i} style={{fontSize:"var(--fs-0)",padding:"7px 9px",background:"var(--superficie)",borderRadius:6,border:"0.5px solid var(--borde)"}}>
+                    <div style={{fontWeight:600,color:"var(--texto)",marginBottom:3}}>{i+1}. {q.enunciado} <span style={{color:"var(--texto-ter)",fontWeight:400}}>· {q.categoria}</span></div>
+                    {q.alternativas.map((a,j)=>(<div key={j} style={{color:j===q.correcta?"var(--exito)":"var(--texto-sec)",fontWeight:j===q.correcta?600:400}}>{j===q.correcta?"✓ ":"· "}{a}</div>))}
+                    {q.feedback && <div style={{color:"var(--texto-ter)",fontStyle:"italic",marginTop:3}}>{q.feedback}</div>}
+                  </div>
+                ))}
+              </div>
+              <button onClick={confirmarImport} disabled={importando} style={{...btnPrimary,marginTop:0,opacity:importando?0.6:1}}>{importando?"Guardando…":`Agregar ${importPreview.length} pregunta(s) a la base`}</button>
+            </div>
+          )}
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:10,textAlign:"center"}}>— o crea una manualmente abajo —</div>
+        </div>
+
         <label style={labelStyle}>Enunciado</label>
         <textarea value={form.enunciado} onChange={e=>setForm({...form,enunciado:e.target.value})} placeholder="Escribe la pregunta..." rows={3} style={{...inputStyle,resize:"vertical"}}/>
         <label style={labelStyle}>Alternativas (marca la correcta)</label>
@@ -3994,6 +4159,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto }) {
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false); // herramientas de la sección (desde el submenú)
+  const [coreOpen, setCoreOpen] = useState(false);   // visor web CORE dentro de la app
   const config = useConfig();
 
   // Acciones enviadas desde el submenú de la pestaña Hospital
@@ -4002,6 +4168,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       if (e.detail?.tab !== "hospital") return;
       if (e.detail.accion === "equipos") setMostrarEquipos(true);
       if (e.detail.accion === "tools") setToolsOpen(o => !o);
+      if (e.detail.accion === "abrir-core") setCoreOpen(true);
     };
     window.addEventListener("uro-submenu-accion", h);
     return () => window.removeEventListener("uro-submenu-accion", h);
@@ -4036,7 +4203,9 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "prescripciones" && esUrologo && <PrescripcionesPanel currentUser={currentUser}/>}
       {subTab === "interconsultas" && <InterconsultasPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "ingresos" && <IngresosPanel currentUser={currentUser} contexto={contexto}/>}
+      {subTab === "comites" && <ComitesPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "seguimiento" && <SeguimientoPanel currentUser={currentUser} contexto={contexto}/>}
+      {coreOpen && <VistaWebModal url={CORE_URL} titulo="CORE" onClose={()=>setCoreOpen(false)}/>}
     </div>
   );
 }
@@ -6190,6 +6359,166 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 }
 
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
+// ─── Comités oncológicos: mismo formato que Ingresos (carpetas/subcarpetas) ───
+function ComiteModal({ comiteExistente, onGuardar, onClose }) {
+  const HOY = new Date().toISOString().slice(0, 10);
+  const D = { fecha: HOY, nombre: "", ficha: "", rut: "", diagnostico: "", presentacion: "", acuerdos: "" };
+  const [f, setF] = useState(() => (comiteExistente?.datos ? { ...D, ...comiteExistente.datos } : D));
+  const [carpeta, setCarpeta] = useState(comiteExistente?.carpeta || "");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
+  const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)" }}>{comiteExistente?.id ? "Editar comité" : "Nuevo comité oncológico"}</div>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)" }}>✕</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div><label style={lbl}>Fecha del comité</label><input type="date" value={f.fecha} onChange={e => set("fecha", e.target.value)} style={inp} /></div>
+          <div><label style={lbl}>N° ficha</label><input value={f.ficha} onChange={e => set("ficha", e.target.value)} style={inp} /></div>
+        </div>
+        <label style={lbl}>Nombre del paciente *</label>
+        <input value={f.nombre} onChange={e => set("nombre", e.target.value)} style={inp} />
+        <label style={lbl}>RUT</label>
+        <input value={f.rut} onChange={e => set("rut", e.target.value)} style={inp} />
+        <label style={lbl}>Diagnóstico</label>
+        <input value={f.diagnostico} onChange={e => set("diagnostico", e.target.value)} style={inp} />
+        <label style={lbl}>Presentación / resumen del caso</label>
+        <textarea rows={4} value={f.presentacion} onChange={e => set("presentacion", e.target.value)} style={{ ...inp, resize: "vertical" }} />
+        <label style={lbl}>Acuerdos del comité / plan</label>
+        <textarea rows={4} value={f.acuerdos} onChange={e => set("acuerdos", e.target.value)} style={{ ...inp, resize: "vertical" }} />
+        <label style={lbl}>Carpeta (usa / para subcarpeta; vacío = sin carpeta)</label>
+        <input value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="Ej: 2026/Próstata" style={inp} />
+        {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{msg}</div>}
+        <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
+      </div>
+    </div>
+  );
+}
+
+function ComitesPanel({ currentUser, contexto }) {
+  const [items, setItems] = useState([]);
+  const [carpetas, setCarpetas] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [colapsadas, setColapsadas] = useState(() => { try { return JSON.parse(localStorage.getItem("uro_com_colapsadas") || "{}"); } catch { return {}; } });
+  useEffect(() => { try { localStorage.setItem("uro_com_colapsadas", JSON.stringify(colapsadas)); } catch {} }, [colapsadas]);
+  const equipoId = contexto !== "personal" ? contexto : null;
+
+  const cargar = async () => {
+    setCargando(true);
+    const scope = (q) => equipoId ? q.eq("equipo_id", equipoId) : q.eq("user_id", currentUser.id).is("equipo_id", null);
+    const ri = await scope(supabase.from("comites").select("*").order("updated_at", { ascending: false }));
+    const rc = await scope(supabase.from("carpetas_comites").select("*").order("orden", { ascending: true }));
+    setItems(ri.data || []); setCarpetas(rc.data || []);
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, [contexto]);
+
+  const rutasSet = new Set();
+  carpetas.forEach(c => c.ruta && rutasSet.add(c.ruta));
+  items.forEach(i => { if (i.carpeta) rutasSet.add(i.carpeta); });
+  Array.from(rutasSet).forEach(r => { const parts = r.split("/"); for (let k = 1; k < parts.length; k++) rutasSet.add(parts.slice(0, k).join("/")); });
+  const todasRutas = Array.from(rutasSet).sort();
+  const ordenDe = {}; carpetas.forEach(c => { ordenDe[c.ruta] = c.orden ?? 0; });
+
+  const raiz = { children: {}, items: [] };
+  const nodoDe = (ruta) => {
+    if (!ruta) return raiz;
+    const parts = ruta.split("/"); let n = raiz;
+    parts.forEach((seg, i) => { const path = parts.slice(0, i + 1).join("/"); if (!n.children[seg]) n.children[seg] = { name: seg, path, children: {}, items: [] }; n = n.children[seg]; });
+    return n;
+  };
+  todasRutas.forEach(r => nodoDe(r));
+  items.forEach(i => nodoDe(i.carpeta).items.push(i));
+  const contar = (node) => node.items.length + Object.values(node.children).reduce((s, c) => s + contar(c), 0);
+
+  const crearCarpeta = async (padre) => {
+    const n = window.prompt(padre ? `Nueva subcarpeta dentro de "${padre}":` : "Nueva carpeta (ej: 2026):");
+    if (!n || !n.trim()) return;
+    const ruta = (padre ? padre + "/" : "") + n.trim().replace(/\//g, "-");
+    const hermanos = carpetas.filter(c => c.ruta.split("/").slice(0, -1).join("/") === (padre || ""));
+    const orden = hermanos.length ? Math.max(...hermanos.map(h => h.orden || 0)) + 1 : 0;
+    const { error } = await supabase.from("carpetas_comites").insert({ user_id: currentUser.id, equipo_id: equipoId, ruta, orden });
+    if (error) { alert("No se pudo crear la carpeta.\n\nProbablemente falta ejecutar la migración 'comites.sql' en Supabase → SQL Editor.\n\nDetalle: " + error.message); return; }
+    await cargar();
+  };
+  const eliminarCarpeta = async (ruta) => {
+    if (!confirm(`¿Eliminar la carpeta "${ruta}" y sus subcarpetas? Los comités dentro quedarán sin carpeta.`)) return;
+    const ids = carpetas.filter(c => c.ruta === ruta || c.ruta.startsWith(ruta + "/")).map(c => c.id);
+    if (ids.length) await supabase.from("carpetas_comites").delete().in("id", ids);
+    const it = items.filter(i => i.carpeta === ruta || (i.carpeta || "").startsWith(ruta + "/")).map(i => i.id);
+    if (it.length) await supabase.from("comites").update({ carpeta: null }).in("id", it);
+    await cargar();
+  };
+  const mover = async (item) => {
+    const c = window.prompt("Mover a carpeta (ruta con / para subcarpeta; vacío = sin carpeta).\nExistentes:\n" + (todasRutas.join("\n") || "—"), item.carpeta || "");
+    if (c === null) return;
+    await supabase.from("comites").update({ carpeta: c.trim() || null }).eq("id", item.id); await cargar();
+  };
+  const guardarComite = async (datos, carpeta, id) => {
+    const fila = { user_id: currentUser.id, equipo_id: equipoId, carpeta: carpeta || null, nombre: datos.nombre || null, ficha: datos.ficha || null, datos, updated_at: new Date().toISOString() };
+    if (id) await supabase.from("comites").update(fila).eq("id", id); else await supabase.from("comites").insert(fila);
+    await cargar();
+  };
+  const eliminar = async (id) => { if (!confirm("¿Eliminar este comité?")) return; await supabase.from("comites").delete().eq("id", id); await cargar(); };
+
+  const filaItem = (item) => (
+    <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "9px 12px", marginBottom: 5 }}>
+      <div onClick={() => { setEditando(item); setModalAbierto(true); }} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.nombre || "(sin nombre)"}</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{item.datos?.diagnostico ? item.datos.diagnostico + " · " : ""}{item.datos?.fecha || (item.updated_at || "").slice(0, 10)}</div>
+      </div>
+      <button onClick={() => mover(item)} title="Mover a carpeta" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)" }}>📁</button>
+      <button onClick={() => eliminar(item.id)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>
+    </div>
+  );
+
+  const renderNodo = (node, depth) => {
+    const hijos = Object.values(node.children).sort((a, b) => (ordenDe[a.path] ?? 0) - (ordenDe[b.path] ?? 0) || a.name.localeCompare(b.name));
+    return hijos.map(h => {
+      const col = colapsadas[h.path];
+      return (
+        <div key={h.path} style={{ marginLeft: depth ? 12 : 0, marginBottom: 3, borderLeft: depth ? "1px solid var(--borde)" : "none", paddingLeft: depth ? 6 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 2px" }}>
+            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({contar(h)})</span></span>
+            <button onClick={() => crearCarpeta(h.path)} title="Nueva subcarpeta" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 5, color: "var(--primario)", cursor: "pointer", fontSize: "var(--fs-2)", width: 22, height: 20, lineHeight: 1, padding: 0 }}>＋</button>
+            <button onClick={() => eliminarCarpeta(h.path)} title="Eliminar carpeta" style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)" }}>🗑</button>
+          </div>
+          {!col && <div>{renderNodo(h, depth + 1)}{h.items.map(filaItem)}</div>}
+        </div>
+      );
+    });
+  };
+
+  return (
+    <div style={{ padding: 16 }}>
+      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo comité</button>
+        <button onClick={() => crearCarpeta("")} style={{ padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
+      </div>
+      {cargando ? <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div> :
+        (items.length === 0 && todasRutas.length === 0) ? <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "20px 0" }}>Aún no hay comités guardados.</div> :
+        <>
+          {renderNodo(raiz, 0)}
+          {raiz.items.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto-sec)", padding: "4px 2px" }}>Sin carpeta ({raiz.items.length})</div>
+              {raiz.items.map(filaItem)}
+            </div>
+          )}
+        </>
+      }
+    </div>
+  );
+}
+
 function IngresosPanel({ currentUser, contexto }) {
   const [ingresos, setIngresos] = useState([]);
   const [carpetas, setCarpetas] = useState([]);
@@ -9705,7 +10034,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   useEffect(() => {
     const h = (e) => {
       const s = e.detail?.subtab;
-      if (["pacientes", "tabla", "notas", "prescripciones", "interconsultas", "seguimiento", "ingresos"].includes(s)) setSubTabHospital(s);
+      if (["pacientes", "tabla", "notas", "prescripciones", "interconsultas", "seguimiento", "ingresos", "comites"].includes(s)) setSubTabHospital(s);
       if (["cirugias", "videos", "preguntas", "medicamentos", "scores", "documentos", "mapas"].includes(s)) setSubTabBiblio(s);
     };
     window.addEventListener("uro-tour-subtab", h);
@@ -10705,6 +11034,7 @@ if (!currentUser) {
         ["pacientes", "👥 Pacientes"],
         ...(!fnOculta(config, "hosp:tabla") ? [["tabla", "📋 Tabla"]] : []),
         ["ingresos", "📋 Ingresos"],
+        ["comites", "🎗️ Comités"],
         ...(!fnOculta(config, "hosp:interconsultas") ? [["interconsultas", "📄 Interconsultas"]] : []),
         ...(!fnOculta(config, "hosp:seguimiento") ? [["seguimiento", "🔄 Seguimiento"]] : []),
         ...(esUrologo && !fnOculta(config, "hosp:prescripciones") ? [["prescripciones", "💊 Recetas"]] : []),
@@ -10713,6 +11043,7 @@ if (!currentUser) {
       activo: subTabHospital,
       elegir: setSubTabHospital,
       extras: [
+        ["🌐 Abrir CORE", () => accion("abrir-core")],
         ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
