@@ -208,7 +208,7 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
     body: JSON.stringify({
       model: "claude-sonnet-5",
       max_tokens: 2048,
-      system: "Eres un extractor de datos clínicos de protocolos quirúrgicos de urología. Respondes exclusivamente con JSON válido.",
+      system: "Eres un extractor de datos clínicos de protocolos quirúrgicos de urología. Respondes exclusivamente con JSON válido. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
       messages: [{ role: "user", content }],
     }),
   });

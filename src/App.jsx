@@ -110,6 +110,31 @@ const TOPICS = [
   { id: "farmaco", label: "Farmacología", subtopics: ["Alfabloqueantes", "Inhibidores 5-alfa reductasa", "Anticolinérgicos", "Análogos GNRH"] }
 ];
 
+// ── Anonimización de datos de pacientes para el chat con IA ──
+// Reemplaza nombres, RUTs y fichas por tokens ([PAC-1], [RUT-1]) antes de enviar
+// el contexto al proveedor de IA, y los restaura en la respuesta.
+function anonimizarCtx(texto) {
+  const mapa = []; let idx = 0;
+  // Nombres (iniciales tipo "JUAN PÉREZ MORA")
+  const conNombres = texto.replace(/(?:^|\n)\s*-\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{2,40})\s*\(/gm, (m, nombre) => {
+    const tok = `[PAC-${++idx}]`; mapa.push({ tok, val: nombre.trim() }); return m.replace(nombre, tok);
+  });
+  // RUTs (12.345.678-9 o 12345678-9 o 123456789)
+  const conRut = conNombres.replace(/\b(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])\b/g, (m) => {
+    const tok = `[RUT-${++idx}]`; mapa.push({ tok, val: m }); return tok;
+  });
+  // Fichas clínicas (FC: 123456 o Ficha 123456)
+  const final = conRut.replace(/(?:FC|Ficha)[:\s]+(\d{3,10})/gi, (m, fc) => {
+    const tok = `[FC-${++idx}]`; mapa.push({ tok, val: fc }); return m.replace(fc, tok);
+  });
+  return { texto: final, mapa };
+}
+function desanonimizar(texto, mapa) {
+  let r = texto;
+  for (const { tok, val } of mapa) r = r.replaceAll(tok, val);
+  return r;
+}
+
 const SYSTEM_PROMPT = `Eres un médico urólogo con amplia experiencia clínica y quirúrgica. Hablas y razonas como un especialista en urología dirigiéndose a un colega o residente: con criterio clínico, terminología precisa y enfoque práctico orientado a la toma de decisiones. Respondes en español clínico.
 
 Áreas de dominio: urooncología, derivaciones urinarias, litiasis e infecciones urológicas, trasplante renal, urología funcional, farmacología urológica, guías EAU y AUA, técnica quirúrgica.
@@ -189,7 +214,7 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
     body: JSON.stringify({
       model: "claude-sonnet-5",
       max_tokens: 1800,
-      system: "Eres un extractor de datos clínicos de hojas de ingreso de urología. Respondes exclusivamente con JSON válido.",
+      system: "Eres un extractor de datos clínicos de hojas de ingreso de urología. Respondes exclusivamente con JSON válido. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
       messages: [{ role: "user", content }],
     }),
   });
@@ -245,7 +270,7 @@ Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre complet
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
     body: JSON.stringify({
       model: "claude-sonnet-5", max_tokens: 3000,
-      system: "Eres un extractor de tablas quirúrgicas de urología. Respondes exclusivamente con JSON válido.",
+      system: "Eres un extractor de tablas quirúrgicas de urología. Respondes exclusivamente con JSON válido. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
       messages: [{ role: "user", content }],
     }),
   });
@@ -302,7 +327,7 @@ Reglas:
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
       body: JSON.stringify({
         model: "claude-sonnet-5", max_tokens: 4096,
-        system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido y compacto, sin explicaciones.",
+        system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido y compacto, sin explicaciones. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
         messages: [{ role: "user", content: c }],
       }),
     });
@@ -2550,6 +2575,70 @@ function VistaWebModal({ url, titulo = "Sitio", onClose }) {
   );
 }
 
+// ── Términos y Condiciones / Política de Privacidad ──
+const RESPONSABLE = "Dr. Sebastián Gárate Ortega";
+const CONTACTO_DATOS = "garateortega@gmail.com";
+const ULTIMA_ACTUALIZACION = "30 de julio de 2026";
+
+function TerminosModal({ onClose }) {
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:620,maxHeight:"90vh",borderRadius:16,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"0.5px solid var(--borde)"}}>
+          <div style={{fontSize:"var(--fs-4)",fontWeight:700,color:"var(--texto)"}}>Términos y Condiciones</div>
+          <button onClick={onClose} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:32,height:32,cursor:"pointer",color:"var(--texto-sec)"}}>✕</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",fontSize:"var(--fs-2)",lineHeight:1.7,color:"var(--texto)"}}>
+          <p><strong>Última actualización:</strong> {ULTIMA_ACTUALIZACION}</p>
+          <p>UroSearch es una herramienta clínica de apoyo desarrollada por <strong>{RESPONSABLE}</strong>, diseñada para uso exclusivo por profesionales de la salud del equipo de urología autorizados.</p>
+          <p><strong>1. Naturaleza del servicio.</strong> UroSearch es un asistente clínico informático. No reemplaza el juicio clínico profesional. Las sugerencias, datos extraídos y contenidos generados por inteligencia artificial son orientativos y deben ser verificados por el profesional tratante antes de cualquier decisión clínica.</p>
+          <p><strong>2. Acceso y cuentas.</strong> El acceso requiere una cuenta aprobada por el administrador. El usuario es responsable de la confidencialidad de sus credenciales y de toda actividad realizada con su cuenta. Está prohibido compartir credenciales o permitir el acceso a personas no autorizadas.</p>
+          <p><strong>3. Datos clínicos.</strong> Los datos de pacientes ingresados en UroSearch son responsabilidad del profesional que los registra. El usuario se compromete a ingresar datos conforme a la normativa vigente (Ley 20.584, Ley 19.628 y Ley 21.719) y a las políticas del establecimiento de salud.</p>
+          <p><strong>4. Uso de inteligencia artificial.</strong> UroSearch utiliza servicios de IA de terceros (Anthropic) para procesar imágenes de documentos clínicos (protocolos, ingresos, exámenes) y para el asistente de chat. Cuando se envían imágenes o texto al servicio de IA, los datos de los pacientes contenidos en ellos son transmitidos al proveedor bajo sus políticas de no retención. UroSearch anonimiza los datos identificables en la medida técnicamente posible antes de la transmisión. El proveedor no utiliza los datos enviados vía API para entrenar sus modelos.</p>
+          <p><strong>5. Disponibilidad.</strong> UroSearch se ofrece "tal cual", sin garantía de disponibilidad continua ni ininterrumpida. El servicio puede experimentar interrupciones por mantenimiento, actualizaciones o causas de fuerza mayor.</p>
+          <p><strong>6. Propiedad intelectual.</strong> El software, diseño, mascota "Uros" y contenidos propios de UroSearch son propiedad de {RESPONSABLE}. Los contenidos clínicos subidos por los usuarios son propiedad de sus autores o del establecimiento según corresponda.</p>
+          <p><strong>7. Limitación de responsabilidad.</strong> {RESPONSABLE} no será responsable por decisiones clínicas basadas en la información proporcionada por UroSearch, por pérdida de datos derivada de fallas técnicas, ni por el uso inadecuado de la plataforma.</p>
+          <p><strong>8. Modificaciones.</strong> Estos términos pueden actualizarse. Los cambios serán comunicados a través de la plataforma y entrarán en vigor desde su publicación.</p>
+          <p><strong>Contacto:</strong> {CONTACTO_DATOS}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrivacidadModal({ onClose }) {
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:620,maxHeight:"90vh",borderRadius:16,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"0.5px solid var(--borde)"}}>
+          <div style={{fontSize:"var(--fs-4)",fontWeight:700,color:"var(--texto)"}}>Política de Privacidad</div>
+          <button onClick={onClose} style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:"50%",width:32,height:32,cursor:"pointer",color:"var(--texto-sec)"}}>✕</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",fontSize:"var(--fs-2)",lineHeight:1.7,color:"var(--texto)"}}>
+          <p><strong>Última actualización:</strong> {ULTIMA_ACTUALIZACION}</p>
+          <p><strong>Responsable del tratamiento de datos:</strong> {RESPONSABLE} ({CONTACTO_DATOS}).</p>
+          <p><strong>1. Datos que recopilamos.</strong></p>
+          <p>• <em>Datos de cuenta:</em> nombre, correo electrónico, especialidad, documento de acreditación, RUT (opcional) y contraseña (cifrada).</p>
+          <p>• <em>Datos clínicos de pacientes:</em> nombre o iniciales, RUT, ficha clínica, diagnóstico, historia clínica, evoluciones, exámenes, imágenes de protocolos e ingresos, y demás información que el profesional registre en la plataforma.</p>
+          <p>• <em>Datos de uso:</em> registros de actividad dentro de la app (logbook quirúrgico, notas, preguntas respondidas), preferencias de interfaz y dispositivo (almacenados localmente).</p>
+          <p><strong>2. Finalidad del tratamiento.</strong> Los datos se utilizan exclusivamente para: (a) gestionar la atención de pacientes hospitalizados y su seguimiento; (b) registro quirúrgico personal (logbook); (c) estudio y autoevaluación clínica; (d) comunicación entre miembros del equipo autorizado.</p>
+          <p><strong>3. Base legal.</strong> El tratamiento se fundamenta en: (a) el consentimiento del usuario al aceptar estos términos; (b) el cumplimiento de obligaciones legales en materia de salud (Ley 20.584); (c) el interés legítimo del responsable en la formación médica.</p>
+          <p><strong>4. Compartición con terceros.</strong></p>
+          <p>• <em>Proveedor de inteligencia artificial (Anthropic, Inc.):</em> cuando el profesional utiliza funciones de extracción automática (lectura de protocolos, ingresos o exámenes desde foto) o el asistente de chat con contexto clínico, los datos contenidos en esas imágenes o textos son transmitidos al proveedor de IA para su procesamiento. UroSearch anonimiza los datos identificables (nombres, RUT, fichas) en la medida técnicamente posible antes de la transmisión. El proveedor no utiliza datos enviados vía API para entrenar sus modelos y opera bajo su propia política de privacidad. <strong>Importante:</strong> las imágenes de documentos clínicos contienen datos visualmente identificables que no pueden ser anonimizados previamente sin perder su utilidad.</p>
+          <p>• <em>Supabase (infraestructura):</em> los datos se almacenan en servidores de Supabase con cifrado en tránsito (TLS) y en reposo. Las políticas de acceso a nivel de fila (RLS) aseguran que cada usuario solo accede a sus propios datos o a los de su equipo autorizado.</p>
+          <p>• No se comparten datos con terceros adicionales, anunciantes ni se comercializan.</p>
+          <p><strong>5. Conservación.</strong> Los datos se conservan mientras la cuenta del usuario esté activa. Al solicitar la eliminación de la cuenta, los datos personales y clínicos asociados se eliminan de la base de datos en un plazo razonable, salvo aquellos que deban conservarse por obligación legal.</p>
+          <p><strong>6. Derechos del usuario.</strong> Conforme a la Ley 19.628 y la Ley 21.719, usted tiene derecho a acceder, rectificar, cancelar y oponerse al tratamiento de sus datos personales. Para ejercer estos derechos, contacte a {CONTACTO_DATOS}.</p>
+          <p><strong>7. Seguridad.</strong> UroSearch implementa: autenticación con contraseña cifrada, políticas de acceso a nivel de fila en la base de datos, bucket de almacenamiento privado con URLs firmadas temporales, cifrado en tránsito, y PIN de bloqueo opcional en la app.</p>
+          <p><strong>8. Datos en el dispositivo.</strong> Algunos datos se almacenan localmente en el navegador (preferencias, borradores de evolución, historial de preguntas). En dispositivos compartidos, se recomienda activar el PIN de bloqueo de la app.</p>
+          <p><strong>9. Modificaciones.</strong> Esta política puede actualizarse. Los cambios serán comunicados a través de la plataforma.</p>
+          <p><strong>Contacto:</strong> {CONTACTO_DATOS}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TutorialInstalacion({ onClose }) {
   const [plat, setPlat] = useState(detectarPlataforma());
   const [i, setI] = useState(0);
@@ -2613,6 +2702,9 @@ function AuthScreen({ onLogin }) {
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [terminosOpen, setTerminosOpen] = useState(false);
+  const [privacidadOpen, setPrivacidadOpen] = useState(false);
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
   const fileRef = useRef(null);
 
   const handleFile = (e) => {
@@ -2684,7 +2776,13 @@ function AuthScreen({ onLogin }) {
         </div>
         <div style={{fontSize:"var(--fs-1)", color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
         <button onClick={()=>setTutorialOpen(true)} style={{marginTop:20,background:"transparent",border:"0.5px solid var(--borde)",borderRadius:9,padding:"10px 16px",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--primario)",cursor:"pointer"}}>📲 Cómo instalar la app</button>
+        <div style={{marginTop:16,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
+          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
+          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
+        </div>
         {tutorialOpen && <TutorialInstalacion onClose={()=>setTutorialOpen(false)}/>}
+        {terminosOpen && <TerminosModal onClose={()=>setTerminosOpen(false)}/>}
+        {privacidadOpen && <PrivacidadModal onClose={()=>setPrivacidadOpen(false)}/>}
         <div style={{fontSize:"var(--fs-1)", fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
@@ -2738,7 +2836,15 @@ function AuthScreen({ onLogin }) {
       <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle} disabled={loading}/>
       {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
       {info && <div style={{fontSize:"var(--fs-1)",color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
-      <button onClick={handleRegister} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:10,marginTop:4}}>
+        <input type="checkbox" id="acepta-terminos" checked={aceptaTerminos} onChange={e=>setAceptaTerminos(e.target.checked)} style={{marginTop:3,accentColor:"var(--primario)",width:18,height:18,flexShrink:0}}/>
+        <label htmlFor="acepta-terminos" style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)",lineHeight:1.5,cursor:"pointer"}}>
+          He leído y acepto los <span onClick={e=>{e.preventDefault();setTerminosOpen(true);}} style={{color:"var(--primario)",textDecoration:"underline",cursor:"pointer"}}>Términos y Condiciones</span> y la <span onClick={e=>{e.preventDefault();setPrivacidadOpen(true);}} style={{color:"var(--primario)",textDecoration:"underline",cursor:"pointer"}}>Política de Privacidad</span>.
+        </label>
+      </div>
+      {terminosOpen && <TerminosModal onClose={()=>setTerminosOpen(false)}/>}
+      {privacidadOpen && <PrivacidadModal onClose={()=>setPrivacidadOpen(false)}/>}
+      <button onClick={handleRegister} disabled={loading || !aceptaTerminos} style={{...btnPrimary, opacity: (loading || !aceptaTerminos) ? 0.5 : 1, cursor: (loading || !aceptaTerminos) ? "default" : "pointer"}}>
         {loading ? "Enviando solicitud..." : "Enviar solicitud"}
       </button>
       <div style={{textAlign:"center",fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginTop:14}}>¿Ya tienes cuenta? <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:"var(--fs-1)"}}>Inicia sesión</button></div>
@@ -10810,7 +10916,9 @@ if (videosResult.ok) {
     }
     // Contexto de pacientes en seguimiento (si la pregunta lo amerita)
     if (ctxSeguimiento) ctx += `\n\n${ctxSeguimiento}`;
-    const sysPrompt = SYSTEM_PROMPT + modoIns + ctx;
+    // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
+    const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
+    const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon;
     const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
     const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
       method: "POST",
@@ -10827,7 +10935,7 @@ if (videosResult.ok) {
     });
     const data = await res.json();
     const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
-    const respuesta = { role:"assistant", content:reply };
+    const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
     // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
     if (!usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && (config.chatModo || "verificada") !== "general") {
