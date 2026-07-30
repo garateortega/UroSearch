@@ -61,7 +61,7 @@ export async function eliminarPaciente(pacienteId) {
 export async function listarEvoluciones(pacienteId) {
   const { data, error } = await supabase
     .from('evoluciones')
-    .select('*, autor:perfiles!autor_id(nombre)')
+    .select('*, autor:perfiles!autor_id(nombre, rol)')
     .eq('paciente_id', pacienteId)
     .order('fecha_evolucion', { ascending: false })
     .order('hora_evolucion', { ascending: false });
@@ -78,7 +78,7 @@ export async function crearEvolucion(pacienteId, autorId, texto, tipo = 'libre')
       texto: texto,
       tipo: tipo,
     })
-    .select('*, autor:perfiles!autor_id(nombre)')
+    .select('*, autor:perfiles!autor_id(nombre, rol)')
     .single();
   if (error) return { ok: false, error: error.message };
   return { ok: true, evolucion: data };

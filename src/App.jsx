@@ -2521,8 +2521,8 @@ const btnSecondary = { width:"100%", padding:"11px", fontSize:"var(--fs-2)", fon
 // Las imágenes son tarjetas por paso ya diseñadas; van en public/tutorial/.
 const TUTO_BASE = `${import.meta.env.BASE_URL || "/"}tutorial/`;
 const TUTORIALES = {
-  android: { label: "Android", pasos: ["android-1","android-2","android-3","android-4","android-5","android-6"] },
-  ios:     { label: "iPhone",  pasos: ["ios-1","ios-2","ios-3","ios-4","ios-5","ios-6"] },
+  android: { label: "Android", pasos: ["android-0","android-1","android-2","android-3","android-4","android-5","android-6"] },
+  ios:     { label: "iPhone",  pasos: ["ios-0","ios-1","ios-2","ios-3","ios-4","ios-5","ios-6"] },
   windows: { label: "Windows", pasos: ["windows-0","windows-1","windows-2","windows-3","windows-4","windows-5","windows-6"] },
 };
 function detectarPlataforma() {
@@ -2566,7 +2566,7 @@ function TutorialInstalacion({ onClose }) {
   };
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.6)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:560,borderRadius:16,display:"flex",flexDirection:"column",maxHeight:"92vh",overflow:"hidden"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",width:"100%",maxWidth:680,borderRadius:16,display:"flex",flexDirection:"column",height:"92vh",maxHeight:"92vh",overflow:"hidden"}}>
         {/* Encabezado + pestañas de plataforma */}
         <div style={{padding:"14px 16px 12px",borderBottom:"0.5px solid var(--borde)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -2583,8 +2583,8 @@ function TutorialInstalacion({ onClose }) {
         <div style={{flex:1,minHeight:0,position:"relative",overflow:"hidden"}} onTouchStart={onTS} onTouchEnd={onTE}>
           <div style={{display:"flex",height:"100%",transition:"transform 0.32s cubic-bezier(0.22,0.61,0.36,1)",transform:`translateX(-${i*100}%)`}}>
             {tuto.pasos.map((p)=>(
-              <div key={p} style={{flex:"0 0 100%",height:"100%",overflowY:"auto",padding:"14px 16px",boxSizing:"border-box",display:"flex",alignItems:"flex-start",justifyContent:"center"}}>
-                <img src={`${TUTO_BASE}${p}.jpg`} alt={p} loading="lazy" style={{width:"100%",maxWidth:420,height:"auto",borderRadius:12,display:"block"}}/>
+              <div key={p} style={{flex:"0 0 100%",height:"100%",padding:"12px 16px",boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <img src={`${TUTO_BASE}${p}.jpg`} alt={p} loading="lazy" style={{maxWidth:"100%",maxHeight:"100%",width:"auto",height:"auto",objectFit:"contain",borderRadius:12,display:"block"}}/>
               </div>
             ))}
           </div>
@@ -4168,7 +4168,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       if (e.detail?.tab !== "hospital") return;
       if (e.detail.accion === "equipos") setMostrarEquipos(true);
       if (e.detail.accion === "tools") setToolsOpen(o => !o);
-      if (e.detail.accion === "abrir-core") setCoreOpen(true);
+      if (e.detail.accion === "abrir-core") { const w = window.open(CORE_URL, "_blank", "noopener,noreferrer"); if (!w) setCoreOpen(true); }
     };
     window.addEventListener("uro-submenu-accion", h);
     return () => window.removeEventListener("uro-submenu-accion", h);
@@ -7098,6 +7098,12 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
 
   // Form de evoluciones
   const [evoLibre, setEvoLibre] = useState("");
+  // Persiste el borrador de evolución por paciente: si cierras la app a mitad de
+  // escribir, al reabrir la ficha de ese paciente reaparece lo que llevabas.
+  useEffect(() => {
+    if (!seleccionado) return;
+    try { setEvoLibre(localStorage.getItem("uro_evo_draft_" + seleccionado.id) || ""); } catch { setEvoLibre(""); }
+  }, [seleccionado?.id]);
   const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
   const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
@@ -7918,23 +7924,47 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (delDia.length === 0) { alert("No hay evoluciones registradas hoy para este paciente."); return; }
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { alert("No se pudo cargar el generador de PDF."); return; }
     const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 18;
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, 12, 16, 16); } catch {}
-    doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(20, 20, 20);
-    doc.text("EVOLUCIONES DEL DÍA", M, y); y += 6;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); doc.setTextColor(90, 90, 90);
-    const fechaLarga = new Date().toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-    doc.text(fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1), M, y); y += 6;
-    doc.setTextColor(20, 20, 20);
-    doc.text(`Paciente: ${seleccionado.iniciales || ""}    Edad: ${seleccionado.edad || "—"}`, M, y); y += 4.8;
-    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || "—"}    Servicio: ${seleccionado.servicio || "—"}    Cama: ${seleccionado.cama || "—"}`, M, y); y += 5;
-    doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 7;
+    // Logo de UroSearch, solo, arriba a la derecha.
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 20, 10, 20, 20); } catch {}
+    // Arriba, a la izquierda: título + datos del paciente.
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(20, 20, 20);
+    doc.text("UROLOGÍA", M, y); y += 7;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text(seleccionado.iniciales || "Paciente", M, y); y += 5.2;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(90, 90, 90);
+    doc.text(`Edad ${seleccionado.edad || "—"}  ·  Ficha ${seleccionado.ficha_clinica || seleccionado.rut || "—"}  ·  ${seleccionado.servicio || "—"}  ·  Cama ${seleccionado.cama || "—"}`, M, y); y += 4.6;
+    // Cirugía realizada y días post-operatorios.
+    const cxs = Array.isArray(seleccionado.cirugias_realizadas) ? seleccionado.cirugias_realizadas : [];
+    const ultCx = cxs[cxs.length - 1];
+    if (ultCx?.nombre) {
+      const dpo = ultCx.fecha ? Math.max(0, Math.round((new Date(hoy) - new Date(ultCx.fecha)) / 86400000)) : null;
+      doc.text(`Cirugía: ${ultCx.nombre}${dpo != null ? `  ·  ${dpo} día(s) post-op` : ""}`, M, y); y += 4.6;
+    }
+    y += 2;
+    doc.setDrawColor(200); doc.line(M, y, W - M, y); y += 7;
+    // Debajo de la línea gris, centrado.
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(20, 20, 20);
+    doc.text("Historia y evolución clínica", W / 2, y, { align: "center" }); y += 9;
+
+    const fmtFecha = (f) => { const [a, m, d] = (f || "").split("-"); return d ? `${d}/${m}/${a}` : (f || ""); };
+    const rolLabel = (r) => ({ urologo: "Urólogo", residente: "Residente de Urología", becado: "Residente de Urología", interno: "Interno", enfermeria: "Enfermería", admin: "Médico" }[r] || (r ? r.charAt(0).toUpperCase() + r.slice(1) : ""));
     delDia.forEach(e => {
-      if (y > 280) { doc.addPage(); y = 18; }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-      doc.text(`${e.hora_evolucion?.slice(0, 5) || ""}  ·  ${e.autor?.nombre || ""}${e.tipo && e.tipo !== "libre" ? "  [" + e.tipo + "]" : ""}`, M, y); y += 5;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+      if (y > 262) { doc.addPage(); y = 18; }
+      // Fecha (dd/mm/aaaa) y hora (HH:MM), una línea a la izquierda.
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(60, 60, 60);
+      doc.text(`${fmtFecha(e.fecha_evolucion)}    ${e.hora_evolucion?.slice(0, 5) || ""}`, M, y); y += 5.5;
+      // Texto de la evolución.
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(20, 20, 20);
       doc.splitTextToSize(e.texto || "", W - 2 * M).forEach(p => { if (y > 286) { doc.addPage(); y = 18; } doc.text(p, M, y); y += 5; });
-      y += 4;
+      // Firma del autor, a la derecha (Dr. Nombre + rol debajo).
+      y += 1.5;
+      if (y > 280) { doc.addPage(); y = 18; }
+      const noDr = e.autor?.rol === "interno" || e.autor?.rol === "enfermeria";
+      const firma = `${noDr ? "" : "Dr. "}${e.autor?.nombre || ""}`.trim();
+      if (firma) { doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(40, 40, 40); doc.text(firma, W - M, y, { align: "right" }); }
+      const rl = rolLabel(e.autor?.rol);
+      if (rl) { y += 4; doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(110, 110, 110); doc.text(rl, W - M, y, { align: "right" }); }
+      y += 9;
     });
     doc.save(`evoluciones_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}_${hoy.replace(/-/g, "")}.pdf`);
   };
@@ -8044,6 +8074,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       setEvoluciones(prev => [result.evolucion, ...prev]);
     }
     setEvoLibre("");
+    try { if (seleccionado) localStorage.removeItem("uro_evo_draft_" + seleccionado.id); } catch {}
     setEvoEstructurada({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
     setDiuresis({ cantidad: "", via: "", caracteristicas: "" });
     setDrenaje({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
@@ -8974,7 +9005,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </div>
 
           {tipoEvo === "libre" ? (
-            <textarea value={evoLibre} onChange={e=>setEvoLibre(e.target.value)} placeholder="Escribe la evolución..." rows={4} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
+            <textarea value={evoLibre} onChange={e=>{ setEvoLibre(e.target.value); try { if (seleccionado) localStorage.setItem("uro_evo_draft_" + seleccionado.id, e.target.value); } catch {} }} placeholder="Escribe la evolución..." rows={4} style={{...inputStyle,resize:"vertical",marginBottom:6}}/>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:6}}>
   
@@ -9371,7 +9402,6 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <div ref={listaScrollElRef} onScroll={e=>{listaScrollPosRef.current = e.currentTarget.scrollTop;}} style={{padding:"16px",overflowY:"auto"}}>
 
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
-        <button onClick={toggleOrientacionPac} title="Cambiar entre vista vertical y horizontal" aria-label="Cambiar orientación de la vista" style={{padding:"6px 10px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>{orientacionPac==="horizontal"?"↔ Horizontal":"↕ Vertical"}</button>
         {!soloLectura && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap",position:"relative"}}>
             <button ref={servBtnRef} onClick={()=>setServiciosMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:serviciosMenuOpen?"var(--primario)":"var(--superficie)",color:serviciosMenuOpen?"var(--texto-inv)":"var(--primario)",border:serviciosMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>
@@ -9379,6 +9409,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             </button>
             <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
             <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
+            <button onClick={toggleOrientacionPac} title={orientacionPac==="horizontal"?"Vista horizontal (tocar para vertical)":"Vista vertical (tocar para horizontal)"} aria-label="Cambiar orientación" style={{padding:"6px 11px",fontSize:"var(--fs-3)",lineHeight:1,fontWeight:700,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer"}}>{orientacionPac==="horizontal"?"↔":"↕"}</button>
 
             {/* Menú desplegable de servicios + estado (estilo Hospital) */}
             {serviciosMenuOpen && (
@@ -9591,7 +9622,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     onPointerCancel={cancelarLongPress}
                     onPointerLeave={cancelarLongPress}
                     title={soloLectura ? undefined : "Deja presionado y arrastra para reordenar"}
-                    style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
+                    style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)",marginBottom:8,paddingBottom:6,borderBottom:"0.5px solid var(--fondo)",display:"flex",alignItems:"center",gap:8,cursor:soloLectura?(undefined):(arrastrando?"grabbing":"grab"),touchAction:orientacionPac==="horizontal"?"pan-x pan-y":"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
                     {!soloLectura && <span style={{fontSize:"var(--fs-2)",color:"var(--texto-ter)",flexShrink:0}}>☰</span>}
                     <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{servicio}</span>
                     <span style={{color:"var(--texto-ter)",fontWeight:400,fontSize:"var(--fs-0)",flexShrink:0}}>({porServicio[servicio].length})</span>
@@ -9606,7 +9637,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                         onPointerMove={(e)=>{ if (pressPosPac.current && (Math.abs(e.clientX-pressPosPac.current.x)>10||Math.abs(e.clientY-pressPosPac.current.y)>10)) clearTimeout(pressTimerPac.current); }}
                         onPointerUp={()=>clearTimeout(pressTimerPac.current)}
                         onPointerLeave={()=>clearTimeout(pressTimerPac.current)}
-                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",opacity:dragPos&&dragPacRef.current?.id===p.id?0.4:1}}>
+                        style={{background:p.estado==="activo"?"var(--fondo-suave)":"var(--neutro-bg)",borderRadius:6,padding:"10px 12px",cursor:"pointer",borderLeft:`3px solid ${p.estado==="activo"?"var(--primario)":"var(--neutro)"}`,touchAction:orientacionPac==="horizontal"?"pan-x pan-y":"pan-y",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",opacity:dragPos&&dragPacRef.current?.id===p.id?0.4:1}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                           <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>
                             {p.iniciales} <span style={{fontSize:"var(--fs-3)",fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>{p.estado_clinico && <span style={{marginLeft:5,fontSize:"var(--fs-2)"}} title={p.estado_clinico}>{p.estado_clinico==="estable"?"🟢":p.estado_clinico==="regular"?"🟡":p.estado_clinico==="cuidado"?"🔴":""}</span>}{p.operado && <span style={{marginLeft:4}} title="Operado">🔪</span>}
@@ -11033,7 +11064,7 @@ if (!currentUser) {
       secciones: [
         ["pacientes", "👥 Pacientes"],
         ...(!fnOculta(config, "hosp:tabla") ? [["tabla", "📋 Tabla"]] : []),
-        ["ingresos", "📋 Ingresos"],
+        ["ingresos", "📥 Ingresos"],
         ["comites", "🎗️ Comités"],
         ...(!fnOculta(config, "hosp:interconsultas") ? [["interconsultas", "📄 Interconsultas"]] : []),
         ...(!fnOculta(config, "hosp:seguimiento") ? [["seguimiento", "🔄 Seguimiento"]] : []),
