@@ -7616,8 +7616,7 @@ function compararCama(a, b) {
   return ca.localeCompare(cb, "es", { numeric: true, sensitivity: "base" });
 }
 
-function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
-  // Plantillas SOAP completas
+// Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
 function normalizarExamen(ex) {
   if (!ex) return ex;
@@ -7796,6 +7795,8 @@ function useSugRx(uid) {
   useEffect(() => { const h = () => setV(leerSugRx(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
   return v;
 }
+
+function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
