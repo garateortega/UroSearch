@@ -429,12 +429,12 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
   };
 
   // ─── Estilos ───
-  const inp = { width: "100%", padding: "9px 11px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", boxSizing: "border-box" };
-  const lbl = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4 };
-  const btnPrim = { padding: "9px 16px", fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
-  const btnSec = { padding: "9px 14px", fontSize: 12.5, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
+  const inp = { width: "100%", padding: "9px 11px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", boxSizing: "border-box" };
+  const lbl = { display: "block", fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4 };
+  const btnPrim = { padding: "9px 16px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
+  const btnSec = { padding: "9px 14px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
   const card = { background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "12px" };
-  const itemAddPac = { padding: "8px 11px", fontSize: 12.5, textAlign: "left", background: "none", border: "none", color: "var(--texto)", borderRadius: 6, cursor: "pointer", fontWeight: 500, width: "100%" };
+  const itemAddPac = { padding: "8px 11px", fontSize: "var(--fs-1)", textAlign: "left", background: "none", border: "none", color: "var(--texto)", borderRadius: 6, cursor: "pointer", fontWeight: 500, width: "100%" };
   const campo = (etiqueta, hijo) => (<div><label style={lbl}>{etiqueta}</label>{hijo}</div>);
 
   if (!currentUser) return null;
@@ -442,7 +442,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
   return (
     <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
       {error && (
-        <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: 13, background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>
+        <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: "var(--fs-2)", background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>
           {error} <button onClick={() => setError("")} style={{ float: "right", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer" }}>✕</button>
         </div>
       )}
@@ -451,7 +451,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
       {vista === "lista" && !protoForm && (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 12.5, color: "var(--texto-sec)" }}>
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)" }}>
               {cargando ? "Cargando…" : `${protocolos.length} criterio(s) · ${pacientes.filter(p => p.estado === "activo").length} paciente(s) en seguimiento`}
             </div>
             <button onClick={() => abrirNuevoProtocolo()} style={btnPrim}>+ Nuevo criterio</button>
@@ -459,14 +459,14 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
 
           {!cargando && protocolos.length === 0 && (
             <>
-              <div style={{ textAlign: "center", padding: "22px 16px", color: "var(--texto-ter)", fontSize: 13, lineHeight: 1.6 }}>
+              <div style={{ textAlign: "center", padding: "22px 16px", color: "var(--texto-ter)", fontSize: "var(--fs-2)", lineHeight: 1.6 }}>
                 Aún no tienes criterios de seguimiento.<br />Crea uno o parte con una de estas plantillas:
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
                 {PLANTILLAS.map((pl) => (
                   <div key={pl.nombre} onClick={() => abrirNuevoProtocolo(pl)} style={{ ...card, cursor: "pointer", borderStyle: "dashed" }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--primario)", marginBottom: 3 }}>{pl.nombre}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--texto-ter)" }}>Control cada {pl.intervalo_valor} {pl.intervalo_unidad}</div>
+                    <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--primario)", marginBottom: 3 }}>{pl.nombre}</div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Control cada {pl.intervalo_valor} {pl.intervalo_unidad}</div>
                   </div>
                 ))}
               </div>
@@ -480,11 +480,11 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
                 <div key={p.id} onClick={() => { setProtoSel(p); setVista("protocolo"); }} style={{ ...card, cursor: "pointer", borderLeft: `3px solid ${r.atrasados > 0 ? "var(--peligro)" : r.proximos > 0 ? "var(--alerta)" : "var(--exito)"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--texto)" }}>{p.nombre}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--texto-sec)", marginTop: 2 }}>
+                      <div style={{ fontSize: "var(--fs-3)", fontWeight: 600, color: "var(--texto)" }}>{p.nombre}</div>
+                      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 2 }}>
                         Control cada {p.intervalo_valor} {(UNIDADES.find(u => u[0] === p.intervalo_unidad) || ["", p.intervalo_unidad])[1]} · avisa {p.aviso_dias} días antes
                       </div>
-                      {p.descripcion && <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginTop: 3 }}>{p.descripcion}</div>}
+                      {p.descripcion && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 3 }}>{p.descripcion}</div>}
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
                       <div style={{ fontSize: 20, fontWeight: 700, color: "var(--primario)" }}>{r.total}</div>
@@ -493,8 +493,8 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
                   </div>
                   {(r.atrasados > 0 || r.proximos > 0) && (
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                      {r.atrasados > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 10, background: "var(--peligro-bg)", color: "var(--peligro)" }}>⚠️ {r.atrasados} atrasado(s)</span>}
-                      {r.proximos > 0 && <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 10, background: "var(--alerta-bg)", color: "var(--alerta)" }}>⏳ {r.proximos} por vencer</span>}
+                      {r.atrasados > 0 && <span style={{ fontSize: "var(--fs-0)", fontWeight: 600, padding: "3px 9px", borderRadius: 10, background: "var(--peligro-bg)", color: "var(--peligro)" }}>⚠️ {r.atrasados} atrasado(s)</span>}
+                      {r.proximos > 0 && <span style={{ fontSize: "var(--fs-0)", fontWeight: 600, padding: "3px 9px", borderRadius: 10, background: "var(--alerta-bg)", color: "var(--alerta)" }}>⏳ {r.proximos} por vencer</span>}
                     </div>
                   )}
                 </div>
@@ -507,7 +507,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
       {/* ══════════ FORM DE CRITERIO ══════════ */}
       {protoForm && (
         <>
-          <button onClick={() => setProtoForm(null)} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
+          <button onClick={() => setProtoForm(null)} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: "var(--fs-2)", cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)", marginBottom: 10 }}>
             {protoForm.id ? "Editar criterio" : "Nuevo criterio de seguimiento"}
           </div>
@@ -522,7 +522,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
             ))}
             {campo("Avisarme (días antes)", <input type="number" min={0} style={inp} value={protoForm.aviso_dias} onChange={(e) => setProtoForm({ ...protoForm, aviso_dias: e.target.value })} />)}
           </div>
-          <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.45 }}>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.45 }}>
             Cuando registres un control, la fecha del próximo se calcula sola. Los pacientes se marcan en 🟡 amarillo cuando falten {protoForm.aviso_dias || 0} días o menos, y en 🔴 rojo si se pasó la fecha.
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -535,12 +535,12 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
       {/* ══════════ DETALLE DE UN CRITERIO ══════════ */}
       {vista === "protocolo" && protoSel && !protoForm && !pacForm && (
         <>
-          <button onClick={() => { setVista("lista"); setProtoSel(null); }} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 10, padding: 0 }}>← Todos los criterios</button>
+          <button onClick={() => { setVista("lista"); setProtoSel(null); }} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: "var(--fs-2)", cursor: "pointer", marginBottom: 10, padding: 0 }}>← Todos los criterios</button>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)" }}>{protoSel.nombre}</div>
-              <div style={{ fontSize: 11.5, color: "var(--texto-sec)", marginTop: 2 }}>
+              <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)" }}>{protoSel.nombre}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 2 }}>
                 Control cada {protoSel.intervalo_valor} {(UNIDADES.find(u => u[0] === protoSel.intervalo_unidad) || ["", ""])[1]}
               </div>
             </div>
@@ -551,7 +551,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
                   <>
                     <div onClick={() => setAddPacMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 19 }} />
                     <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 20, background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 5, boxShadow: "0 8px 22px rgba(0,0,0,0.16)", display: "flex", flexDirection: "column", gap: 2, minWidth: 190 }}>
-                      <div style={{ fontSize: 10.5, color: "var(--texto-ter)", padding: "3px 10px 1px", lineHeight: 1.35 }}>Agregar paciente al seguimiento</div>
+                      <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", padding: "3px 10px 1px", lineHeight: 1.35 }}>Agregar paciente al seguimiento</div>
                       <button onClick={() => { setAddPacMenu(false); inputCamaraRef.current?.click(); }} style={itemAddPac}>📸 Tomar foto</button>
                       <button onClick={() => { setAddPacMenu(false); inputGaleriaRef.current?.click(); }} style={itemAddPac}>🖼 Galería / archivos</button>
                       <button onClick={() => { setAddPacMenu(false); abrirNuevoPaciente(protoSel.id); }} style={itemAddPac}>✍️ A mano</button>
@@ -575,14 +575,14 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
           )}
 
           <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 11.5, color: "var(--texto-ter)" }}>Ordenar por:</span>
+            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Ordenar por:</span>
             {[["urgencia", "⚠️ Urgencia"], ["antiguedad", "🕐 Más antiguos"], ["nombre", "A-Z"]].map(([id, l]) => (
-              <button key={id} onClick={() => setOrdenPor(id)} style={{ padding: "5px 11px", fontSize: 11.5, borderRadius: 12, cursor: "pointer", fontWeight: ordenPor === id ? 700 : 500, background: ordenPor === id ? "var(--primario)" : "var(--superficie)", color: ordenPor === id ? "var(--texto-inv)" : "var(--texto-sec)", border: ordenPor === id ? "none" : "0.5px solid var(--borde)" }}>{l}</button>
+              <button key={id} onClick={() => setOrdenPor(id)} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", borderRadius: 12, cursor: "pointer", fontWeight: ordenPor === id ? 700 : 500, background: ordenPor === id ? "var(--primario)" : "var(--superficie)", color: ordenPor === id ? "var(--texto-inv)" : "var(--texto-sec)", border: ordenPor === id ? "none" : "0.5px solid var(--borde)" }}>{l}</button>
             ))}
           </div>
 
           {ordenados.length === 0 && (
-            <div style={{ textAlign: "center", padding: "24px 16px", color: "var(--texto-ter)", fontSize: 13 }}>
+            <div style={{ textAlign: "center", padding: "24px 16px", color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>
               Aún no hay pacientes en este seguimiento.
             </div>
           )}
@@ -598,22 +598,22 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
                         {p.paciente || "Sin nombre"}{p.edad ? `, ${p.edad}a` : ""}{p.sexo ? ` · ${p.sexo}` : ""}
                       </div>
                       {(p.ficha_clinica || p.rut) && (
-                        <div style={{ fontSize: 10.5, color: "var(--texto-ter)", marginTop: 1 }}>
+                        <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: 1 }}>
                           {p.ficha_clinica ? `FC ${p.ficha_clinica}` : ""}{p.ficha_clinica && p.rut ? " · " : ""}{p.rut || ""}
                         </div>
                       )}
-                      {p.diagnostico && <div style={{ fontSize: 12.5, color: "var(--texto-sec)", marginTop: 3 }}>{p.diagnostico}</div>}
-                      <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginTop: 4 }}>
+                      {p.diagnostico && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginTop: 3 }}>{p.diagnostico}</div>}
+                      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 4 }}>
                         Último control: {fmt(p.ultimo_control)} · Próximo: <b style={{ color: e.color }}>{fmt(p.proximo_control)}</b>
                       </div>
-                      {p.hallazgos && <div style={{ fontSize: 11.5, color: "var(--texto-sec)", marginTop: 4, lineHeight: 1.45 }}>{p.hallazgos}</div>}
+                      {p.hallazgos && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 4, lineHeight: 1.45 }}>{p.hallazgos}</div>}
                     </div>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 9px", borderRadius: 10, flexShrink: 0, background: e.bg, color: e.color, whiteSpace: "nowrap" }}>{e.label}</span>
+                    <span style={{ fontSize: "var(--fs-xs)", fontWeight: 700, padding: "4px 9px", borderRadius: 10, flexShrink: 0, background: e.bg, color: e.color, whiteSpace: "nowrap" }}>{e.label}</span>
                   </div>
                   <div style={{ display: "flex", gap: 7, marginTop: 9, flexWrap: "wrap" }}>
-                    <button onClick={() => marcarControlado(p)} style={{ ...btnSec, padding: "6px 11px", fontSize: 11.5, color: "var(--exito)", borderColor: "var(--exito-borde)" }}>✓ Controlado hoy</button>
-                    <button onClick={() => { setFotos([]); setPacForm({ ...p, edad: p.edad != null ? String(p.edad) : "", paciente: p.paciente || "", ficha_clinica: p.ficha_clinica || "", rut: p.rut || "", diagnostico: p.diagnostico || "", hallazgos: p.hallazgos || "", notas: p.notas || "", texto_extraido: p.texto_extraido || "" }); }} style={{ ...btnSec, padding: "6px 11px", fontSize: 11.5 }}>✎ Editar</button>
-                    <button onClick={() => eliminarPaciente(p.id)} style={{ padding: "6px 10px", fontSize: 11.5, background: "none", border: "none", color: "var(--peligro)", cursor: "pointer" }}>🗑</button>
+                    <button onClick={() => marcarControlado(p)} style={{ ...btnSec, padding: "6px 11px", fontSize: "var(--fs-0)", color: "var(--exito)", borderColor: "var(--exito-borde)" }}>✓ Controlado hoy</button>
+                    <button onClick={() => { setFotos([]); setPacForm({ ...p, edad: p.edad != null ? String(p.edad) : "", paciente: p.paciente || "", ficha_clinica: p.ficha_clinica || "", rut: p.rut || "", diagnostico: p.diagnostico || "", hallazgos: p.hallazgos || "", notas: p.notas || "", texto_extraido: p.texto_extraido || "" }); }} style={{ ...btnSec, padding: "6px 11px", fontSize: "var(--fs-0)" }}>✎ Editar</button>
+                    <button onClick={() => eliminarPaciente(p.id)} style={{ padding: "6px 10px", fontSize: "var(--fs-0)", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer" }}>🗑</button>
                   </div>
                 </div>
               );
@@ -625,7 +625,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
       {/* ══════════ FORM DE PACIENTE ══════════ */}
       {pacForm && (
         <>
-          <button onClick={() => { setPacForm(null); setFotos([]); }} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
+          <button onClick={() => { setPacForm(null); setFotos([]); }} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: "var(--fs-2)", cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
           {fotos.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               {fotos.map((f, i) => <img key={i} src={f.dataUrl} alt={`página ${i + 1}`} style={{ height: 70, borderRadius: 6, border: "0.5px solid var(--borde)" }} />)}
@@ -644,7 +644,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
             <div style={{ gridColumn: "1 / -1" }}>{campo("Diagnóstico", <input style={inp} value={pacForm.diagnostico} onChange={(e) => setPacForm({ ...pacForm, diagnostico: e.target.value })} />)}</div>
             {campo("Último control / ingreso al protocolo", <input type="date" style={inp} value={pacForm.ultimo_control || ""} onChange={(e) => { const f = { ...pacForm, ultimo_control: e.target.value }; f.proximo_control = recalcularProximo(f); setPacForm(f); }} />)}
             {campo("Próximo control (se calcula solo)", <input type="date" style={inp} value={pacForm.proximo_control || ""} onChange={(e) => setPacForm({ ...pacForm, proximo_control: e.target.value })} />)}
-            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.45, marginTop: -4 }}>
+            <div style={{ gridColumn: "1 / -1", fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.45, marginTop: -4 }}>
               Si estás ingresando al paciente con su consentimiento informado, en «último control» va la <b>fecha de ingreso al protocolo</b>: desde ahí se cuenta el primer control.
             </div>
             <div style={{ gridColumn: "1 / -1" }}>{campo("Hallazgos / exámenes", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={pacForm.hallazgos} onChange={(e) => setPacForm({ ...pacForm, hallazgos: e.target.value })} placeholder="Marcadores, imágenes, PSA…" />)}</div>

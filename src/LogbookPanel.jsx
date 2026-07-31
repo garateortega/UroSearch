@@ -293,7 +293,7 @@ function BarrasHorizontales({ items, color = "var(--primario)" }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       {items.map((it) => (
         <div key={it.label}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-1)", marginBottom: 2 }}>
             <span style={{ color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{it.label}</span>
             <span style={{ color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{it.n}{it.extra ? ` · ${it.extra}` : ""}</span>
           </div>
@@ -302,7 +302,7 @@ function BarrasHorizontales({ items, color = "var(--primario)" }) {
           </div>
         </div>
       ))}
-      {items.length === 0 && <div style={{ fontSize: 12, color: "var(--texto-ter)" }}>Sin datos aún.</div>}
+      {items.length === 0 && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>Sin datos aún.</div>}
     </div>
   );
 }
@@ -320,7 +320,7 @@ function esOncologica(r) {
 // Muestra la mediana como línea de referencia. Útil para ver tiempos operatorios,
 // sangrado, etc. de un procedimiento y detectar la curva de aprendizaje.
 function Dispersion({ puntos, unidad = "min", color = "var(--primario)", mediana = null }) {
-  if (!puntos || puntos.length === 0) return <div style={{ fontSize: 12, color: "var(--texto-ter)" }}>Sin datos numéricos.</div>;
+  if (!puntos || puntos.length === 0) return <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>Sin datos numéricos.</div>;
   const W = 300, H = 120, padL = 30, padR = 8, padT = 10, padB = 18;
   const vals = puntos.map((p) => p.val);
   const maxV = Math.max(...vals), minV = Math.min(...vals);
@@ -833,17 +833,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   }, [registros, criterioMet]);
 
   // ─── Estilos compartidos ───
-  const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
-  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
+  const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 3, display: "block" };
   const btnPrim = { padding: "10px 18px", fontSize: 14, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
-  const btnSec = { padding: "10px 14px", fontSize: 13, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
+  const btnSec = { padding: "10px 14px", fontSize: "var(--fs-2)", background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
   const card = { border: "0.5px solid var(--borde)", borderRadius: 12, padding: "12px 14px", background: "var(--superficie)" };
   const kpi = { ...card, flex: "1 1 130px", textAlign: "center" };
   const campo = (etiqueta, hijo) => (<div><label style={lbl}>{etiqueta}</label>{hijo}</div>);
   const rolLabel = (r) => (ROLES.find(([id]) => id === r) || [r, r])[1];
   // Chip compacto para las métricas por cirugía
   const Chip = ({ label, val, ok, sub }) => (
-    <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 20, background: ok ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (ok ? "var(--exito-borde)" : "var(--borde)"), color: ok ? "var(--exito)" : "var(--texto-sec)", whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: "var(--fs-0)", padding: "3px 9px", borderRadius: 20, background: ok ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (ok ? "var(--exito-borde)" : "var(--borde)"), color: ok ? "var(--exito)" : "var(--texto-sec)", whiteSpace: "nowrap" }}>
       <span style={{ color: "var(--texto-ter)" }}>{label}:</span> <b style={{ color: ok ? "var(--exito)" : "var(--texto)" }}>{val}</b>
       {sub ? <span style={{ color: "var(--texto-ter)", marginLeft: 4, fontSize: 10 }}>({sub})</span> : null}
     </span>
@@ -963,7 +963,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", width: "100%", boxSizing: "border-box" }}>
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "14px 12px 40px" }}>
-      {error && <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: 13, background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>{error}</div>}
+      {error && <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: "var(--fs-2)", background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>{error}</div>}
 
       {/* ============ VISTA: NUEVA / EDITAR ============ */}
       {vista === "nueva" && (
@@ -982,13 +982,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 <>
                   <div style={{ fontSize: 30, marginBottom: 6 }}>📷</div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Fotografía o sube los protocolos operatorios</div>
-                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente (hasta 6 imágenes por lote).</div>
+                  <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente (hasta 6 imágenes por lote).</div>
                   {/* Toggle: cada foto es una cirugía distinta, o todas son la misma */}
                   <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10, flexWrap: "wrap" }}>
                     {[["distintas", "📸 Cada foto = una cirugía"], ["misma", "📄 Varias fotos = misma cirugía"]].map(([id, label]) => {
                       const on = modoFotos === id;
                       return (
-                        <button key={id} onClick={() => setModoFotos(id)} style={{ padding: "6px 11px", fontSize: 11.5, fontWeight: on ? 700 : 500, borderRadius: 18, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
+                        <button key={id} onClick={() => setModoFotos(id)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: on ? 700 : 500, borderRadius: 18, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
                       );
                     })}
                   </div>
@@ -1007,12 +1007,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           )}
 
           {extraidoOk && (
-            <div style={{ padding: "9px 12px", fontSize: 13, background: "var(--exito-bg)", border: "1px solid var(--exito)", borderRadius: 8, color: "var(--exito)" }}>
+            <div style={{ padding: "9px 12px", fontSize: "var(--fs-2)", background: "var(--exito-bg)", border: "1px solid var(--exito)", borderRadius: 8, color: "var(--exito)" }}>
               ✓ Datos extraídos del protocolo. Revísalos y corrige lo que falte antes de guardar.
             </div>
           )}
           {colaTotal > 1 && (
-            <div style={{ padding: "9px 12px", fontSize: 13, background: "var(--primario-bg, var(--superficie))", border: "1px solid var(--primario)", borderRadius: 8, color: "var(--primario)", fontWeight: 600 }}>
+            <div style={{ padding: "9px 12px", fontSize: "var(--fs-2)", background: "var(--primario-bg, var(--superficie))", border: "1px solid var(--primario)", borderRadius: 8, color: "var(--primario)", fontWeight: 600 }}>
               🗂 Cirugía {colaTotal - cola.length} de {colaTotal} · al guardar pasas a la siguiente.
             </div>
           )}
@@ -1063,12 +1063,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
             {/* Complemento posterior: biopsia / control imagenológico (colapsable) */}
             <div style={{ gridColumn: "1 / -1", marginTop: 2 }}>
-              <button type="button" onClick={() => setComplementoOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--primario)" }}>
+              <button type="button" onClick={() => setComplementoOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--primario)" }}>
                 🔬 Complementar después (biopsia / control) {complementoOpen ? "▴" : "▾"}
               </button>
               {complementoOpen && (
                 <div style={{ marginTop: 8, padding: "10px 12px", border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-                  <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--texto-ter)", lineHeight: 1.4 }}>Puedes dejar esto vacío ahora y editarlo cuando llegue la biopsia o el control con imagen (p.ej. para saber si quedó <i>stone free</i>).</div>
+                  <div style={{ gridColumn: "1 / -1", fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.4 }}>Puedes dejar esto vacío ahora y editarlo cuando llegue la biopsia o el control con imagen (p.ej. para saber si quedó <i>stone free</i>).</div>
                   {campo("Resultado de biopsia", <input style={inp} value={reg.biopsia_resultado} onChange={(e) => set("biopsia_resultado", e.target.value)} placeholder="Ej: Adenocarcinoma acinar" />)}
                   {campo("ISUP (si aplica)", (
                     <select style={inp} value={reg.biopsia_isup} onChange={(e) => set("biopsia_isup", e.target.value)}>
@@ -1091,17 +1091,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             {/* Complicación: NO aparece de entrada; se agrega con este botón */}
             <div style={{ gridColumn: "1 / -1" }}>
               {!reg.complicacion ? (
-                <button type="button" onClick={() => set("complicacion", true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--texto-sec)" }}>
+                <button type="button" onClick={() => set("complicacion", true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--texto-sec)" }}>
                   ⚠️ Agregar complicación
                 </button>
               ) : (
                 <div style={{ padding: "10px 12px", border: "0.5px solid var(--peligro)", borderRadius: 10, background: "var(--peligro-bg)", display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--peligro)" }}>⚠️ Complicación</span>
+                    <span style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--peligro)" }}>⚠️ Complicación</span>
                     <select style={{ ...inp, width: "auto" }} value={reg.clavien} onChange={(e) => set("clavien", e.target.value)}>
                       {CLAVIEN.map((c) => <option key={c} value={c}>{c ? `Clavien-Dindo ${c}` : "Clavien-Dindo…"}</option>)}
                     </select>
-                    <button type="button" onClick={() => { set("complicacion", false); set("clavien", ""); set("detalles_complicacion", ""); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Quitar</button>
+                    <button type="button" onClick={() => { set("complicacion", false); set("clavien", ""); set("detalles_complicacion", ""); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)", fontWeight: 600 }}>Quitar</button>
                   </div>
                   {campo("Detalle de la complicación", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.detalles_complicacion} onChange={(e) => set("detalles_complicacion", e.target.value)} />)}
                 </div>
@@ -1122,7 +1122,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       {/* ─── Métricas que otros me compartieron ─── */}
       {vista === "lista" && recibidos.length > 0 && (
         <div style={{ ...card, marginBottom: 12, borderLeft: "3px solid var(--primario)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>🔗 Compartido conmigo ({recibidos.length})</div>
+          <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>🔗 Compartido conmigo ({recibidos.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {recibidos.map((r) => {
               const abierto = recibidoAbierto === r.id;
@@ -1130,15 +1130,15 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 <div key={r.id} style={{ border: "0.5px solid var(--borde)", borderRadius: 8, padding: "9px 11px", background: "var(--fondo-suave)" }}>
                   <div onClick={() => setRecibidoAbierto(abierto ? null : r.id)} style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{r.de_nombre || "Un colega"}</div>
-                      <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>
+                      <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>{r.de_nombre || "Un colega"}</div>
+                      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>
                         {r.tipo === "metricas" ? "📊 Métricas" : "📋 Registros"} · {new Date(r.created_at).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
                       </div>
                     </div>
-                    <span style={{ fontSize: 12, color: "var(--primario)", flexShrink: 0 }}>{abierto ? "▴ Ocultar" : "▾ Ver"}</span>
+                    <span style={{ fontSize: "var(--fs-1)", color: "var(--primario)", flexShrink: 0 }}>{abierto ? "▴ Ocultar" : "▾ Ver"}</span>
                   </div>
                   {abierto && (
-                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "0.5px solid var(--borde)", fontSize: 12, color: "var(--texto)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "0.5px solid var(--borde)", fontSize: "var(--fs-1)", color: "var(--texto)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
                       {r.contenido}
                     </div>
                   )}
@@ -1165,7 +1165,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             {registros.length > 0 && <button onClick={exportarCSV} style={btnSec}>⬇ CSV</button>}
           </div>
 
-          {cargando && <div style={{ fontSize: 13, color: "var(--texto-sec)", textAlign: "center", padding: 20 }}>Cargando registros…</div>}
+          {cargando && <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", textAlign: "center", padding: 20 }}>Cargando registros…</div>}
 
           {!cargando && filtrados.length === 0 && (
             <div style={{ ...card, textAlign: "center", padding: "26px 14px" }}>
@@ -1181,7 +1181,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>
                     {r.procedimiento}{r.lateralidad ? ` (${r.lateralidad.toLowerCase()})` : ""}
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--texto-sec)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span>📅 {r.fecha}</span>
                     {r.iniciales && <span>👤 {r.iniciales}{r.edad != null ? `, ${r.edad}a` : ""}</span>}
                     {r.ficha_clinica && <span>FC {r.ficha_clinica}</span>}
@@ -1202,7 +1202,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               </div>
 
               {abierto === r.id && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--borde)", fontSize: 12.5, color: "var(--texto)", display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--borde)", fontSize: "var(--fs-1)", color: "var(--texto)", display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>
                   {r.categoria && <div><b>Categoría:</b> {r.categoria}</div>}
                   {r.diagnostico_pre && <div><b>Dg. preop:</b> {r.diagnostico_pre}</div>}
                   {r.diagnostico_post && <div><b>Dg. postop:</b> {r.diagnostico_post}</div>}
@@ -1217,9 +1217,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {r.detalles_complicacion && <div style={{ color: "var(--peligro)" }}><b>Complicación:</b> {r.detalles_complicacion}</div>}
                   {r.observaciones && <div><b>Obs:</b> {r.observaciones}</div>}
                   <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                    {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ ...btnSec, padding: "6px 12px", fontSize: 12 }}>🖼 Ver protocolo</button>}
-                    <button onClick={() => empezarEdicion(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: 12 }}>✏️ Editar</button>
-                    <button onClick={() => eliminar(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: 12, color: "var(--peligro)" }}>🗑 Eliminar</button>
+                    {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>🖼 Ver protocolo</button>}
+                    <button onClick={() => empezarEdicion(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>✏️ Editar</button>
+                    <button onClick={() => eliminar(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)", color: "var(--peligro)" }}>🗑 Eliminar</button>
                   </div>
                 </div>
               )}
@@ -1236,7 +1236,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             {[["todas", "Todas"], ["onco", "Oncológicas"], ["noonco", "No oncológicas"]].map(([id, label]) => {
               const on = criterioMet === id;
               return (
-                <button key={id} onClick={() => { setCriterioMet(id); setProcAbierto(null); setResumenIA(""); }} style={{ padding: "6px 12px", fontSize: 12, fontWeight: on ? 700 : 500, borderRadius: 20, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>
+                <button key={id} onClick={() => { setCriterioMet(id); setProcAbierto(null); setResumenIA(""); }} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", fontWeight: on ? 700 : 500, borderRadius: 20, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>
                   {label}{id === "onco" ? ` (${met.onco})` : ""}
                 </button>
               );
@@ -1245,41 +1245,41 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.total}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Cirugías registradas</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Cirugías registradas</div>
             </div>
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--exito)" }}>{met.comoCirujano}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Como cirujano principal{met.total > 0 ? ` (${Math.round((met.comoCirujano / met.total) * 100)}%)` : ""}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como cirujano principal{met.total > 0 ? ` (${Math.round((met.comoCirujano / met.total) * 100)}%)` : ""}</div>
             </div>
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.comoAyudante}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
             </div>
             <div style={{ ...kpi, minWidth: 180 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--primario)", lineHeight: 1.25 }}>{met.masFrecuente ? met.masFrecuente.label : "—"}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)", marginTop: 3 }}>Procedimiento más frecuente{met.masFrecuente ? ` (${met.masFrecuente.n})` : ""}</div>
+              <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--primario)", lineHeight: 1.25 }}>{met.masFrecuente ? met.masFrecuente.label : "—"}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 3 }}>Procedimiento más frecuente{met.masFrecuente ? ` (${met.masFrecuente.n})` : ""}</div>
             </div>
           </div>
 
           <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 8 }}>
+            <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 8 }}>
               Volumen mensual (últimos 12 meses)
-              <span style={{ fontSize: 11, fontWeight: 400, color: "var(--texto-ter)", marginLeft: 8 }}>■ como cirujano · <span style={{ opacity: 0.4 }}>■</span> total</span>
+              <span style={{ fontSize: "var(--fs-0)", fontWeight: 400, color: "var(--texto-ter)", marginLeft: 8 }}>■ como cirujano · <span style={{ opacity: 0.4 }}>■</span> total</span>
             </div>
             <BarrasMensuales datos={met.meses} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes</div>
               <BarrasHorizontales items={met.topProc} />
             </div>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento</div>
               <BarrasHorizontales items={met.ayudantiasPorProc} color="var(--alerta)" />
             </div>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
               <BarrasHorizontales items={met.cats} color="var(--exito)" />
             </div>
           </div>
@@ -1287,12 +1287,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           {/* Métricas por cirugía: colapsadas; cada procedimiento se despliega y muestra su gráfico */}
           <div style={card}>
             <button onClick={() => setMetPorCxOpen((o) => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>Métricas por cirugía {met.detalleProc.length > 0 ? `(${met.detalleProc.length})` : ""}</span>
+              <span style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>Métricas por cirugía {met.detalleProc.length > 0 ? `(${met.detalleProc.length})` : ""}</span>
               <span style={{ fontSize: 14, color: "var(--primario)" }}>{metPorCxOpen ? "▴" : "▾"}</span>
             </button>
             {metPorCxOpen && (
               met.detalleProc.length === 0 ? (
-                <div style={{ fontSize: 12, color: "var(--texto-ter)", marginTop: 10 }}>Sin datos aún.</div>
+                <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginTop: 10 }}>Sin datos aún.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                   {met.detalleProc.map((d) => {
@@ -1300,8 +1300,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     return (
                       <div key={d.label} style={{ border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--fondo-suave)", overflow: "hidden" }}>
                         <button onClick={() => setProcAbierto(abierto ? null : d.label)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{d.label}</span>
-                          <span style={{ fontSize: 12, color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{d.n} cx {abierto ? "▴" : "▾"}</span>
+                          <span style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>{d.label}</span>
+                          <span style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{d.n} cx {abierto ? "▴" : "▾"}</span>
                         </button>
                         {abierto && (
                           <div style={{ padding: "0 12px 12px" }}>
@@ -1317,11 +1317,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                             </div>
                             {d.durCasos.length > 0 ? (
                               <div>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 2 }}>Tiempo operatorio por cirugía (orden cronológico)</div>
+                                <div style={{ fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 2 }}>Tiempo operatorio por cirugía (orden cronológico)</div>
                                 <Dispersion puntos={d.durCasos} unidad="min" mediana={d.dur ? d.dur.med : null} />
                               </div>
                             ) : (
-                              <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>Sin tiempos operatorios registrados para graficar.</div>
+                              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Sin tiempos operatorios registrados para graficar.</div>
                             )}
                           </div>
                         )}
@@ -1336,12 +1336,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           {/* Resumen escrito por la IA */}
           <div style={card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: resumenIA || resumenError ? 8 : 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>🧠 Resumen de la casuística</span>
-              <button onClick={generarResumenIA} disabled={resumenCargando || met.total === 0} style={{ ...btnSec, padding: "6px 12px", fontSize: 12, opacity: resumenCargando || met.total === 0 ? 0.6 : 1 }}>{resumenCargando ? "Generando…" : resumenIA ? "↻ Regenerar" : "Generar resumen"}</button>
+              <span style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>🧠 Resumen de la casuística</span>
+              <button onClick={generarResumenIA} disabled={resumenCargando || met.total === 0} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)", opacity: resumenCargando || met.total === 0 ? 0.6 : 1 }}>{resumenCargando ? "Generando…" : resumenIA ? "↻ Regenerar" : "Generar resumen"}</button>
             </div>
-            {resumenError && <div style={{ fontSize: 12, color: "var(--peligro)" }}>{resumenError}</div>}
-            {resumenIA && <div style={{ fontSize: 13, color: "var(--texto)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resumenIA}</div>}
-            {!resumenIA && !resumenError && !resumenCargando && <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>La IA analiza tus medianas y conteos (no envía fotos) y escribe conclusiones sobre este logbook. Consume muy pocos tokens.</div>}
+            {resumenError && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)" }}>{resumenError}</div>}
+            {resumenIA && <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resumenIA}</div>}
+            {!resumenIA && !resumenError && !resumenCargando && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>La IA analiza tus medianas y conteos (no envía fotos) y escribe conclusiones sobre este logbook. Consume muy pocos tokens.</div>}
           </div>
 
           {registros.length > 0 && (
@@ -1356,7 +1356,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       {/* ─── Aviso: cirugía agregada al logbook de compañeros ─── */}
       {compartidoMsg && (
         <div style={{ position: "fixed", left: 0, right: 0, bottom: 18, zIndex: 1100, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-          <div style={{ background: "var(--exito-bg, var(--superficie))", border: "1px solid var(--exito)", color: "var(--exito)", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 600, boxShadow: "0 8px 20px rgba(0,0,0,0.2)", maxWidth: "90%" }}>{compartidoMsg}</div>
+          <div style={{ background: "var(--exito-bg, var(--superficie))", border: "1px solid var(--exito)", color: "var(--exito)", borderRadius: 10, padding: "9px 14px", fontSize: "var(--fs-2)", fontWeight: 600, boxShadow: "0 8px 20px rgba(0,0,0,0.2)", maxWidth: "90%" }}>{compartidoMsg}</div>
         </div>
       )}
 
@@ -1379,7 +1379,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             {/* Qué compartir */}
             <div style={{ display: "flex", gap: 6, margin: "10px 0 14px" }}>
               {[["registros", "📋 Registros"], ["metricas", "📊 Métricas"]].map(([id, label]) => (
-                <button key={id} onClick={() => setCompartirQue(id)} style={{ flex: 1, padding: "8px", fontSize: 12.5, fontWeight: 600, borderRadius: 8, cursor: "pointer", border: compartirQue === id ? "none" : "0.5px solid var(--borde)", background: compartirQue === id ? "var(--primario)" : "var(--superficie)", color: compartirQue === id ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
+                <button key={id} onClick={() => setCompartirQue(id)} style={{ flex: 1, padding: "8px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: compartirQue === id ? "none" : "0.5px solid var(--borde)", background: compartirQue === id ? "var(--primario)" : "var(--superficie)", color: compartirQue === id ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
               ))}
             </div>
 
@@ -1396,21 +1396,21 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <label style={{ ...lbl, marginBottom: 0 }}>Personas</label>
                   {miembrosCompartir.length > 0 && (
-                    <button onClick={() => setDestinatarios(destinatarios.length === miembrosCompartir.length ? [] : miembrosCompartir.map(m => m.id))} style={{ background: "none", border: "none", color: "var(--primario)", fontSize: 11.5, cursor: "pointer", fontWeight: 600 }}>
+                    <button onClick={() => setDestinatarios(destinatarios.length === miembrosCompartir.length ? [] : miembrosCompartir.map(m => m.id))} style={{ background: "none", border: "none", color: "var(--primario)", fontSize: "var(--fs-0)", cursor: "pointer", fontWeight: 600 }}>
                       {destinatarios.length === miembrosCompartir.length ? "Ninguno" : "Todo el equipo"}
                     </button>
                   )}
                 </div>
                 {miembrosCompartir.length === 0 ? (
-                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 12 }}>Este equipo no tiene otros miembros.</div>
+                  <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 12 }}>Este equipo no tiene otros miembros.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
                     {miembrosCompartir.map((m) => {
                       const on = destinatarios.includes(m.id);
                       return (
                         <div key={m.id} onClick={() => setDestinatarios(on ? destinatarios.filter(x => x !== m.id) : [...destinatarios, m.id])} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
-                          <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
-                          <span style={{ fontSize: 13, color: "var(--texto)" }}>{m.nombre}</span>
+                          <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on ? "var(--exito)" : "var(--borde)"), background: on ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: "var(--fs-1)", display: "flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>
+                          <span style={{ fontSize: "var(--fs-2)", color: "var(--texto)" }}>{m.nombre}</span>
                         </div>
                       );
                     })}
@@ -1419,7 +1419,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               </>
             )}
 
-            {compartirMsg && <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: compartirMsg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: compartirMsg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (compartirMsg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{compartirMsg}</div>}
+            {compartirMsg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: compartirMsg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: compartirMsg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (compartirMsg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{compartirMsg}</div>}
 
             <button onClick={enviarCompartir} disabled={compartiendo || destinatarios.length === 0} style={{ ...btnPrim, width: "100%", opacity: (compartiendo || destinatarios.length === 0) ? 0.6 : 1 }}>
               {compartiendo ? "Compartiendo…" : `Compartir ${compartirQue === "metricas" ? "métricas" : "registros"}`}

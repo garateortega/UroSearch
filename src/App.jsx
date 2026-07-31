@@ -502,6 +502,14 @@ const ICONO_SUBTAB = {
 };
 // Quita el emoji/símbolo inicial de una etiqueta ("💊 Recetas" → "Recetas").
 const _soloTexto = (s) => (s || "").replace(/^[^A-Za-zÀ-ÿ0-9]+\s*/, "");
+// Íconos para botones sueltos del submenú (extras / contexto), mapeados por su emoji líder.
+const ICONO_POR_EMOJI = {
+  "🌐": "web", "🔗": "compartir", "👥": "equipo", "👤": "pacientes",
+  "📊": "metricas", "📷": "foto", "🔔": "notificacion", "⚙️": "config",
+  "🎬": "videos", "📄": "notas", "➕": "nuevo", "🛠️": "config",
+};
+const _emojiLider = (s) => { const m = (s || "").match(/^(\p{Extended_Pictographic}(?:\uFE0F)?)/u); return m ? m[1] : null; };
+const _icoDeLabel = (s) => { const e = _emojiLider(s); return e ? ICONO_POR_EMOJI[e] || null : null; };
 
 // Sirve para que un panel vuelva a donde estabas si sales y regresas a la app.
 function usePersistedState(clave, inicial) {
@@ -11972,20 +11980,27 @@ if (!currentUser) {
               );
             })}
             {submenu.extras.length > 0 && <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>}
-            {submenu.extras.map(([label,fn]) => (
-              <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
-                {label}
-              </button>
-            ))}
+            {submenu.extras.map(([label,fn]) => {
+              const ico = _icoDeLabel(label);
+              return (
+                <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
+                  {ico ? <Ico name={ico} size={18}/> : null}
+                  <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
+                </button>
+              );
+            })}
             {submenu.contexto && (
               <>
                 <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>
                 <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>Viendo: {equipoActualNombre}</div>
                 {submenu.contexto.opciones.map(([id,label]) => {
                   const activo = submenu.contexto.actual === id;
+                  const ico = _icoDeLabel(label);
                   return (
-                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
-                      {label}{activo ? "  ✓" : ""}
+                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500,display:"flex",alignItems:"center",gap:10}}>
+                      {ico ? <Ico name={ico} size={17}/> : null}
+                      <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
+                      {activo ? <span style={{color:"var(--primario)"}}>✓</span> : null}
                     </button>
                   );
                 })}

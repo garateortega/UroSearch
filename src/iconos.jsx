@@ -49,6 +49,8 @@ const PATHS = {
   mas: <><path d="M12 5v14M5 12h14" {...P} /></>,
   excel: <><rect x="4" y="3" width="16" height="18" rx="2" {...P} /><path d="M9 8l6 8M15 8l-6 8" {...P} /></>,
   foto: <><rect x="3" y="6" width="18" height="14" rx="2" {...P} /><circle cx="12" cy="13" r="3.5" {...P} /><path d="M8 6l1.5-2h5L16 6" {...P} /></>,
+  web: <><circle cx="12" cy="12" r="9" {...P} /><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" {...P} /></>,
+  compartir: <><circle cx="6" cy="12" r="2.5" {...P} /><circle cx="17" cy="6" r="2.5" {...P} /><circle cx="17" cy="18" r="2.5" {...P} /><path d="M8.2 10.8l6.6-3.6M8.2 13.2l6.6 3.6" {...P} /></>,
 };
 
 export function Ico({ name, size = 20, style, ...rest }) {

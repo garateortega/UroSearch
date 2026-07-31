@@ -332,22 +332,22 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
   };
 
   // ─── Estilos ───
-  const inp = { width: "100%", padding: "9px 11px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", boxSizing: "border-box" };
-  const lbl = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4 };
-  const btnPrim = { padding: "9px 16px", fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
-  const btnSec = { padding: "9px 14px", fontSize: 12.5, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
+  const inp = { width: "100%", padding: "9px 11px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", outline: "none", boxSizing: "border-box" };
+  const lbl = { display: "block", fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4 };
+  const btnPrim = { padding: "9px 16px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
+  const btnSec = { padding: "9px 14px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
   const card = { background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "12px" };
   const campo = (etiqueta, hijo) => (<div><label style={lbl}>{etiqueta}</label>{hijo}</div>);
   const colorPrio = { urgente: "var(--peligro)", normal: "var(--alerta)", electiva: "var(--exito)" };
 
   const Barras = ({ items, color = "var(--primario)" }) => {
-    if (!items || items.length === 0) return <div style={{ fontSize: 12, color: "var(--texto-ter)" }}>Sin datos.</div>;
+    if (!items || items.length === 0) return <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>Sin datos.</div>;
     const max = Math.max(...items.map((i) => i.n));
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {items.slice(0, 8).map((i) => (
           <div key={i.label}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--texto)", marginBottom: 3, gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-0)", color: "var(--texto)", marginBottom: 3, gap: 8 }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.label}</span>
               <span style={{ fontWeight: 700, color: "var(--texto-sec)", flexShrink: 0 }}>{i.n}</span>
             </div>
@@ -372,7 +372,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
 
   return (
     <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
-      {error && <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: 13, background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>{error}</div>}
+      {error && <div style={{ padding: "9px 12px", marginBottom: 10, fontSize: "var(--fs-2)", background: "var(--peligro-bg)", border: "1px solid var(--peligro)", borderRadius: 8, color: "var(--peligro)" }}>{error}</div>}
 
       {/* ============ LISTA ============ */}
       {vista === "lista" && (
@@ -392,38 +392,38 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
               <>
                 <div style={{ fontSize: 28, marginBottom: 6 }}>📄</div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Archiva una interconsulta</div>
-                <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>Fotografíala o súbela: la IA lee el contenido y completa los campos para que solo revises.</div>
+                <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 10 }}>Fotografíala o súbela: la IA lee el contenido y completa los campos para que solo revises.</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                   <button onClick={() => inputCamaraRef.current?.click()} style={btnPrim}>📸 Tomar foto</button>
                   <button onClick={() => inputGaleriaRef.current?.click()} style={btnSec}>🖼 Galería / archivos</button>
                   <button onClick={() => { resetForm(); setVista("nueva"); }} style={btnSec}>✍️ A mano</button>
                 </div>
-                <button onClick={() => setMostrarCaptura(false)} style={{ background: "none", border: "none", color: "var(--texto-ter)", fontSize: 12, cursor: "pointer", marginTop: 10 }}>Cancelar</button>
+                <button onClick={() => setMostrarCaptura(false)} style={{ background: "none", border: "none", color: "var(--texto-ter)", fontSize: "var(--fs-1)", cursor: "pointer", marginTop: 10 }}>Cancelar</button>
               </>
             )}
           </div>
 
           <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
             {[["todas", "Todas"], ["pendiente", "Pendientes"], ["resuelta", "Resueltas"]].map(([id, label]) => (
-              <button key={id} onClick={() => setFiltro(id)} style={{ padding: "6px 12px", fontSize: 12, borderRadius: 14, cursor: "pointer", fontWeight: filtro === id ? 700 : 500, background: filtro === id ? "var(--primario)" : "var(--superficie)", color: filtro === id ? "var(--texto-inv)" : "var(--texto-sec)", border: filtro === id ? "none" : "0.5px solid var(--borde)" }}>{label}</button>
+              <button key={id} onClick={() => setFiltro(id)} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", borderRadius: 14, cursor: "pointer", fontWeight: filtro === id ? 700 : 500, background: filtro === id ? "var(--primario)" : "var(--superficie)", color: filtro === id ? "var(--texto-inv)" : "var(--texto-sec)", border: filtro === id ? "none" : "0.5px solid var(--borde)" }}>{label}</button>
             ))}
-            <span style={{ fontSize: 11, color: "var(--texto-ter)", marginLeft: "auto" }}>{filtradas.length} de {lista.length}</span>
+            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginLeft: "auto" }}>{filtradas.length} de {lista.length}</span>
           </div>
 
           {/* Buscar por fecha (rango, opcional) */}
           <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>📅 Fecha:</span>
-            <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} aria-label="Desde" style={{ padding: "5px 8px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }} />
-            <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>—</span>
-            <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} aria-label="Hasta" style={{ padding: "5px 8px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }} />
+            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>📅 Fecha:</span>
+            <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} aria-label="Desde" style={{ padding: "5px 8px", fontSize: "var(--fs-1)", borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }} />
+            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>—</span>
+            <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} aria-label="Hasta" style={{ padding: "5px 8px", fontSize: "var(--fs-1)", borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }} />
             {(fechaDesde || fechaHasta) && (
-              <button onClick={() => { setFechaDesde(""); setFechaHasta(""); }} style={{ padding: "5px 10px", fontSize: 11, borderRadius: 14, cursor: "pointer", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)" }}>✕ Limpiar</button>
+              <button onClick={() => { setFechaDesde(""); setFechaHasta(""); }} style={{ padding: "5px 10px", fontSize: "var(--fs-0)", borderRadius: 14, cursor: "pointer", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)" }}>✕ Limpiar</button>
             )}
           </div>
 
-          {cargando && <div style={{ textAlign: "center", padding: 24, color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div>}
+          {cargando && <div style={{ textAlign: "center", padding: 24, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div>}
           {!cargando && filtradas.length === 0 && (
-            <div style={{ textAlign: "center", padding: "26px 16px", color: "var(--texto-ter)", fontSize: 13, lineHeight: 1.6 }}>
+            <div style={{ textAlign: "center", padding: "26px 16px", color: "var(--texto-ter)", fontSize: "var(--fs-2)", lineHeight: 1.6 }}>
               No hay interconsultas archivadas.<br />Fotografía la primera para empezar a acumular tu casuística.
             </div>
           )}
@@ -437,11 +437,11 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>{r.motivo || r.diagnostico || "Interconsulta"}</div>
-                        <div style={{ fontSize: 11.5, color: "var(--texto-sec)", marginTop: 2 }}>
+                        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 2 }}>
                           📅 {r.fecha}{r.servicio_solicitante ? ` · ${r.servicio_solicitante}` : ""}{r.paciente ? ` · ${r.paciente}` : ""}
                         </div>
                         {(r.ficha_clinica || r.rut) && (
-                          <div style={{ fontSize: 10.5, color: "var(--texto-ter)", marginTop: 1 }}>
+                          <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: 1 }}>
                             {r.ficha_clinica ? `FC ${r.ficha_clinica}` : ""}{r.ficha_clinica && r.rut ? " · " : ""}{r.rut || ""}
                           </div>
                         )}
@@ -452,7 +452,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
                     </div>
                   </div>
                   {abierto && (
-                    <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--texto)", lineHeight: 1.5, display: "flex", flexDirection: "column", gap: 3 }}>
+                    <div style={{ marginTop: 8, fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.5, display: "flex", flexDirection: "column", gap: 3 }}>
                       {r.edad != null && <div><b>Paciente:</b> {r.edad} años{r.sexo ? ` · ${r.sexo}` : ""}</div>}
                       {(r.servicio || r.cama) && <div><b>Ubicación:</b> {[r.servicio, r.cama ? `cama ${r.cama}` : ""].filter(Boolean).join(" · ")}</div>}
                       {r.medico_solicitante && <div><b>Solicita:</b> {r.medico_solicitante}</div>}
@@ -461,14 +461,14 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
                       {r.conducta && <div><b>Conducta:</b> {r.conducta}</div>}
                       {r.texto_extraido && (
                         <details style={{ marginTop: 4 }}>
-                          <summary style={{ fontSize: 11.5, color: "var(--texto-ter)", cursor: "pointer" }}>Ver texto leído del documento</summary>
-                          <div style={{ fontSize: 11.5, color: "var(--texto-sec)", whiteSpace: "pre-wrap", marginTop: 4, lineHeight: 1.45 }}>{r.texto_extraido}</div>
+                          <summary style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", cursor: "pointer" }}>Ver texto leído del documento</summary>
+                          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", whiteSpace: "pre-wrap", marginTop: 4, lineHeight: 1.45 }}>{r.texto_extraido}</div>
                         </details>
                       )}
                       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                         <button onClick={() => alternarEstado(r)} style={{ ...btnSec, padding: "6px 12px" }}>{r.estado === "resuelta" ? "Marcar pendiente" : "✓ Marcar resuelta"}</button>
                         <button onClick={() => editar(r)} style={{ ...btnSec, padding: "6px 12px" }}>✎ Editar</button>
-                        <button onClick={() => eliminar(r.id)} style={{ padding: "6px 12px", fontSize: 12, background: "none", border: "none", color: "var(--peligro)", cursor: "pointer" }}>🗑</button>
+                        <button onClick={() => eliminar(r.id)} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer" }}>🗑</button>
                       </div>
                     </div>
                   )}
@@ -482,7 +482,7 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
       {/* ============ NUEVA / EDITAR ============ */}
       {vista === "nueva" && (
         <>
-          <button onClick={() => { resetForm(); setVista("lista"); }} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
+          <button onClick={() => { resetForm(); setVista("lista"); }} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: "var(--fs-2)", cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
           {fotos.length > 0 && (
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               {fotos.map((f, i) => <img key={i} src={f.dataUrl} alt={`página ${i + 1}`} style={{ height: 70, borderRadius: 6, border: "0.5px solid var(--borde)" }} />)}
@@ -532,29 +532,29 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
       {/* ============ MÉTRICAS ============ */}
       {vista === "metricas" && (
         <>
-          <button onClick={() => setVista("lista")} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: 13, cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
+          <button onClick={() => setVista("lista")} style={{ background: "none", border: "none", color: "var(--texto-sec)", fontSize: "var(--fs-2)", cursor: "pointer", marginBottom: 12, padding: 0 }}>← Volver</button>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
             <div style={{ ...card, flex: "1 1 110px" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.total}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Interconsultas</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Interconsultas</div>
             </div>
             <div style={{ ...card, flex: "1 1 110px" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--exito)" }}>{met.resueltas}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Resueltas{met.total ? ` (${Math.round((met.resueltas / met.total) * 100)}%)` : ""}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Resueltas{met.total ? ` (${Math.round((met.resueltas / met.total) * 100)}%)` : ""}</div>
             </div>
             <div style={{ ...card, flex: "1 1 110px" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--alerta)" }}>{met.pendientes}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Pendientes</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Pendientes</div>
             </div>
             <div style={{ ...card, flex: "1 1 110px" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.edadProm ?? "—"}</div>
-              <div style={{ fontSize: 11, color: "var(--texto-sec)" }}>Edad promedio</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Edad promedio</div>
             </div>
           </div>
 
           {met.meses.length > 0 && (
             <div style={{ ...card, marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 8 }}>Volumen por mes</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 8 }}>Volumen por mes</div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 90 }}>
                 {met.meses.map((m) => {
                   const max = Math.max(...met.meses.map((x) => x.n));
@@ -572,19 +572,19 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Servicio solicitante</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Servicio solicitante</div>
               <Barras items={met.servicios} />
             </div>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Motivos más frecuentes</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Motivos más frecuentes</div>
               <Barras items={met.motivos} color="var(--exito)" />
             </div>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Diagnósticos</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Diagnósticos</div>
               <Barras items={met.diagnosticos} color="var(--alerta)" />
             </div>
             <div style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Prioridad</div>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Prioridad</div>
               <Barras items={met.prioridades} color="var(--peligro)" />
             </div>
           </div>
