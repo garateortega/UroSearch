@@ -12,6 +12,7 @@ import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
 import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
 import { guardarSnapshot, leerSnapshot } from "./offlineCache";
+import { Ico } from "./iconos";
 import { encolar, procesarCola, pendientesCount } from "./offlineQueue";
 
 // ============================================================
@@ -488,6 +489,31 @@ function useConfig() {
 }
 const fnOculta = (cfg, id) => Array.isArray(cfg?.ocultas) && cfg.ocultas.includes(id);
 
+// ─── Íconos SVG por id de subpestaña (para el submenú de cada sección) ───
+const ICONO_SUBTAB = {
+  // Hospital
+  pacientes: "pacientes", tabla: "tabla", notas: "notas", prescripciones: "recetas",
+  interconsultas: "interconsultas", seguimiento: "seguimiento", comites: "comites", ingresos: "ingresos",
+  // Biblioteca
+  cirugias: "cirugias", videos: "videos", preguntas: "preguntas", medicamentos: "medicamentos",
+  protocolos: "protocolos", scores: "scores", documentos: "notas",
+  // Logbook
+  lista: "logbook", nueva: "foto", metricas: "metricas",
+};
+// Quita el emoji/símbolo inicial de una etiqueta ("💊 Recetas" → "Recetas").
+const _soloTexto = (s) => (s || "").replace(/^[^A-Za-zÀ-ÿ0-9]+\s*/, "");
+
+// Sirve para que un panel vuelva a donde estabas si sales y regresas a la app.
+function usePersistedState(clave, inicial) {
+  const [val, setVal] = useState(() => {
+    try { const raw = localStorage.getItem(clave); return raw != null ? JSON.parse(raw) : inicial; } catch { return inicial; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(clave, JSON.stringify(val)); } catch {}
+  }, [clave, val]);
+  return [val, setVal];
+}
+
 // Si se apaga una pestaña principal pero se deja activa alguna de sus secciones,
 // esa sección se muestra como pestaña propia (así no queda inalcanzable).
 const SUBFUNCIONES_PROMOVIBLES = {
@@ -498,7 +524,7 @@ const SUBFUNCIONES_PROMOVIBLES = {
   "biblio:videos":       { padre: "conocimiento", sub: "videos",         label: "📚 Videos" },
   "biblio:preguntas":    { padre: "conocimiento", sub: "preguntas",      label: "❓ Preguntas" },
   "biblio:medicamentos": { padre: "conocimiento", sub: "medicamentos",   label: "💊 Medicamentos" },
-  "biblio:protocolos":   { padre: "conocimiento", sub: "protocolos",     label: "📄 Protocolos" },
+  "biblio:protocolos":   { padre: "conocimiento", sub: "protocolos",     label: "📘 Protocolos" },
   "biblio:scores":       { padre: "conocimiento", sub: "scores",         label: "🧮 Scores" },
 };
 
@@ -562,7 +588,7 @@ const FUNCIONES_CONFIGURABLES = [
     ["biblio:videos", "📚 Videos"],
     ["biblio:preguntas", "❓ Preguntas"],
     ["biblio:medicamentos", "💊 Medicamentos"],
-    ["biblio:protocolos", "📄 Protocolos"],
+    ["biblio:protocolos", "📘 Protocolos"],
     ["biblio:scores", "🧮 Scores"],
   ]},
 ];
@@ -695,6 +721,65 @@ function SeguridadLock() {
   );
 }
 
+// ─── Editor de sugerencias personalizables (SOAP y recetas), por usuario ───
+function EditorSugerencias({ currentUser }) {
+  const uid = currentUser?.id;
+  const [abierto, setAbierto] = useState(false);
+  const [soap, setSoap] = useState(() => leerSugSOAP(uid));
+  const [rx, setRx] = useState(() => leerSugRx(uid));
+  const [msg, setMsg] = useState("");
+  const catsSOAP = [["subjetivo", "S — Subjetivo"], ["objetivo", "O — Objetivo"], ["examen", "Examen físico"], ["indicaciones", "Indicaciones"]];
+  const area = { width: "100%", minHeight: 82, padding: "8px 10px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5, fontFamily: "inherit" };
+  const bloque = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", margin: "8px 0 3px" };
+  const guardar = () => {
+    const limpiar = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, (Array.isArray(v) ? v : []).map((x) => x.trim()).filter(Boolean)]));
+    guardarSugSOAP(uid, limpiar(soap));
+    guardarSugRx(uid, limpiar(rx));
+    setMsg("✓ Guardado"); setTimeout(() => setMsg(""), 2500);
+  };
+  const restaurar = () => {
+    if (!confirm("¿Restaurar las sugerencias por defecto? Se perderán tus cambios.")) return;
+    setSoap(SUGERENCIAS_SOAP); setRx(_defRx());
+    guardarSugSOAP(uid, SUGERENCIAS_SOAP); guardarSugRx(uid, _defRx());
+    setMsg("Restauradas por defecto"); setTimeout(() => setMsg(""), 2500);
+  };
+  return (
+    <div style={{ border: "0.5px solid var(--borde)", borderRadius: 10, marginBottom: 16, overflow: "hidden" }}>
+      <button onClick={() => setAbierto((o) => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 12px", background: "var(--superficie)", border: "none", cursor: "pointer" }}>
+        <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>✍️ Mis sugerencias (SOAP y recetas)</span>
+        <span style={{ color: "var(--primario)" }}>{abierto ? "▴" : "▾"}</span>
+      </button>
+      {abierto && (
+        <div style={{ padding: "10px 12px", borderTop: "0.5px solid var(--borde)" }}>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.4 }}>Una sugerencia por línea. Aparecen en tu evolución SOAP y en tus recetas. Son solo tuyas.</div>
+
+          <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginTop: 4 }}>Evolución SOAP</div>
+          {catsSOAP.map(([k, label]) => (
+            <div key={k}>
+              <div style={bloque}>{label}</div>
+              <textarea value={(soap[k] || []).join("\n")} onChange={(e) => setSoap((p) => ({ ...p, [k]: e.target.value.split("\n") }))} style={area} />
+            </div>
+          ))}
+
+          <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginTop: 12 }}>Recetas</div>
+          {RX_CATS.map(([k, label]) => (
+            <div key={k}>
+              <div style={bloque}>{label}</div>
+              <textarea value={(rx[k] || []).join("\n")} onChange={(e) => setRx((p) => ({ ...p, [k]: e.target.value.split("\n") }))} style={area} />
+            </div>
+          ))}
+
+          {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--exito)", margin: "8px 0" }}>{msg}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button onClick={guardar} style={{ flex: 1, padding: "10px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar sugerencias</button>
+            <button onClick={restaurar} style={{ padding: "10px 12px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Restaurar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfigModal({ onClose, currentUser }) {
   const [cfg, setCfg] = useState(cargarConfig);
   useBackClose(true, onClose);
@@ -822,6 +907,9 @@ function ConfigModal({ onClose, currentUser }) {
           })}
         </div>
 
+        {/* Sugerencias personalizables */}
+        <EditorSugerencias currentUser={currentUser} />
+
         {/* Funciones */}
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
         <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 10, lineHeight: 1.45 }}>Desmarca lo que no uses para simplificar la interfaz. Puedes reactivarlo cuando quieras.<br/>Si apagas una pestaña principal pero dejas activa alguna de sus secciones, esa sección aparecerá como pestaña propia.</div>
@@ -928,6 +1016,7 @@ const RX_CATS = [["medicamentos", "💊 Medicamentos"], ["laboratorio", "🧪 La
 // ─── Panel de Prescripciones (exclusivo urólogo): checklists → PDF tipo receta ───
 function PrescripcionesPanel({ currentUser }) {
   const [cat, setCat] = useState("medicamentos");
+  const sugRx = useSugRx(currentUser?.id); // sugerencias personalizadas por usuario
   const [seleccionados, setSeleccionados] = useState({});   // { "medicamentos": Set(idx), ... } via objeto
   const [extra, setExtra] = useState("");                    // líneas libres adicionales
   const [sugerenciasOpen, setSugerenciasOpen] = useState(false); // checklist de sugeridos colapsado por defecto
@@ -956,7 +1045,7 @@ function PrescripcionesPanel({ currentUser }) {
   };
 
   const lineasActuales = () => {
-    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => RX_TEMPLATES[cat].items[i]);
+    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => sugRx[cat][i]);
     const libres = extra.split("\n").map(s => s.trim()).filter(Boolean);
     return [...base, ...libres];
   };
@@ -1110,7 +1199,7 @@ function PrescripcionesPanel({ currentUser }) {
 
       {sugerenciasOpen && (
         <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
-          {RX_TEMPLATES[cat].items.map((it, idx) => {
+          {sugRx[cat].map((it, idx) => {
             const on = marcados.includes(idx);
             return (
               <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
@@ -1140,7 +1229,7 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
-  const [abiertoId, setAbiertoId] = useState(null); // medicamento expandido (colapsados por defecto)
+  const [abiertoId, setAbiertoId] = usePersistedState("uro_med_abierto", null); // medicamento expandido (recordado)
   const [form, setForm] = useState({ nombre: "", presentacion: "", posologia: "", indicacion: "", categoria: "", notas: "" });
   const [err, setErr] = useState("");
 
@@ -1281,6 +1370,33 @@ const SCORES = [
     id: "briganti", nombre: "Briganti", desc: "Riesgo de invasión ganglionar (cáncer de próstata)",
     tipo: "custom",
   },
+  {
+    id: "ipssqol", nombre: "IPSS-QoL", desc: "Calidad de vida por síntomas urinarios",
+    tipo: "suma",
+    preguntas: ["¿Cómo se sentiría si tuviera que pasar el resto de su vida con sus síntomas urinarios actuales?"],
+    opciones: ["0 · Encantado", "1 · Complacido", "2 · Más bien satisfecho", "3 · Indiferente", "4 · Más bien insatisfecho", "5 · Muy mal", "6 · Fatal"],
+    interpretar: (s) => s <= 1 ? "Buena calidad de vida (0–1)" : s <= 4 ? "Afectación moderada (2–4)" : "Muy afectada (5–6)",
+  },
+  {
+    id: "mskcc", nombre: "MSKCC (Motzer)", desc: "Pronóstico en cáncer renal metastásico",
+    tipo: "checks",
+    factores: [
+      "Karnofsky < 80 %",
+      "LDH > 1,5× el límite superior normal",
+      "Hemoglobina < límite inferior normal",
+      "Calcio corregido > 10 mg/dL",
+      "< 1 año desde el diagnóstico al tratamiento sistémico",
+    ],
+    interpretar: (s) => s === 0 ? "Riesgo favorable (0 factores)" : s <= 2 ? "Riesgo intermedio (1–2 factores)" : "Riesgo pobre (≥ 3 factores)",
+  },
+  {
+    id: "padua", nombre: "PADUA", desc: "Complejidad anatómica de masa renal",
+    tipo: "custom",
+  },
+  {
+    id: "iief5", nombre: "IIEF-5 (SHIM)", desc: "Severidad de la disfunción eréctil",
+    tipo: "custom",
+  },
 ];
 
 // ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
@@ -1392,6 +1508,8 @@ function ScoresPanel() {
         {score.tipo === "checks" && <ScoreChecks score={score} />}
         {score.id === "damico" && <ScoreDAmico />}
         {score.id === "renal" && <ScoreRENAL />}
+        {score.id === "padua" && <ScorePADUA />}
+        {score.id === "iief5" && <ScoreIIEF5 />}
         {score.id === "briganti" && <ScoreBriganti />}
       </div>
     );
@@ -1522,6 +1640,74 @@ function ScoreRENAL() {
 // antes de calcular un % real. Mientras estén en null, la calculadora recoge los
 // datos y muestra el punto de corte validado, pero no inventa una probabilidad.
 const BRIGANTI_COEF = { "2012": null, "2019": null };
+
+function ScorePADUA() {
+  const [loc, setLoc] = useState(1), [exo, setExo] = useState(1), [rim, setRim] = useState(1);
+  const [sen, setSen] = useState(1), [col, setCol] = useState(1), [tam, setTam] = useState(1);
+  const [ap, setAp] = useState("x"); // sufijo anterior/posterior (no suma)
+  const total = loc + exo + rim + sen + col + tam;
+  const grupo = total <= 7 ? "Riesgo bajo (6–7)" : total <= 9 ? "Riesgo intermedio (8–9)" : "Riesgo alto (≥ 10)";
+  const color = total <= 7 ? "var(--exito)" : total <= 9 ? "var(--alerta)" : "var(--peligro)";
+  const sel = (val, setter, opts) => (
+    <select value={val} onChange={ev => setter(parseInt(ev.target.value))} style={selScore}>
+      {opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+    </select>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div><label style={lblScore}>Localización longitudinal (polar)</label>{sel(loc, setLoc, [[1, "Polo superior o inferior (1 pt)"], [2, "Zona media (2 pt)"]])}</div>
+      <div><label style={lblScore}>Tasa exofítica</label>{sel(exo, setExo, [[1, "≥ 50 % exofítico (1 pt)"], [2, "< 50 % exofítico (2 pt)"], [3, "Totalmente endofítico (3 pt)"]])}</div>
+      <div><label style={lblScore}>Borde renal</label>{sel(rim, setRim, [[1, "Lateral (1 pt)"], [2, "Medial (2 pt)"]])}</div>
+      <div><label style={lblScore}>Relación con el seno renal</label>{sel(sen, setSen, [[1, "No contacta (1 pt)"], [2, "Contacta (2 pt)"]])}</div>
+      <div><label style={lblScore}>Relación con el sistema colector</label>{sel(col, setCol, [[1, "No contacta (1 pt)"], [2, "Desplaza o infiltra (2 pt)"]])}</div>
+      <div><label style={lblScore}>Tamaño tumoral</label>{sel(tam, setTam, [[1, "≤ 4 cm (1 pt)"], [2, "> 4 y ≤ 7 cm (2 pt)"], [3, "> 7 cm (3 pt)"]])}</div>
+      <div><label style={lblScore}>Anterior / posterior (sufijo)</label>
+        <select value={ap} onChange={ev => setAp(ev.target.value)} style={selScore}><option value="x">x (indeterminado)</option><option value="a">a (anterior)</option><option value="p">p (posterior)</option></select></div>
+      <div style={scoreBox}>
+        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}{ap === "x" ? "" : ap}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 14</span></div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{grupo}</div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreIIEF5() {
+  // 5 ítems, cada uno 1–5; total 5–25.
+  const preguntas = [
+    "1. Confianza para lograr y mantener una erección",
+    "2. Con estimulación, ¿con qué frecuencia las erecciones fueron suficientes para la penetración?",
+    "3. Durante el coito, ¿con qué frecuencia mantuvo la erección tras la penetración?",
+    "4. Durante el coito, ¿qué tan difícil fue mantener la erección hasta terminar?",
+    "5. ¿Con qué frecuencia el coito fue satisfactorio?",
+  ];
+  const opciones = [
+    ["1 · Muy baja / casi nunca", "2 · Baja", "3 · Regular", "4 · Alta", "5 · Muy alta / casi siempre"],
+    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
+    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
+    ["1 · Extremadamente difícil", "2 · Muy difícil", "3 · Difícil", "4 · Poco difícil", "5 · Sin dificultad"],
+    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
+  ];
+  const [vals, setVals] = useState([3, 3, 3, 3, 3]);
+  const total = vals.reduce((s, x) => s + x, 0);
+  const interp = total >= 22 ? "Sin disfunción eréctil (22–25)" : total >= 17 ? "DE leve (17–21)" : total >= 12 ? "DE leve a moderada (12–16)" : total >= 8 ? "DE moderada (8–11)" : "DE severa (5–7)";
+  const color = total >= 22 ? "var(--exito)" : total >= 12 ? "var(--alerta)" : "var(--peligro)";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {preguntas.map((p, i) => (
+        <div key={i}>
+          <label style={lblScore}>{p}</label>
+          <select value={vals[i]} onChange={e => { const v = [...vals]; v[i] = parseInt(e.target.value); setVals(v); }} style={selScore}>
+            {opciones[i].map((o, j) => <option key={j} value={j + 1}>{o}</option>)}
+          </select>
+        </div>
+      ))}
+      <div style={scoreBox}>
+        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 25</span></div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{interp}</div>
+      </div>
+    </div>
+  );
+}
 
 function ScoreBriganti() {
   const [ver, setVer] = useState("2019");
@@ -3127,11 +3313,11 @@ function borrarHistorialQuiz(userId) {
 function PreguntasPanel({ currentUser, isAdmin }) {
   const [preguntas, setPreguntas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [vista, setVista] = useState("quiz"); // "quiz" | "nueva" | "lista"
+  const [vista, setVista] = usePersistedState("uro_preg_vista", "quiz"); // "quiz" | "nueva" | "lista" (recordada)
   const [idx, setIdx] = useState(0);          // índice de la pregunta actual en quiz
   const [seleccion, setSeleccion] = useState(null); // alternativa elegida
   const [mostrarResp, setMostrarResp] = useState(false);
-  const [filtroCat, setFiltroCat] = useState("Todas");
+  const [filtroCat, setFiltroCat] = usePersistedState("uro_preg_cat", "Todas");
   const [form, setForm] = useState({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
   const [errorForm, setErrorForm] = useState("");
   // #13: importar preguntas desde Word / PDF / imagen / texto (solo admin)
@@ -3853,16 +4039,181 @@ const PROTOCOLOS_CIRUGIAS = [
     postoperatorio: ["Foley con irrigación continua 24h", "Retiro Foley 24-48h", "ATB profilaxis 3 días", "Estudio anatomopatológico"],
     complicaciones: ["Perforación vesical (intraperitoneal o extraperitoneal)", "Sangrado postoperatorio", "ITU", "Estenosis uretral", "Síndrome de RTU (raro con bipolar)"],
     duracion: "30-90 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc9", titulo: "RTU-Próstata (RTU-P)", categoria: "HBP / Obstructivo",
+    descripcion: "Resección transuretral del adenoma prostático para desobstrucción en hiperplasia benigna sintomática.",
+    indicaciones: ["HBP con síntomas moderados-severos refractarios a fármacos", "Retención urinaria recurrente", "ITU a repetición por obstrucción", "Hematuria de origen prostático", "Litiasis vesical secundaria", "Próstata 30–80 cc"],
+    contraindicaciones: ["Próstata muy grande (>80–100 cc, preferir alternativas)", "ITU activa no tratada", "Coagulopatía no corregida"],
+    preparacion: ["Urocultivo negativo o tratado", "Suspender antiagregantes/anticoagulantes según riesgo", "Profilaxis ATB monodosis", "Consentimiento (riesgo de eyaculación retrógrada)"],
+    tecnica: ["Posición litotomía", "Cistoscopia y evaluación de lóbulos", "Resección por lóbulos con asa (monopolar con glicina o bipolar con suero fisiológico)", "Referencia distal en veru montanum para proteger esfínter", "Hemostasia cuidadosa", "Evacuación de fragmentos (Ellik)", "Instalación de sonda de 3 vías con irrigación"],
+    postoperatorio: ["Irrigación vesical continua 12–24 h", "Retiro de sonda 24–72 h según claridad de orina", "Hidratación", "Control de micción espontánea"],
+    complicaciones: ["Eyaculación retrógrada (frecuente)", "Sangrado / retención por coágulos", "Síndrome post-RTU (hiponatremia, con monopolar)", "Estenosis uretral o de cuello vesical", "Incontinencia (raro)", "Disfunción eréctil"],
+    duracion: "45-90 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc10", titulo: "Adenomectomía Prostática Abierta / Simple", categoria: "HBP / Obstructivo",
+    descripcion: "Enucleación del adenoma prostático para HBP de gran volumen; por vía abierta (Millin/transvesical) o laparoscópica/robótica.",
+    indicaciones: ["Próstata >80–100 cc", "Divertículo vesical o litiasis vesical concomitante que requiera abordaje", "Contraindicación de posición de litotomía prolongada"],
+    contraindicaciones: ["Sospecha de cáncer de próstata no estudiado", "Coagulopatía no corregida"],
+    preparacion: ["Estudio de próstata (PSA, tacto, imágenes)", "Urocultivo tratado", "Reserva de hemoderivados", "Profilaxis ATB y TVP"],
+    tecnica: ["Abordaje transvesical (Freyer) o retropúbico (Millin)", "Enucleación digital/con instrumento del adenoma", "Hemostasia del lecho y cuello", "Sonda Foley con tracción suave inicial", "Cistostomía según técnica"],
+    postoperatorio: ["Irrigación vesical", "Retiro de sonda 5–7 días", "Deambulación precoz", "Control de sangrado"],
+    complicaciones: ["Sangrado con requerimiento transfusional", "ITU", "Incontinencia transitoria", "Estenosis de cuello", "Eyaculación retrógrada"],
+    duracion: "1.5-3 horas", anestesia: "General o Espinal"
+  },
+  {
+    id: "pc11", titulo: "Nefrectomía Radical", categoria: "Oncología",
+    descripcion: "Extirpación completa del riñón con la grasa perirrenal (± adrenalectomía / linfadenectomía) por cáncer renal.",
+    indicaciones: ["Masa renal T2 o mayor", "Tumores centrales no aptos para preservación", "Trombo tumoral venoso (con manejo específico)"],
+    contraindicaciones: ["Enfermedad metastásica sin rol de citorreducción", "Comorbilidad prohibitiva"],
+    preparacion: ["UroTAC/RM de estadificación", "Función renal contralateral", "Profilaxis ATB y TVP", "Reserva de sangre"],
+    tecnica: ["Abordaje laparoscópico/robótico o abierto", "Control precoz del pedículo (arteria y vena renal)", "Disección extrafascial (fascia de Gerota)", "Adrenalectomía solo si compromiso o tumor polar superior", "Linfadenectomía en casos seleccionados", "Extracción de la pieza en bolsa"],
+    postoperatorio: ["Deambulación precoz", "Control de función renal", "Retiro de drenaje según débito", "Seguimiento oncológico por estadio"],
+    complicaciones: ["Sangrado / lesión vascular", "Lesión de órganos vecinos (bazo, colon, páncreas)", "Insuficiencia renal", "Hernia incisional", "TVP/TEP"],
+    duracion: "2-4 horas", anestesia: "General"
+  },
+  {
+    id: "pc12", titulo: "Nefroureterectomía Radical", categoria: "Oncología",
+    descripcion: "Resección del riñón, uréter y rodete vesical por carcinoma urotelial de vía urinaria superior.",
+    indicaciones: ["Tumor urotelial de pelvis renal o uréter de alto riesgo", "Tumores voluminosos, multifocales o de alto grado"],
+    contraindicaciones: ["Metástasis sin control local requerido", "Comorbilidad severa"],
+    preparacion: ["UroTAC con fase excretora", "Citología / ureteroscopia diagnóstica", "Profilaxis ATB y TVP"],
+    tecnica: ["Nefrectomía (laparoscópica/robótica/abierta)", "Disección ureteral completa hasta la vejiga", "Resección del rodete vesical periureteral", "Cierre vesical y drenaje", "Instilación intravesical postoperatoria de quimioterapia (dosis única)"],
+    postoperatorio: ["Sonda vesical según cierre", "Cistografía si dudas antes de retiro", "Seguimiento cistoscópico (riesgo de recidiva vesical)"],
+    complicaciones: ["Recidiva vesical", "Fuga urinaria", "Sangrado", "Lesión de órganos vecinos"],
+    duracion: "2.5-4 horas", anestesia: "General"
+  },
+  {
+    id: "pc13", titulo: "Ureterolitotomía / URS Semirrígida con Láser", categoria: "Litiasis",
+    descripcion: "Tratamiento endoscópico de litiasis ureteral con fragmentación láser y/o extracción con canastillo.",
+    indicaciones: ["Litiasis ureteral que no expulsa o sintomática", "Cálculos ureterales medios/distales", "Fracaso de LEOC"],
+    contraindicaciones: ["ITU activa no tratada", "Estenosis ureteral infranqueable", "Coagulopatía no corregida"],
+    preparacion: ["Urocultivo tratado", "Imagen actualizada (UroTAC)", "Profilaxis ATB"],
+    tecnica: ["Posición litotomía", "Cistoscopia y cateterización ureteral", "Ascenso de ureteroscopio semirrígido con guía de seguridad", "Fragmentación con láser Holmium", "Extracción de fragmentos con canastillo", "Instalación de catéter doble J"],
+    postoperatorio: ["Retiro de sonda vesical precoz", "Retiro de doble J 1–4 semanas", "Analgesia", "Control imagenológico de fragmentos residuales"],
+    complicaciones: ["Lesión / perforación ureteral", "Avulsión ureteral (rara, grave)", "ITU / urosepsis", "Estenosis ureteral", "Migración de fragmentos"],
+    duracion: "30-75 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc14", titulo: "Instalación / Retiro de Catéter Doble J (JJ)", categoria: "Derivaciones",
+    descripcion: "Colocación endoscópica de catéter ureteral interno para asegurar drenaje del tracto urinario superior.",
+    indicaciones: ["Obstrucción ureteral (litiasis, tumor, estenosis)", "Protección de anastomosis", "Post-cirugía endourológica", "Hidronefrosis sintomática"],
+    contraindicaciones: ["ITU activa no controlada (preferir nefrostomía)", "Uretra/uréter infranqueable"],
+    preparacion: ["Urocultivo tratado", "Profilaxis ATB", "Imagen para tallar longitud del catéter"],
+    tecnica: ["Cistoscopia", "Cateterización del meato ureteral con guía", "Ascenso de guía bajo fluoroscopia", "Colocación del doble J sobre la guía", "Verificación de rizos (renal y vesical)"],
+    postoperatorio: ["Registro de fecha de instalación y retiro", "Educar síntomas del catéter (disuria, dolor lumbar miccional, hematuria leve)", "Programar retiro (evitar 'JJ olvidado')"],
+    complicaciones: ["Síntomas irritativos", "Migración / incrustación", "ITU", "Reflujo con dolor lumbar", "Olvido del catéter con incrustación grave"],
+    duracion: "15-30 min", anestesia: "Sedación / Espinal"
+  },
+  {
+    id: "pc15", titulo: "Cistostomía Suprapúbica (Talla Vesical)", categoria: "Derivaciones",
+    descripcion: "Drenaje vesical percutáneo por vía suprapúbica cuando el acceso uretral no es posible.",
+    indicaciones: ["Retención urinaria con imposibilidad de sondaje uretral", "Traumatismo uretral", "Necesidad de derivación vesical prolongada"],
+    contraindicaciones: ["Vejiga no distendida / no palpable (relativa; usar guía ecográfica)", "Cirugía abdominal baja previa (precaución)", "Coagulopatía"],
+    preparacion: ["Vejiga llena / guía ecográfica", "Asepsia", "Anestesia local"],
+    tecnica: ["Punción suprapúbica en línea media 2 cm sobre pubis", "Verificación de salida de orina", "Colocación de catéter suprapúbico", "Fijación a piel"],
+    postoperatorio: ["Cuidado del sitio de inserción", "Recambio programado del catéter", "Vigilar obstrucción"],
+    complicaciones: ["Lesión intestinal (raro)", "Sangrado", "Infección del trayecto", "Salida accidental del catéter"],
+    duracion: "10-20 min", anestesia: "Local ± Sedación"
+  },
+  {
+    id: "pc16", titulo: "Pieloplastia Desmembrada (Anderson-Hynes)", categoria: "Reconstructiva",
+    descripcion: "Reparación de la estenosis de la unión pieloureteral con resección del segmento estenótico y anastomosis.",
+    indicaciones: ["Estenosis pieloureteral sintomática", "Deterioro de función renal o dolor / ITU asociados", "Litiasis secundaria a la obstrucción"],
+    contraindicaciones: ["Riñón sin función recuperable (considerar nefrectomía)", "Comorbilidad prohibitiva"],
+    preparacion: ["Cintigrama renal (DTPA/MAG3) para función y drenaje", "UroTAC", "Profilaxis ATB"],
+    tecnica: ["Abordaje laparoscópico/robótico o abierto", "Identificación de la unión pieloureteral y vasos polares", "Resección del segmento estenótico", "Espatulación del uréter", "Anastomosis pielo-ureteral sobre catéter doble J", "Drenaje"],
+    postoperatorio: ["Doble J 4–6 semanas", "Retiro de sonda vesical precoz", "Cintigrama de control diferido"],
+    complicaciones: ["Fuga urinaria", "Reestenosis", "ITU", "Sangrado"],
+    duracion: "2-3 horas", anestesia: "General"
+  },
+  {
+    id: "pc17", titulo: "Orquiectomía (Radical Inguinal / Simple)", categoria: "Oncología",
+    descripcion: "Extirpación testicular: radical por vía inguinal ante sospecha de tumor, o simple/subalbugínea (paliativa/hormonal).",
+    indicaciones: ["Masa testicular sospechosa de tumor (radical inguinal)", "Bloqueo androgénico en cáncer de próstata avanzado (simple bilateral)", "Testículo no viable (torsión tardía, absceso)"],
+    contraindicaciones: ["Coagulopatía no corregida"],
+    preparacion: ["Marcadores tumorales (AFP, β-hCG, LDH) si sospecha tumoral", "Ecografía testicular", "Discutir prótesis y banco de semen si aplica"],
+    tecnica: ["Radical: incisión inguinal, control precoz del cordón en anillo inguinal interno, extracción sin violar la bolsa escrotal", "Simple/subalbugínea: vía escrotal (indicaciones no oncológicas)"],
+    postoperatorio: ["Analgesia", "Soporte escrotal", "Seguimiento oncológico y estadificación si tumor"],
+    complicaciones: ["Hematoma escrotal", "Infección", "Dolor crónico", "Impacto en fertilidad/hormonal"],
+    duracion: "30-60 min", anestesia: "General o Espinal"
+  },
+  {
+    id: "pc18", titulo: "Hidrocelectomía", categoria: "Genital / Escrotal",
+    descripcion: "Corrección quirúrgica del hidrocele mediante técnica de Jaboulay (eversión) o Lord (plicatura).",
+    indicaciones: ["Hidrocele sintomático o voluminoso", "Molestias, impacto estético o funcional"],
+    contraindicaciones: ["Sospecha de tumor subyacente (estudiar antes)", "Infección activa"],
+    preparacion: ["Ecografía escrotal", "Descartar causa secundaria", "Profilaxis ATB según caso"],
+    tecnica: ["Incisión escrotal", "Apertura de la vaginal y evacuación del líquido", "Eversión (Jaboulay) o plicatura (Lord) del saco", "Hemostasia prolija", "Cierre por planos ± drenaje"],
+    postoperatorio: ["Soporte escrotal", "Hielo local y analgesia", "Vigilar hematoma"],
+    complicaciones: ["Hematoma escrotal", "Infección", "Recidiva", "Edema prolongado"],
+    duracion: "30-60 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc19", titulo: "Varicocelectomía (Subinguinal Microquirúrgica)", categoria: "Genital / Escrotal",
+    descripcion: "Ligadura de las venas espermáticas dilatadas, preferentemente con técnica microquirúrgica subinguinal.",
+    indicaciones: ["Varicocele con dolor", "Infertilidad con alteración seminal y varicocele palpable", "Hipotrofia testicular en adolescentes"],
+    contraindicaciones: ["Varicocele asintomático sin repercusión (relativa)"],
+    preparacion: ["Espermiograma", "Examen físico de pie y Valsalva", "Ecografía doppler si dudas"],
+    tecnica: ["Incisión subinguinal", "Disección del cordón bajo microscopio", "Ligadura de venas preservando arteria testicular y linfáticos", "Preservación de conductos deferentes"],
+    postoperatorio: ["Soporte escrotal", "Analgesia", "Control seminal diferido (3 meses)"],
+    complicaciones: ["Hidrocele reactivo", "Recidiva/persistencia", "Lesión arterial (atrofia, raro)", "Hematoma"],
+    duracion: "45-90 min", anestesia: "General o Espinal"
+  },
+  {
+    id: "pc20", titulo: "Circuncisión", categoria: "Genital / Escrotal",
+    descripcion: "Resección del prepucio por indicaciones médicas (fimosis, parafimosis recurrente, balanopostitis).",
+    indicaciones: ["Fimosis sintomática o cicatricial", "Parafimosis recurrente", "Balanopostitis a repetición", "Motivos médicos o culturales"],
+    contraindicaciones: ["Hipospadias no corregido (prepucio necesario para reconstrucción)", "Infección local activa"],
+    preparacion: ["Aseo local", "Anestesia (bloqueo peneano ± general en niños)"],
+    tecnica: ["Marcación del surco balanoprepucial", "Resección del prepucio", "Hemostasia meticulosa", "Afrontamiento mucocutáneo con sutura reabsorbible"],
+    postoperatorio: ["Analgesia", "Aseo local", "Evitar erecciones/actividad según edad"],
+    complicaciones: ["Sangrado", "Infección", "Edema", "Resección excesiva/insuficiente", "Estenosis del meato (tardía)"],
+    duracion: "20-45 min", anestesia: "Local/Bloqueo o General"
+  },
+  {
+    id: "pc21", titulo: "Biopsia Prostática (Transrectal / Transperineal)", categoria: "Diagnóstica",
+    descripcion: "Toma de muestras prostáticas guiada por ecografía (± fusión con RM) para diagnóstico de cáncer.",
+    indicaciones: ["PSA elevado o en ascenso", "Tacto rectal sospechoso", "Lesión PI-RADS 3–5 en RM multiparamétrica", "Seguimiento en vigilancia activa"],
+    contraindicaciones: ["ITU/prostatitis activa", "Coagulopatía no corregida", "Patología anorrectal que impida acceso transrectal"],
+    preparacion: ["Profilaxis ATB (transrectal) / preparación según vía", "Suspender antiagregantes según riesgo", "Consentimiento", "Enema si transrectal"],
+    tecnica: ["Ecografía transrectal", "Anestesia local (bloqueo periprostático)", "Toma sistemática de cilindros ± dirigida por fusión RM/eco", "Vía transperineal reduce riesgo de sepsis"],
+    postoperatorio: ["Vigilar hematuria, hematospermia y rectorragia autolimitadas", "Consultar si fiebre o retención", "Resultado histopatológico (ISUP/Gleason)"],
+    complicaciones: ["Sepsis urinaria (mayor en transrectal)", "Sangrado (hematuria, rectorragia, hematospermia)", "Retención urinaria", "Dolor"],
+    duracion: "15-30 min", anestesia: "Local ± Sedación"
+  },
+  {
+    id: "pc22", titulo: "Cistolitotomía / Litotricia Vesical Endoscópica", categoria: "Litiasis",
+    descripcion: "Tratamiento de litiasis vesical por vía endoscópica (litotricia) o cirugía abierta según tamaño.",
+    indicaciones: ["Litiasis vesical sintomática", "Cálculos secundarios a obstrucción (tratar la causa)", "Cálculos grandes no fragmentables endoscópicamente (abierta)"],
+    contraindicaciones: ["ITU activa no tratada", "Coagulopatía"],
+    preparacion: ["Urocultivo tratado", "Evaluar obstrucción de salida vesical", "Profilaxis ATB"],
+    tecnica: ["Endoscópica: cistolitotripsia (neumática/láser) y evacuación", "Abierta: cistotomía, extracción del cálculo y cierre vesical", "Corregir la causa obstructiva en el mismo acto si procede"],
+    postoperatorio: ["Sonda vesical según técnica", "Irrigación si sangrado", "Tratar la obstrucción de base"],
+    complicaciones: ["Sangrado", "Perforación vesical", "ITU", "Recidiva si no se corrige la causa"],
+    duracion: "30-90 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc23", titulo: "Adrenalectomía (Laparoscópica)", categoria: "Oncología",
+    descripcion: "Extirpación de la glándula suprarrenal por masa funcionante o sospechosa, habitualmente laparoscópica.",
+    indicaciones: ["Adenoma funcionante (feocromocitoma, aldosteronoma, Cushing)", "Masa suprarrenal >4 cm o sospechosa", "Metástasis única resecable seleccionada"],
+    contraindicaciones: ["Carcinoma suprarrenal voluminoso con invasión (valorar abierta)", "Comorbilidad prohibitiva"],
+    preparacion: ["Estudio hormonal completo", "Bloqueo alfa preoperatorio en feocromocitoma", "Manejo anestésico de crisis hipertensivas", "Reserva de sangre"],
+    tecnica: ["Abordaje transperitoneal o retroperitoneal", "Control precoz de la vena suprarrenal (clave en feocromocitoma)", "Disección de la glándula con su grasa", "Extracción en bolsa"],
+    postoperatorio: ["Monitorización hemodinámica y glicemia", "Suplencia esteroidal si corresponde", "Control de presión arterial"],
+    complicaciones: ["Crisis hipertensiva intraoperatoria (feocromocitoma)", "Sangrado", "Lesión de órganos vecinos", "Insuficiencia suprarrenal (bilateral)"],
+    duracion: "2-3 horas", anestesia: "General"
   }
 ];
 
 const CATEGORIAS_CIRUGIAS = ["Todas", "Oncología", "Litiasis", "Derivaciones", "Trasplante", "Funcional", "Otras"];
 
 function CirugiasBiblioteca() {
-  const [seleccionado, setSeleccionado] = useState(null);
+  const [seleccionado, setSeleccionado] = usePersistedState("uro_cir_sel", null);
   useBackClose(!!seleccionado, () => setSeleccionado(null));
   const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = useState("Todas");
+  const [filtro, setFiltro] = usePersistedState("uro_cir_filtro", "Todas");
 
   const filtrados = PROTOCOLOS_CIRUGIAS.filter(p => {
     const matchCat = filtro === "Todas" || p.categoria === filtro;
@@ -6503,6 +6854,73 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     T("Justificar excepciones:", M, y, false); line(M + 38, y + 0.5, R - M - 38); y += 9;
     T("NOMBRE MEDICO:", M, y, true); line(M + 32, y + 0.5, 55); if (currentUser?.nombre) T(currentUser.nombre, M + 34, y - 0.5); T("FIRMA:", R - 55, y, true); line(R - 42, y + 0.5, 40); y += 6;
     T("Fecha:", M, y, true); line(M + 13, y + 0.5, 40); if (f.fingreso) T(f.fingreso, M + 15, y - 0.5);
+
+    // ───────────── PÁGINA 2: INDICACIONES POR TIPO DE INTERVENCIÓN Y RIESGO ─────────────
+    doc.addPage();
+    let y2 = 14;
+    const wrapT = (t, x, yy, w, s = 6.6, b = false, lh = 3.3) => {
+      doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s);
+      const ls = doc.splitTextToSize(t, w); ls.forEach((l) => { doc.text(l, x, yy); yy += lh; }); return yy;
+    };
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    doc.text("INDICACIONES RECOMENDADAS SEGÚN TIPO DE INTERVENCIÓN QUIRÚRGICA Y RIESGO ETE:", M, y2, { maxWidth: R - M }); y2 += 4;
+    doc.setFont("helvetica", "italic"); doc.setFontSize(7);
+    doc.text("(Marque con una x las indicaciones correspondientes)", M, y2); y2 += 4;
+
+    // Tabla: columna izquierda (tipo de intervención) · derecha (indicaciones por riesgo)
+    const colX = M, colW1 = 46, colX2 = M + colW1, colW2 = R - colX2;
+    const filas = [
+      ["TODA INTERVENCIÓN", [
+        ["RIESGO ETE MUY BAJO", "Deambulación precoz."],
+        ["RIESGO ETE BAJO", "Métodos mecánicos: medias elásticas de compresión gradual antes de la intervención."],
+      ]],
+      ["Cirugía General, Ginecológica, Urológica, de tórax, Cabeza y cuello, Mama, plástica y reconstructiva, vascular (NO ONCOLÓGICO, NO BARIÁTRICO)", [
+        ["RIESGO ETE MODERADO", "Métodos farmacológicos a bajas dosis + métodos mecánicos: HNF 5000 UI c/12 h SC (última dosis 12 h pre y reiniciar 12 h post) ó HNF 5000 UI c/8 h; ó Dalteparina 2500 UI/día (última 24 h pre); ó Enoxaparina 20 mg (2000 UI)/día (última 24 h pre, reiniciar ≥12 h post)."],
+        ["RIESGO ETE ALTO", "Métodos farmacológicos a alta dosis + mecánicos: HNF 5000 UI c/8 h; ó Dalteparina 2500 UI/día aumentando a 5000 UI desde la 2ª dosis post-op; ó Enoxaparina 40 mg (4000 UI)/día (última 24 h pre, reiniciar ≥12 h post)."],
+      ]],
+      ["Cirugía Oncológica o con neoplasia no resuelta", [
+        ["RIESGO ETE ALTO", "Farmacológico a altas dosis + métodos físicos si están disponibles: HNF 5000 UI c/8 h SC; ó Enoxaparina 40 mg SC/día; ó Dalteparina 5000 UI SC/día (última dosis 12 h pre, reiniciar 12 h post)."],
+      ]],
+      ["Cirugía Bariátrica", [
+        ["RIESGO ETE ALTO", "HNF 5000 UI (IMC 40–50) ó 7500 UI (IMC > 50) c/8 h SC, inicio 6 h post; ó Enoxaparina 40 mg c/12 h (< 150 kg) ó 60 mg c/12 h (> 150 kg), inicio 6 h post."],
+      ]],
+      ["Cirugía Ortopédica (fractura de pelvis, fémur o pierna; artroplastia de rodilla o cadera)", [
+        ["RIESGO ETE ALTO", "HNF 5000 UI c/8 h (última 24 h pre, reiniciar ≥8 h post); ó Enoxaparina 40 mg/día; ó Dalteparina 5000 UI/día (reiniciar ≥8 h post). Ajustar dosis en obesos."],
+      ]],
+      ["Politraumatizados (HDN estables, sin sangrado activo ni requerimiento transfusional)", [
+        ["RIESGO ETE ALTO", "Inicio de medidas farmacológicas a criterio del médico tratante (evaluar riesgo hemorrágico); ideal antes de 48 h: Enoxaparina 40 mg c/12 h SC; ó Dalteparina 5000 UI/día SC (2ª opción)."],
+      ]],
+    ];
+
+    // Encabezado de la tabla
+    doc.setLineWidth(0.2);
+    filas.forEach(([tipo, indic]) => {
+      // altura de la fila = alto del bloque de indicaciones
+      const yIni = y2;
+      let yInd = y2 + 3.5;
+      indic.forEach(([riesgo, texto]) => {
+        chk(colX2 + 1.5, yInd);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(6.4); doc.text(riesgo, colX2 + 6, yInd);
+        yInd = wrapT(texto, colX2 + 6, yInd + 3, colW2 - 8, 6.2, false, 3);
+        yInd += 1.5;
+      });
+      const yTipoFin = wrapT(tipo, colX + 1.5, y2 + 3.5, colW1 - 3, 6.2, true, 3);
+      const yFin = Math.max(yInd, yTipoFin) + 1.5;
+      // bordes de la fila
+      doc.rect(colX, yIni, colW1, yFin - yIni);
+      doc.rect(colX2, yIni, colW2, yFin - yIni);
+      y2 = yFin;
+    });
+
+    // Notas al pie
+    y2 += 3;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6);
+    y2 = wrapT("LA ADMINISTRACIÓN PREOPERATORIA PARA PACIENTES CON ANESTESIA REGIONAL (RAQUÍDEA/PERIDURAL) DEBE REALIZARSE AL MENOS 12 HORAS PRE-INTERVENCIÓN.", M, y2, R - M, 6, true, 3) + 2;
+    doc.setFont("helvetica", "normal");
+    y2 = wrapT("(*) Si no están disponibles los métodos mecánicos, evaluar el riesgo hemorrágico e iniciar profilaxis farmacológica como si fuera de riesgo moderado.", M, y2, R - M, 5.8) + 1;
+    y2 = wrapT("(**) En alto riesgo hemorrágico, iniciar métodos mecánicos y agregar medidas farmacológicas una vez disminuido el riesgo de hemorragia.", M, y2, R - M, 5.8) + 1;
+    y2 = wrapT("(***) En pacientes con clearance de creatinina < 30 ml/min está contraindicada la Enoxaparina; privilegiar HNF.", M, y2, R - M, 5.8);
+
     doc.save(`ete_caprini_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
   };
 
@@ -7328,6 +7746,48 @@ const SUGERENCIAS_SOAP = {
     "Solicitar exámenes de control",
   ]
 };
+
+// ─── Sugerencias personalizables por usuario (SOAP y recetas) ───
+// Se guardan por usuario en localStorage. Si no hay nada guardado, se usan
+// las listas por defecto. Al cambiarlas en Configuración se emite un evento
+// para que los paneles abiertos se actualicen al instante.
+function _leerSugJSON(clave, def) { try { const r = localStorage.getItem(clave); const v = r ? JSON.parse(r) : null; return v && typeof v === "object" ? v : def; } catch { return def; } }
+const _claveSOAP = (uid) => `uro_sug_soap_${uid || "anon"}`;
+const _claveRx = (uid) => `uro_sug_rx_${uid || "anon"}`;
+const _defRx = () => Object.fromEntries(Object.entries(RX_TEMPLATES).map(([k, v]) => [k, v.items]));
+function leerSugSOAP(uid) { const d = _leerSugJSON(_claveSOAP(uid), null); return d ? { ...SUGERENCIAS_SOAP, ...d } : SUGERENCIAS_SOAP; }
+function leerSugRx(uid) { const def = _defRx(); const d = _leerSugJSON(_claveRx(uid), null); return d ? { ...def, ...d } : def; }
+// Guarda en localStorage (inmediato) y sincroniza a Supabase (entre dispositivos).
+function guardarSugSOAP(uid, obj) {
+  try { localStorage.setItem(_claveSOAP(uid), JSON.stringify(obj)); window.dispatchEvent(new CustomEvent("uro-sug-cambio")); } catch {}
+  if (uid) { try { supabase.from("preferencias_sugerencias").upsert({ user_id: uid, soap: obj, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).then(() => {}); } catch {} }
+}
+function guardarSugRx(uid, obj) {
+  try { localStorage.setItem(_claveRx(uid), JSON.stringify(obj)); window.dispatchEvent(new CustomEvent("uro-sug-cambio")); } catch {}
+  if (uid) { try { supabase.from("preferencias_sugerencias").upsert({ user_id: uid, rx: obj, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).then(() => {}); } catch {} }
+}
+// Trae las sugerencias guardadas en Supabase y actualiza la caché local (sincroniza).
+async function sincronizarSugerencias(uid) {
+  if (!uid) return;
+  try {
+    const { data } = await supabase.from("preferencias_sugerencias").select("soap, rx").eq("user_id", uid).maybeSingle();
+    if (!data) return;
+    let cambio = false;
+    if (data.soap && typeof data.soap === "object") { localStorage.setItem(_claveSOAP(uid), JSON.stringify(data.soap)); cambio = true; }
+    if (data.rx && typeof data.rx === "object") { localStorage.setItem(_claveRx(uid), JSON.stringify(data.rx)); cambio = true; }
+    if (cambio) window.dispatchEvent(new CustomEvent("uro-sug-cambio"));
+  } catch {}
+}
+function useSugSOAP(uid) {
+  const [v, setV] = useState(() => leerSugSOAP(uid));
+  useEffect(() => { const h = () => setV(leerSugSOAP(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
+  return v;
+}
+function useSugRx(uid) {
+  const [v, setV] = useState(() => leerSugRx(uid));
+  useEffect(() => { const h = () => setV(leerSugRx(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
+  return v;
+}
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
@@ -7372,6 +7832,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     try { setEvoLibre(localStorage.getItem("uro_evo_draft_" + seleccionado.id) || ""); } catch { setEvoLibre(""); }
   }, [seleccionado?.id]);
   const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
+  const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
   const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
   const [seccionAbierta, setSeccionAbierta] = useState(null); // qué bloque de sugerencias está desplegado
@@ -9303,7 +9764,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
     {seccionAbierta==="subjetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.subjetivo.map(s => (
+        {sugSOAP.subjetivo.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9316,7 +9777,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
     {seccionAbierta==="objetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.objetivo.map(s => (
+        {sugSOAP.objetivo.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9405,7 +9866,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
     {seccionAbierta==="examen" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.examen.map(s => (
+        {sugSOAP.examen.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9418,7 +9879,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
     {seccionAbierta==="indicaciones" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.indicaciones.map(s => (
+        {sugSOAP.indicaciones.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -10049,7 +10510,7 @@ function VideoPlayer({ video, onClose }) {
 }
 
 function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
-  const [filtro, setFiltro] = useState("Todas");
+  const [filtro, setFiltro] = usePersistedState("uro_vid_filtro", "Todas");
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
   const [nuevo, setNuevo] = useState({ titulo:"", categoria:"Oncología", url:"", autor:"", descripcion:"", keywords:"" });
@@ -11379,7 +11840,7 @@ if (!currentUser) {
         ...(!fnOculta(config, "biblio:videos") ? [["videos", "📚 Videos"]] : []),
         ...(!fnOculta(config, "biblio:preguntas") ? [["preguntas", "❓ Preguntas"]] : []),
         ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
-        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📄 Protocolos"]] : []),
+        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📘 Protocolos"]] : []),
         ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
         ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
       ],
@@ -11501,9 +11962,12 @@ if (!currentUser) {
             <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>{submenu.titulo}</div>
             {submenu.secciones.map(([id,label]) => {
               const activo = submenu.activo === id;
+              const ico = ICONO_SUBTAB[id];
               return (
-                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
-                  {label}{activo ? "  ✓" : ""}
+                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500,display:"flex",alignItems:"center",gap:10}}>
+                  {ico ? <Ico name={ico} size={18}/> : null}
+                  <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
+                  {activo ? <span style={{color:"var(--primario)"}}>✓</span> : null}
                 </button>
               );
             })}

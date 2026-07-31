@@ -9,6 +9,7 @@ import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import {
   listarLogbook, crearRegistroLogbook, actualizarRegistroLogbook,
   eliminarRegistroLogbook, subirFotoLogbook, obtenerUrlFoto, eliminarFotoLogbook,
+  listarCompanerosEquipo, agregarLogbookACompanero,
 } from "./logbook";
 import { supabase } from "./supabase";
 
@@ -353,6 +354,27 @@ function Dispersion({ puntos, unidad = "min", color = "var(--primario)", mediana
   );
 }
 
+// ─── ¿Un compañero (por su nombre) figura en un texto de participante? ───
+// Normaliza (sin tildes, sin títulos "Dr./Dra.") y exige coincidencia razonable
+// para no agregar cirugías al logbook de la persona equivocada.
+function _normNombre(s) {
+  return sinTildes(s || "").replace(/\bd(r|ra)s?\b\.?/g, " ").replace(/[.,;]/g, " ").replace(/\s+/g, " ").trim();
+}
+function _tokensNombre(s) {
+  return _normNombre(s).split(" ").filter((t) => t.length >= 3);
+}
+function participaEnTexto(nombreMiembro, textoParticipante) {
+  if (!nombreMiembro || !textoParticipante) return false;
+  const nm = _tokensNombre(nombreMiembro);
+  if (nm.size === 0 && nm.length === 0) return false;
+  const tp = new Set(_tokensNombre(textoParticipante));
+  let comunes = 0;
+  nm.forEach((t) => { if (tp.has(t)) comunes++; });
+  // Match fuerte: ≥2 tokens en común (nombre + apellido), o si el miembro tiene
+  // un solo token significativo, que ese aparezca.
+  return comunes >= 2 || (nm.length === 1 && comunes === 1);
+}
+
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
@@ -386,6 +408,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [resumenIA, setResumenIA] = useState("");           // resumen escrito por la IA
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState("");
+  // Logbook de equipo: compañeros (para agregar la cirugía a quien participó)
+  const [companeros, setCompaneros] = useState([]);
+  const [compartidoMsg, setCompartidoMsg] = useState(""); // aviso "agregado también a X, Y"
   const inputFotoRef = useRef(null);   // galería / archivos
   const inputCamaraRef = useRef(null); // cámara directa
 
@@ -406,6 +431,18 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       setCargando(false);
     });
   }, [currentUser]);
+
+  // Compañeros de mis equipos (para el logbook de equipo)
+  useEffect(() => {
+    if (!currentUser) { setCompaneros([]); return; }
+    const ids = (equipos || []).map((e) => e.id).filter(Boolean);
+    if (ids.length === 0) { setCompaneros([]); return; }
+    let vivo = true;
+    listarCompanerosEquipo(ids, currentUser.id).then((r) => {
+      if (vivo && r.ok) setCompaneros(r.companeros);
+    });
+    return () => { vivo = false; };
+  }, [currentUser, equipos]);
 
   // Acciones enviadas desde el submenú de la pestaña Logbook
   useEffect(() => {
@@ -602,6 +639,25 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           }
         }
       } catch { /* no bloquea el guardado del logbook */ }
+
+      // ── Logbook de equipo: agrega la cirugía a los compañeros que participaron ──
+      try {
+        setCompartidoMsg("");
+        const agregados = [];
+        for (const comp of companeros) {
+          let rolComp = null;
+          if (participaEnTexto(comp.nombre, datos.cirujano)) rolComp = "cirujano";
+          else if (participaEnTexto(comp.nombre, datos.ayudantes)) rolComp = "primer_ayudante";
+          if (!rolComp) continue;
+          // Se le agrega con SU rol; sin foto (el path es del bucket del que subió).
+          const r = await agregarLogbookACompanero(comp.id, { ...datos, rol: rolComp });
+          if (r.ok && r.id) agregados.push(comp.nombre || "compañero");
+        }
+        if (agregados.length > 0) {
+          setCompartidoMsg(`✓ También se agregó al logbook de ${agregados.join(", ")}.`);
+          setTimeout(() => setCompartidoMsg(""), 6000);
+        }
+      } catch { /* silencioso: nunca bloquea el guardado propio */ }
     }
     // Subida múltiple: si quedan cirugías en la cola, carga la siguiente y se queda en el formulario.
     if (!editId && cola.length > 0) {
@@ -1294,6 +1350,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               <button onClick={() => { setCompartirQue("metricas"); setCompartirOpen(true); }} style={{ ...btnSec, alignSelf: "flex-start" }}>🔗 Compartir métricas</button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── Aviso: cirugía agregada al logbook de compañeros ─── */}
+      {compartidoMsg && (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 18, zIndex: 1100, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ background: "var(--exito-bg, var(--superficie))", border: "1px solid var(--exito)", color: "var(--exito)", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 600, boxShadow: "0 8px 20px rgba(0,0,0,0.2)", maxWidth: "90%" }}>{compartidoMsg}</div>
         </div>
       )}
 

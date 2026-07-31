@@ -207,6 +207,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
   const [guardando, setGuardando] = useState(false);
   const [extrayendo, setExtrayendo] = useState(false);
   const [fotos, setFotos] = useState([]);
+  const [addPacMenu, setAddPacMenu] = useState(false); // menú "+" para agregar paciente al seguimiento
   const inputGaleriaRef = useRef(null);
   const inputCamaraRef = useRef(null);
 
@@ -433,6 +434,7 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
   const btnPrim = { padding: "9px 16px", fontSize: 13, fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" };
   const btnSec = { padding: "9px 14px", fontSize: 12.5, fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" };
   const card = { background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "12px" };
+  const itemAddPac = { padding: "8px 11px", fontSize: 12.5, textAlign: "left", background: "none", border: "none", color: "var(--texto)", borderRadius: 6, cursor: "pointer", fontWeight: 500, width: "100%" };
   const campo = (etiqueta, hijo) => (<div><label style={lbl}>{etiqueta}</label>{hijo}</div>);
 
   if (!currentUser) return null;
@@ -542,29 +544,35 @@ export default function SeguimientoPanel({ currentUser, contexto = "personal" })
                 Control cada {protoSel.intervalo_valor} {(UNIDADES.find(u => u[0] === protoSel.intervalo_unidad) || ["", ""])[1]}
               </div>
             </div>
-            <button onClick={() => setProtoForm({ ...protoSel })} style={btnSec}>⚙️ Editar criterio</button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ position: "relative" }}>
+                <button onClick={() => setAddPacMenu(v => !v)} title="Agregar paciente" style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 700, lineHeight: 1, background: addPacMenu ? "var(--primario)" : "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer", padding: 0 }}>+</button>
+                {addPacMenu && (
+                  <>
+                    <div onClick={() => setAddPacMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 19 }} />
+                    <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 20, background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 5, boxShadow: "0 8px 22px rgba(0,0,0,0.16)", display: "flex", flexDirection: "column", gap: 2, minWidth: 190 }}>
+                      <div style={{ fontSize: 10.5, color: "var(--texto-ter)", padding: "3px 10px 1px", lineHeight: 1.35 }}>Agregar paciente al seguimiento</div>
+                      <button onClick={() => { setAddPacMenu(false); inputCamaraRef.current?.click(); }} style={itemAddPac}>📸 Tomar foto</button>
+                      <button onClick={() => { setAddPacMenu(false); inputGaleriaRef.current?.click(); }} style={itemAddPac}>🖼 Galería / archivos</button>
+                      <button onClick={() => { setAddPacMenu(false); abrirNuevoPaciente(protoSel.id); }} style={itemAddPac}>✍️ A mano</button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={() => setProtoForm({ ...protoSel })} style={btnSec}>⚙️ Editar criterio</button>
+            </div>
           </div>
 
           <input ref={inputGaleriaRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onFotos} />
           <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFotos} />
 
-          <div style={{ ...card, textAlign: "center", borderStyle: "dashed", marginBottom: 12 }}>
-            {extrayendo ? (
+          {extrayendo && (
+            <div style={{ ...card, textAlign: "center", marginBottom: 12 }}>
               <div style={{ fontSize: 14, color: "var(--texto-sec)", padding: "6px 0" }}>
                 <div style={{ fontSize: 26, marginBottom: 6 }}>🔍</div>Leyendo el documento…
               </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--texto)", marginBottom: 3 }}>Agregar paciente a este seguimiento</div>
-                <div style={{ fontSize: 11.5, color: "var(--texto-ter)", marginBottom: 9 }}>Fotografía el consentimiento informado de ingreso, un control o un examen: Uros extrae los datos del paciente y la fecha.</div>
-                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                  <button onClick={() => inputCamaraRef.current?.click()} style={btnPrim}>📸 Tomar foto</button>
-                  <button onClick={() => inputGaleriaRef.current?.click()} style={btnSec}>🖼 Galería</button>
-                  <button onClick={() => abrirNuevoPaciente(protoSel.id)} style={btnSec}>✍️ A mano</button>
-                </div>
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: 11.5, color: "var(--texto-ter)" }}>Ordenar por:</span>

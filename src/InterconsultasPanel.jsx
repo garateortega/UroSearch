@@ -141,6 +141,8 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
   const [fotos, setFotos] = useState([]);
   const [abiertoId, setAbiertoId] = useState(null);
   const [filtro, setFiltro] = useState("todas"); // todas | pendiente | resuelta
+  const [fechaDesde, setFechaDesde] = useState(""); // filtro por fecha (rango, opcional)
+  const [fechaHasta, setFechaHasta] = useState("");
   const [mostrarCaptura, setMostrarCaptura] = useState(false); // despliegue del bloque "Agregar interconsulta"
   const inputGaleriaRef = useRef(null);
   const inputCamaraRef = useRef(null);
@@ -360,7 +362,13 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
 
   if (!currentUser) return null;
 
-  const filtradas = filtro === "todas" ? lista : lista.filter((r) => r.estado === filtro);
+  const filtradas = lista.filter((r) => {
+    if (filtro !== "todas" && r.estado !== filtro) return false;
+    const f = (r.fecha || "").slice(0, 10);
+    if (fechaDesde && (!f || f < fechaDesde)) return false;
+    if (fechaHasta && (!f || f > fechaHasta)) return false;
+    return true;
+  });
 
   return (
     <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
@@ -395,11 +403,22 @@ export default function InterconsultasPanel({ currentUser, contexto = "personal"
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
             {[["todas", "Todas"], ["pendiente", "Pendientes"], ["resuelta", "Resueltas"]].map(([id, label]) => (
               <button key={id} onClick={() => setFiltro(id)} style={{ padding: "6px 12px", fontSize: 12, borderRadius: 14, cursor: "pointer", fontWeight: filtro === id ? 700 : 500, background: filtro === id ? "var(--primario)" : "var(--superficie)", color: filtro === id ? "var(--texto-inv)" : "var(--texto-sec)", border: filtro === id ? "none" : "0.5px solid var(--borde)" }}>{label}</button>
             ))}
             <span style={{ fontSize: 11, color: "var(--texto-ter)", marginLeft: "auto" }}>{filtradas.length} de {lista.length}</span>
+          </div>
+
+          {/* Buscar por fecha (rango, opcional) */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>📅 Fecha:</span>
+            <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} aria-label="Desde" style={{ padding: "5px 8px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }} />
+            <span style={{ fontSize: 11, color: "var(--texto-ter)" }}>—</span>
+            <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} aria-label="Hasta" style={{ padding: "5px 8px", fontSize: 12, borderRadius: 8, border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto)" }} />
+            {(fechaDesde || fechaHasta) && (
+              <button onClick={() => { setFechaDesde(""); setFechaHasta(""); }} style={{ padding: "5px 10px", fontSize: 11, borderRadius: 14, cursor: "pointer", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)" }}>✕ Limpiar</button>
+            )}
           </div>
 
           {cargando && <div style={{ textAlign: "center", padding: 24, color: "var(--texto-ter)", fontSize: 13 }}>Cargando…</div>}

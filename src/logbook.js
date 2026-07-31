@@ -95,3 +95,44 @@ export async function eliminarFotoLogbook(path) {
     return { ok: false, error: e.message };
   }
 }
+// ============================================================
+// LOGBOOK DE EQUIPO
+// Al guardar una cirugía, si un compañero de equipo también participó
+// (aparece como cirujano o ayudante), se agrega a SU logbook con su rol.
+// ============================================================
+
+// Compañeros (id + nombre) de todos los equipos indicados, sin duplicar y sin mí.
+export async function listarCompanerosEquipo(equipoIds, miId) {
+  try {
+    if (!equipoIds || equipoIds.length === 0) return { ok: true, companeros: [] };
+    const { data, error } = await supabase
+      .from("miembros_equipo")
+      .select("user_id, perfiles(id, nombre)")
+      .in("equipo_id", equipoIds);
+    if (error) return { ok: false, error: error.message };
+    const map = new Map();
+    (data || []).forEach((m) => {
+      const p = m.perfiles;
+      const id = p?.id || m.user_id;
+      if (id && id !== miId && !map.has(id)) map.set(id, { id, nombre: p?.nombre || "" });
+    });
+    return { ok: true, companeros: Array.from(map.values()) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Agrega el registro al logbook de un compañero (RPC con permisos/dedup en la base).
+// Devuelve { ok, id } — id null si no se agregó (duplicado o no comparten equipo).
+export async function agregarLogbookACompanero(targetUserId, datos) {
+  try {
+    const { data, error } = await supabase.rpc("logbook_agregar_companero", {
+      target_user: targetUserId,
+      datos,
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, id: data };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
