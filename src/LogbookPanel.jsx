@@ -306,6 +306,53 @@ function BarrasHorizontales({ items, color = "var(--primario)" }) {
   );
 }
 
+// ─── Heurística: ¿es una cirugía oncológica? (por procedimiento/diagnóstico) ───
+function esOncologica(r) {
+  const t = sinTildes(
+    (r.procedimiento || "") + " " + (r.intervencion || "") + " " +
+    (r.diagnostico_pre || "") + " " + (r.diagnostico_post || "") + " " + (r.categoria || "")
+  );
+  return /prostatectomia radical|cistectomia|nefrectomia|nefroureterectomia|orquiectomia|penectomia|linfadenectomia|adrenalectomia|rtuv|rtu v|tumor|cancer|neoplasia|oncolog|carcinoma|masa renal|biopsia prostatica/.test(t);
+}
+
+// ─── Gráfico de dispersión: cada punto es una cirugía (x = orden temporal, y = valor) ───
+// Muestra la mediana como línea de referencia. Útil para ver tiempos operatorios,
+// sangrado, etc. de un procedimiento y detectar la curva de aprendizaje.
+function Dispersion({ puntos, unidad = "min", color = "var(--primario)", mediana = null }) {
+  if (!puntos || puntos.length === 0) return <div style={{ fontSize: 12, color: "var(--texto-ter)" }}>Sin datos numéricos.</div>;
+  const W = 300, H = 120, padL = 30, padR = 8, padT = 10, padB = 18;
+  const vals = puntos.map((p) => p.val);
+  const maxV = Math.max(...vals), minV = Math.min(...vals);
+  const rango = maxV - minV || 1;
+  const n = puntos.length;
+  const x = (i) => padL + (n === 1 ? (W - padL - padR) / 2 : (i / (n - 1)) * (W - padL - padR));
+  const y = (v) => padT + (1 - (v - minV) / rango) * (H - padT - padB);
+  const medY = mediana != null ? y(mediana) : null;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ overflow: "visible" }}>
+      {/* ejes */}
+      <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="var(--borde)" strokeWidth="0.5" />
+      <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--borde)" strokeWidth="0.5" />
+      {/* etiquetas min/max */}
+      <text x={padL - 3} y={padT + 3} textAnchor="end" fontSize="8" fill="var(--texto-ter)">{Math.round(maxV)}</text>
+      <text x={padL - 3} y={H - padB} textAnchor="end" fontSize="8" fill="var(--texto-ter)">{Math.round(minV)}</text>
+      {/* línea de mediana */}
+      {medY != null && (
+        <>
+          <line x1={padL} y1={medY} x2={W - padR} y2={medY} stroke={color} strokeWidth="0.8" strokeDasharray="3 2" opacity="0.6" />
+          <text x={W - padR} y={medY - 2} textAnchor="end" fontSize="8" fill={color}>mediana {mediana} {unidad}</text>
+        </>
+      )}
+      {/* puntos */}
+      {puntos.map((p, i) => (
+        <circle key={i} cx={x(i)} cy={y(p.val)} r="3" fill={color} opacity="0.75">
+          <title>{p.fecha ? p.fecha + " · " : ""}{p.val} {unidad}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
@@ -329,6 +376,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [colaTotal, setColaTotal] = useState(0);
   const [extractProgreso, setExtractProgreso] = useState(null); // { i, n } mientras la IA lee cada foto
   const [complementoOpen, setComplementoOpen] = useState(false); // sección biopsia/control colapsable
+  // Multi-foto: el usuario elige cada vez si cada foto es una cirugía distinta o si
+  // todas las fotos son páginas de la MISMA cirugía.
+  const [modoFotos, setModoFotos] = useState("distintas"); // "distintas" | "misma"
+  // Métricas: criterio de separación y secciones colapsables
+  const [criterioMet, setCriterioMet] = useState("todas"); // "todas" | "onco" | "noonco"
+  const [metPorCxOpen, setMetPorCxOpen] = useState(false);  // "Métricas por cirugía" colapsado por defecto
+  const [procAbierto, setProcAbierto] = useState(null);     // procedimiento expandido (muestra gráfico)
+  const [resumenIA, setResumenIA] = useState("");           // resumen escrito por la IA
+  const [resumenCargando, setResumenCargando] = useState(false);
+  const [resumenError, setResumenError] = useState("");
   const inputFotoRef = useRef(null);   // galería / archivos
   const inputCamaraRef = useRef(null); // cámara directa
 
@@ -416,9 +473,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const comprimidas = [];
       for (const f of files) comprimidas.push(await comprimirImagen(f));
 
-      if (comprimidas.length === 1) {
-        // Una sola cirugía (comportamiento clásico). La foto queda cargada aunque
-        // la extracción falle, para poder completar los datos a mano.
+      if (modoFotos === "misma" || comprimidas.length === 1) {
+        // TODAS las fotos son páginas de UNA misma cirugía (o hay una sola foto).
+        // Se extraen juntas para que la IA use todas las páginas. La foto queda
+        // cargada aunque la extracción falle, para completar los datos a mano.
         setExtractProgreso(null);
         setFotos(comprimidas);
         try {
@@ -430,7 +488,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         }
         setCola([]); setColaTotal(0);
       } else {
-        // Varias cirugías distintas: se extrae cada foto por separado.
+        // Cada foto es una CIRUGÍA DISTINTA: se extrae cada una por separado.
         const drafts = [];
         for (let i = 0; i < comprimidas.length; i++) {
           setExtractProgreso({ i: i + 1, n: comprimidas.length });
@@ -647,30 +705,36 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   // Devuelve {mediana, prom, n} o null si no hay datos
   const stat = (arr) => (arr.length ? { med: mediana(arr), prom: prom(arr), n: arr.length } : null);
   const met = useMemo(() => {
-    const total = registros.length;
-    const comoCirujano = registros.filter((r) => r.rol === "cirujano").length;
-    const comoAyudante = registros.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
-    const conComplicacion = registros.filter((r) => r.complicacion).length;
-    const clavienAlto = registros.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
+    // Criterio de separación (oncológicas / no oncológicas / todas)
+    const base = criterioMet === "onco" ? registros.filter(esOncologica)
+      : criterioMet === "noonco" ? registros.filter((r) => !esOncologica(r))
+      : registros;
+    const total = base.length;
+    const comoCirujano = base.filter((r) => r.rol === "cirujano").length;
+    const comoAyudante = base.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
+    const conComplicacion = base.filter((r) => r.complicacion).length;
+    const clavienAlto = base.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
     // Nota: no se calcula una "duración promedio global" — mezclar cirugías
     // heterogéneas da un número que no significa nada. La duración va por procedimiento.
-    const conDuracion = registros.filter((r) => r.duracion_min > 0).length;
+    const conDuracion = base.filter((r) => r.duracion_min > 0).length;
+    const onco = registros.filter(esOncologica).length; // conteo global (para el chip del criterio)
 
     const porCat = {};
     const porProc = {};
-    registros.forEach((r) => {
+    base.forEach((r) => {
       porCat[r.categoria || "Otro"] = (porCat[r.categoria || "Otro"] || 0) + 1;
       const p = familiaProc(r.procedimiento);
-      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0 };
+      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0, durCasos: [], sangradoCasos: [] };
       const v = porProc[p];
       v.n++;
       if (r.rol === "cirujano") v.cx++;
       if (ROLES_AYUDANTE.includes(r.rol)) v.ayud++;
-      if (r.duracion_min > 0) v.dur.push(r.duracion_min);
+      if (r.duracion_min > 0) { v.dur.push(r.duracion_min); v.durCasos.push({ fecha: r.fecha, val: r.duracion_min }); }
       // Sangrado: un 0 es un dato válido, y un campo vacío también cuenta como 0
       // (no toda cirugía sangra; si hubiera sangrado se habría anotado).
       // Por eso el n del sangrado es siempre el total de cirugías del procedimiento.
-      v.sangrado.push(r.sangrado_ml != null && r.sangrado_ml !== "" ? Number(r.sangrado_ml) : 0);
+      const sg = r.sangrado_ml != null && r.sangrado_ml !== "" ? Number(r.sangrado_ml) : 0;
+      v.sangrado.push(sg); v.sangradoCasos.push({ fecha: r.fecha, val: sg });
       if (r.tamano_litiasis_mm > 0) v.litiasis.push(r.tamano_litiasis_mm);
       if (r.tamano_prostata_cc > 0) v.prostata.push(r.tamano_prostata_cc);
       if (r.complicacion) v.compl++;
@@ -679,11 +743,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     const meses = ultimosMeses(12).map((mes) => ({
       mes,
-      total: registros.filter((r) => mesClave(r.fecha) === mes).length,
-      cirujano: registros.filter((r) => mesClave(r.fecha) === mes && r.rol === "cirujano").length,
+      total: base.filter((r) => mesClave(r.fecha) === mes).length,
+      cirujano: base.filter((r) => mesClave(r.fecha) === mes && r.rol === "cirujano").length,
     }));
 
     // Detalle completo por procedimiento (para tarjetas de métricas)
+    const ordenarPorFecha = (a) => [...a].sort((x, y) => (x.fecha || "").localeCompare(y.fecha || ""));
     const detalleProc = Object.entries(porProc)
       .sort((a, b) => b[1].n - a[1].n)
       .map(([label, v]) => ({
@@ -693,6 +758,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         durProm: prom(v.dur),   // se mantiene para el orden y el KPI
         compl: v.compl,
         stoneFree: v.stoneTotal > 0 ? { free: v.stoneFree, total: v.stoneTotal } : null,
+        durCasos: ordenarPorFecha(v.durCasos),      // puntos para el gráfico de tiempos
+        sangradoCasos: ordenarPorFecha(v.sangradoCasos),
       }));
 
     const topProc = detalleProc.slice(0, 8).map((d) => ({
@@ -706,8 +773,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     // Procedimiento más frecuente (reemplaza a la duración promedio global)
     const masFrecuente = detalleProc.length ? detalleProc[0] : null;
-    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, detalleProc, ayudantiasPorProc };
-  }, [registros]);
+    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, detalleProc, ayudantiasPorProc, onco };
+  }, [registros, criterioMet]);
 
   // ─── Estilos compartidos ───
   const inp = { width: "100%", padding: "8px 10px", fontSize: 13, border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
@@ -725,6 +792,38 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       {sub ? <span style={{ color: "var(--texto-ter)", marginLeft: 4, fontSize: 10 }}>({sub})</span> : null}
     </span>
   );
+
+  // ─── Resumen escrito por la IA sobre la casuística (bajo demanda, pocos tokens) ───
+  const generarResumenIA = async () => {
+    if (resumenCargando) return;
+    setResumenCargando(true); setResumenError(""); setResumenIA("");
+    try {
+      const criterioTxt = criterioMet === "onco" ? "solo cirugías oncológicas" : criterioMet === "noonco" ? "solo cirugías no oncológicas" : "todas las cirugías";
+      const lineas = [
+        `Casuística (${criterioTxt}). Total: ${met.total}. Como cirujano principal: ${met.comoCirujano}. Como ayudante: ${met.comoAyudante}. Con complicación: ${met.conComplicacion} (Clavien-Dindo alto: ${met.clavienAlto}).`,
+        "Por procedimiento (valores = medianas):",
+        ...met.detalleProc.map((d) => `- ${d.label}: ${d.n} cx (cirujano ${d.cx}, ayudante ${d.ayud})${d.dur ? `, duración ${d.dur.med} min (n=${d.dur.n})` : ""}${d.sangrado ? `, sangrado ${d.sangrado.med} ml` : ""}${d.litiasis ? `, litiasis ${d.litiasis.med} mm` : ""}${d.prostata ? `, próstata ${d.prostata.med} cc` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}`),
+      ].join("\n");
+      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({
+          model: "claude-sonnet-5",
+          max_tokens: 500,
+          system: "Eres un urólogo que revisa la casuística quirúrgica de un colega residente. Escribe un resumen breve (4 a 6 frases), en español clínico, con conclusiones útiles: volumen y ritmo, proporción como cirujano vs ayudante, procedimientos donde tiene más experiencia, tiempos operatorios o sangrado destacables, y una o dos sugerencias de qué reforzar. Básate SOLO en los datos entregados, no inventes cifras. No uses markdown ni viñetas.",
+          messages: [{ role: "user", content: `Analiza esta casuística de logbook de urología y dame conclusiones:\n\n${lineas}` }],
+        }),
+      });
+      if (!res.ok) throw new Error(`el servidor respondió ${res.status}`);
+      const data = await res.json();
+      const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+      if (!txt) throw new Error("respuesta vacía");
+      setResumenIA(txt);
+    } catch (e) {
+      setResumenError("No se pudo generar el resumen: " + (e.message || "error"));
+    }
+    setResumenCargando(false);
+  };
 
   // ─── Compartir registros/métricas con el equipo o personas seleccionadas ───
   const [destinatarios, setDestinatarios] = useState([]); // ids seleccionados
@@ -827,7 +926,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 <>
                   <div style={{ fontSize: 30, marginBottom: 6 }}>📷</div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>Fotografía o sube los protocolos operatorios</div>
-                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente. Sube varias imágenes: <b>cada foto se guarda como una cirugía distinta</b> (hasta 6). Las revisas y guardas una por una.</div>
+                  <div style={{ fontSize: 12, color: "var(--texto-ter)", marginBottom: 10 }}>La IA extrae los datos automáticamente (hasta 6 imágenes por lote).</div>
+                  {/* Toggle: cada foto es una cirugía distinta, o todas son la misma */}
+                  <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                    {[["distintas", "📸 Cada foto = una cirugía"], ["misma", "📄 Varias fotos = misma cirugía"]].map(([id, label]) => {
+                      const on = modoFotos === id;
+                      return (
+                        <button key={id} onClick={() => setModoFotos(id)} style={{ padding: "6px 11px", fontSize: 11.5, fontWeight: on ? 700 : 500, borderRadius: 18, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
+                      );
+                    })}
+                  </div>
                   <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                     <button onClick={() => inputCamaraRef.current?.click()} style={btnPrim}>📸 Tomar foto</button>
                     <button onClick={() => inputFotoRef.current?.click()} style={btnSec}>🖼 Galería / archivos</button>
@@ -1067,6 +1175,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       {/* ============ VISTA: MÉTRICAS ============ */}
       {vista === "metricas" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Criterio de separación de la casuística */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {[["todas", "Todas"], ["onco", "Oncológicas"], ["noonco", "No oncológicas"]].map(([id, label]) => {
+              const on = criterioMet === id;
+              return (
+                <button key={id} onClick={() => { setCriterioMet(id); setProcAbierto(null); setResumenIA(""); }} style={{ padding: "6px 12px", fontSize: 12, fontWeight: on ? 700 : 500, borderRadius: 20, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>
+                  {label}{id === "onco" ? ` (${met.onco})` : ""}
+                </button>
+              );
+            })}
+          </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.total}</div>
@@ -1109,37 +1228,64 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             </div>
           </div>
 
-          {/* Métricas detalladas por cirugía (duración, sangrado, litiasis, próstata, stone free) */}
+          {/* Métricas por cirugía: colapsadas; cada procedimiento se despliega y muestra su gráfico */}
           <div style={card}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Métricas por cirugía</div>
-            {met.detalleProc.length === 0 ? (
-              <div style={{ fontSize: 12, color: "var(--texto-ter)" }}>Sin datos aún.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {met.detalleProc.map((d) => (
-                  <div key={d.label} style={{ border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px", background: "var(--fondo-suave)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{d.label}</span>
-                      <span style={{ fontSize: 12, color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{d.n} cx</span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      <Chip label="Cirujano" val={d.cx} />
-                      {d.ayud > 0 && <Chip label="Ayudante" val={d.ayud} />}
-                      {d.dur && <Chip label="Duración" val={`${d.dur.med} min`} sub={`n=${d.dur.n}`} />}
-                      {d.sangrado && <Chip label="Sangrado" val={`${d.sangrado.med} ml`} sub={`n=${d.sangrado.n}`} />}
-                      {d.litiasis && <Chip label="Litiasis" val={`${d.litiasis.med} mm`} sub={`n=${d.litiasis.n}`} />}
-                      {d.prostata && <Chip label="Próstata" val={`${d.prostata.med} cc`} sub={`n=${d.prostata.n}`} />}
-                      {d.stoneFree && <Chip label="Stone free" val={`${d.stoneFree.free}/${d.stoneFree.total}`} ok />}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <button onClick={() => setMetPorCxOpen((o) => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>Métricas por cirugía {met.detalleProc.length > 0 ? `(${met.detalleProc.length})` : ""}</span>
+              <span style={{ fontSize: 14, color: "var(--primario)" }}>{metPorCxOpen ? "▴" : "▾"}</span>
+            </button>
+            {metPorCxOpen && (
+              met.detalleProc.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--texto-ter)", marginTop: 10 }}>Sin datos aún.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                  {met.detalleProc.map((d) => {
+                    const abierto = procAbierto === d.label;
+                    return (
+                      <div key={d.label} style={{ border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--fondo-suave)", overflow: "hidden" }}>
+                        <button onClick={() => setProcAbierto(abierto ? null : d.label)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>{d.label}</span>
+                          <span style={{ fontSize: 12, color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{d.n} cx {abierto ? "▴" : "▾"}</span>
+                        </button>
+                        {abierto && (
+                          <div style={{ padding: "0 12px 12px" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                              <Chip label="Cirujano" val={d.cx} />
+                              {d.ayud > 0 && <Chip label="Ayudante" val={d.ayud} />}
+                              {d.dur && <Chip label="Duración" val={`${d.dur.med} min`} sub={`n=${d.dur.n}`} />}
+                              {d.sangrado && <Chip label="Sangrado" val={`${d.sangrado.med} ml`} sub={`n=${d.sangrado.n}`} />}
+                              {d.litiasis && <Chip label="Litiasis" val={`${d.litiasis.med} mm`} sub={`n=${d.litiasis.n}`} />}
+                              {d.prostata && <Chip label="Próstata" val={`${d.prostata.med} cc`} sub={`n=${d.prostata.n}`} />}
+                              {d.compl > 0 && <Chip label="Complic." val={d.compl} />}
+                              {d.stoneFree && <Chip label="Stone free" val={`${d.stoneFree.free}/${d.stoneFree.total}`} ok />}
+                            </div>
+                            {d.durCasos.length > 0 ? (
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--texto-sec)", marginBottom: 2 }}>Tiempo operatorio por cirugía (orden cronológico)</div>
+                                <Dispersion puntos={d.durCasos} unidad="min" mediana={d.dur ? d.dur.med : null} />
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>Sin tiempos operatorios registrados para graficar.</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             )}
           </div>
 
-          <div style={{ fontSize: 11, color: "var(--texto-ter)", lineHeight: 1.5 }}>
-            Los valores por cirugía son <b>medianas</b> (no promedios): una cirugía muy larga o muy sangrante no distorsiona el resto. El <b>n</b> indica sobre cuántos registros se calcula. En el <b>sangrado</b>, las cirugías sin cifra anotada se cuentan como <b>0 ml</b> (no toda cirugía sangra), por lo que su n es el total del procedimiento. El <i>stone free</i>, en cambio, se calcula solo sobre las cirugías con control imagenológico registrado.
-            <br />Las complicaciones (Clavien-Dindo) no se muestran aquí; quedan registradas en cada cirugía y aparecen al exportar.
+          {/* Resumen escrito por la IA */}
+          <div style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: resumenIA || resumenError ? 8 : 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)" }}>🧠 Resumen de la casuística</span>
+              <button onClick={generarResumenIA} disabled={resumenCargando || met.total === 0} style={{ ...btnSec, padding: "6px 12px", fontSize: 12, opacity: resumenCargando || met.total === 0 ? 0.6 : 1 }}>{resumenCargando ? "Generando…" : resumenIA ? "↻ Regenerar" : "Generar resumen"}</button>
+            </div>
+            {resumenError && <div style={{ fontSize: 12, color: "var(--peligro)" }}>{resumenError}</div>}
+            {resumenIA && <div style={{ fontSize: 13, color: "var(--texto)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resumenIA}</div>}
+            {!resumenIA && !resumenError && !resumenCargando && <div style={{ fontSize: 11, color: "var(--texto-ter)" }}>La IA analiza tus medianas y conteos (no envía fotos) y escribe conclusiones sobre este logbook. Consume muy pocos tokens.</div>}
           </div>
 
           {registros.length > 0 && (

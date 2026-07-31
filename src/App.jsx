@@ -5,7 +5,7 @@ import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
+import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
@@ -498,6 +498,7 @@ const SUBFUNCIONES_PROMOVIBLES = {
   "biblio:videos":       { padre: "conocimiento", sub: "videos",         label: "📚 Videos" },
   "biblio:preguntas":    { padre: "conocimiento", sub: "preguntas",      label: "❓ Preguntas" },
   "biblio:medicamentos": { padre: "conocimiento", sub: "medicamentos",   label: "💊 Medicamentos" },
+  "biblio:protocolos":   { padre: "conocimiento", sub: "protocolos",     label: "📄 Protocolos" },
   "biblio:scores":       { padre: "conocimiento", sub: "scores",         label: "🧮 Scores" },
 };
 
@@ -561,6 +562,7 @@ const FUNCIONES_CONFIGURABLES = [
     ["biblio:videos", "📚 Videos"],
     ["biblio:preguntas", "❓ Preguntas"],
     ["biblio:medicamentos", "💊 Medicamentos"],
+    ["biblio:protocolos", "📄 Protocolos"],
     ["biblio:scores", "🧮 Scores"],
   ]},
 ];
@@ -726,6 +728,16 @@ function ConfigModal({ onClose, currentUser }) {
     setPushCargando(false);
   };
 
+  // ─── Vista de pacientes: horizontal (fila deslizable) o vertical (apilada) ───
+  const [orientPac, setOrientPac] = useState(() => {
+    try { return localStorage.getItem("uro_orient_pac") === "horizontal" ? "horizontal" : "vertical"; } catch { return "vertical"; }
+  });
+  const cambiarOrientPac = (v) => {
+    setOrientPac(v);
+    try { localStorage.setItem("uro_orient_pac", v); } catch {}
+    try { window.dispatchEvent(new CustomEvent("uro-orient-pac-change", { detail: v })); } catch {}
+  };
+
   const aplicar = (nueva) => { setCfg(nueva); guardarConfig(nueva); };
   const toggleFn = (id) => {
     const ocultas = fnOculta(cfg, id) ? cfg.ocultas.filter(x => x !== id) : [...(cfg.ocultas || []), id];
@@ -791,6 +803,20 @@ function ConfigModal({ onClose, currentUser }) {
                   <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>{label}</div>
                   <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
                 </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Vista de pacientes */}
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>👥 Vista de pacientes</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {[["vertical", "↕️ Vertical", "Servicios apilados"], ["horizontal", "↔️ Horizontal", "Servicios en fila deslizable"]].map(([id, label, desc]) => {
+            const on = orientPac === id;
+            return (
+              <div key={id} onClick={() => cambiarOrientPac(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)", textAlign: "center" }}>
+                <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: on ? "var(--primario)" : "var(--texto)" }}>{label}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.3, marginTop: 3 }}>{desc}</div>
               </div>
             );
           })}
@@ -1256,6 +1282,100 @@ const SCORES = [
     tipo: "custom",
   },
 ];
+
+// ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
+function ProtocolosPanel({ currentUser, isAdmin }) {
+  const [items, setItems] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [busqueda, setBusqueda] = useState("");
+  const [subiendo, setSubiendo] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [form, setForm] = useState({ titulo: "", categoria: "", archivo: null, archivoNombre: "" });
+  const [abriendo, setAbriendo] = useState(null);
+  const fileRef = useRef(null);
+
+  const cargar = async () => {
+    setCargando(true);
+    const r = await listarProtocolos();
+    if (r.ok) setItems(r.protocolos); else setMsg("⚠️ " + r.error);
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const abrir = async (p) => {
+    setAbriendo(p.id); setMsg("");
+    const r = await urlProtocolo(p.archivo_path);
+    setAbriendo(null);
+    if (r.ok) abrirExterno(r.url); else setMsg("⚠️ No se pudo abrir: " + r.error);
+  };
+
+  const subir = async () => {
+    if (!form.titulo.trim()) { setMsg("⚠️ Ponle un título al protocolo."); return; }
+    if (!form.archivo) { setMsg("⚠️ Selecciona un archivo Word o PDF."); return; }
+    setSubiendo(true); setMsg("");
+    const r = await crearProtocolo(currentUser.id, { titulo: form.titulo.trim(), categoria: form.categoria.trim() || "General", archivo: form.archivo });
+    setSubiendo(false);
+    if (r.ok) { setForm({ titulo: "", categoria: "", archivo: null, archivoNombre: "" }); if (fileRef.current) fileRef.current.value = ""; setMsg("✓ Protocolo subido."); cargar(); }
+    else setMsg("⚠️ " + r.error);
+  };
+
+  const borrar = async (p) => {
+    if (!confirm(`¿Eliminar el protocolo "${p.titulo}"? Esto no se puede deshacer.`)) return;
+    const r = await eliminarProtocolo(p.id, p.archivo_path);
+    if (r.ok) cargar(); else setMsg("⚠️ " + r.error);
+  };
+
+  const filtrados = items.filter((p) => !busqueda || (p.titulo + " " + (p.categoria || "")).toLowerCase().includes(busqueda.toLowerCase()));
+  const porCat = {};
+  filtrados.forEach((p) => { const c = p.categoria || "General"; (porCat[c] = porCat[c] || []).push(p); });
+  const cats = Object.keys(porCat).sort((a, b) => a.localeCompare(b, "es"));
+  const iconoArchivo = (p) => /pdf/i.test(p.mime || "") || /\.pdf$/i.test(p.archivo_nombre || "") ? "📕" : "📘";
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Buscar protocolo…" style={{ ...inp, marginBottom: 12 }} />
+
+      {isAdmin && (
+        <div style={{ border: "0.5px solid var(--borde)", borderRadius: 12, padding: 14, background: "var(--superficie)", marginBottom: 16 }}>
+          <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>➕ Subir protocolo (solo admin)</div>
+          <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Título (ej: Prostatectomía radical laparoscópica)" style={{ ...inp, marginBottom: 8 }} />
+          <input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} placeholder="Categoría (ej: Próstata, Litiasis, Riñón…)" style={{ ...inp, marginBottom: 8 }} />
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const f = e.target.files?.[0] || null; setForm({ ...form, archivo: f, archivoNombre: f?.name || "" }); }} style={{ display: "none" }} />
+          <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-2)", background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10, textAlign: "left" }}>📎 {form.archivoNombre || "Seleccionar archivo (PDF o Word)…"}</button>
+          <button onClick={subir} disabled={subiendo} style={{ width: "100%", padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: subiendo ? "default" : "pointer", opacity: subiendo ? 0.6 : 1 }}>{subiendo ? "Subiendo…" : "Subir protocolo"}</button>
+        </div>
+      )}
+
+      {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginBottom: 12 }}>{msg}</div>}
+
+      {cargando ? (
+        <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "20px 0" }}>Cargando…</div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "24px 0" }}>{items.length === 0 ? "Aún no hay protocolos subidos." : "Sin resultados."}</div>
+      ) : (
+        cats.map((c) => (
+          <div key={c} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto-sec)", marginBottom: 6 }}>{c}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {porCat[c].map((p) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--fondo-suave)", borderRadius: 10, padding: "10px 12px" }}>
+                  <div onClick={() => abrir(p)} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{iconoArchivo(p)} {p.titulo}</div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.archivo_nombre || ""}</div>
+                  </div>
+                  <button onClick={() => abrir(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--primario)", fontWeight: 600, whiteSpace: "nowrap" }}>{abriendo === p.id ? "…" : "Abrir ↗"}</button>
+                  {isAdmin && <button onClick={() => borrar(p)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
 
 function ScoresPanel() {
   const [abierto, setAbierto] = useState(null);
@@ -2558,21 +2678,24 @@ function detectarPlataforma() {
   if (/Windows|Macintosh|Linux/.test(ua)) return "windows";
   return "android";
 }
-// ── Visor web dentro de UroSearch (iframe) ──
+// ── Apertura externa (CORE u otros sitios) ──
 // URL del sistema CORE. ⚠️ CÁMBIALA por la dirección real de tu CORE.
 const CORE_URL = "https://www.hbvaldivia.cl/core/";
-function VistaWebModal({ url, titulo = "Sitio", onClose }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "0.5px solid var(--borde)", background: "var(--superficie)" }}>
-        <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: "var(--fs-2)", color: "var(--primario)", cursor: "pointer", fontWeight: 600 }}>← Volver</button>
-        <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
-        <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "var(--fs-1)", color: "var(--primario)", textDecoration: "none", fontWeight: 600 }}>Abrir afuera ↗</a>
-      </div>
-      <iframe src={url} title={titulo} style={{ flex: 1, width: "100%", border: "none" }} sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads" />
-      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", textAlign: "center", padding: "6px 10px", borderTop: "0.5px solid var(--borde)" }}>Si la página aparece en blanco, ese sitio no permite abrirse dentro de otra app. Usa “Abrir afuera”.</div>
-    </div>
-  );
+// Abre una URL SIEMPRE en el navegador externo, sin visor in-app.
+// Usa un <a target="_blank"> real (más confiable que window.open en PWA/iOS);
+// si por alguna razón fuera bloqueado, cae a location.href como último recurso.
+function abrirExterno(url) {
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch {
+    try { window.location.href = url; } catch {}
+  }
 }
 
 // ── Términos y Condiciones / Política de Privacidad ──
@@ -2776,14 +2899,14 @@ function AuthScreen({ onLogin }) {
         </div>
         <div style={{fontSize:"var(--fs-1)", color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
         <button onClick={()=>setTutorialOpen(true)} style={{marginTop:20,background:"transparent",border:"0.5px solid var(--borde)",borderRadius:9,padding:"10px 16px",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--primario)",cursor:"pointer"}}>📲 Cómo instalar la app</button>
-        <div style={{marginTop:16,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
-          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
-          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
-        </div>
         {tutorialOpen && <TutorialInstalacion onClose={()=>setTutorialOpen(false)}/>}
         {terminosOpen && <TerminosModal onClose={()=>setTerminosOpen(false)}/>}
         {privacidadOpen && <PrivacidadModal onClose={()=>setPrivacidadOpen(false)}/>}
         <div style={{fontSize:"var(--fs-1)", fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
+        <div style={{marginTop:10,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
+          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
+          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
+        </div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
     );
@@ -3944,6 +4067,7 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
       {subTab === "cirugias" && <CirugiasBiblioteca/>}
       {subTab === "preguntas" && <PreguntasPanel currentUser={currentUser} isAdmin={isAdmin}/>}
       {subTab === "medicamentos" && <MedicamentosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
+      {subTab === "protocolos" && <ProtocolosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
       {subTab === "scores" && <ScoresPanel/>}
 
       {subTab === "documentos" && isAdmin && <ConocimientoPanel conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin}/>}
@@ -4265,7 +4389,6 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto }) {
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false); // herramientas de la sección (desde el submenú)
-  const [coreOpen, setCoreOpen] = useState(false);   // visor web CORE dentro de la app
   const config = useConfig();
 
   // Acciones enviadas desde el submenú de la pestaña Hospital
@@ -4274,7 +4397,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       if (e.detail?.tab !== "hospital") return;
       if (e.detail.accion === "equipos") setMostrarEquipos(true);
       if (e.detail.accion === "tools") setToolsOpen(o => !o);
-      if (e.detail.accion === "abrir-core") { const w = window.open(CORE_URL, "_blank", "noopener,noreferrer"); if (!w) setCoreOpen(true); }
+      if (e.detail.accion === "abrir-core") { abrirExterno(CORE_URL); }
     };
     window.addEventListener("uro-submenu-accion", h);
     return () => window.removeEventListener("uro-submenu-accion", h);
@@ -4311,7 +4434,6 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "ingresos" && <IngresosPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "comites" && <ComitesPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "seguimiento" && <SeguimientoPanel currentUser={currentUser} contexto={contexto}/>}
-      {coreOpen && <VistaWebModal url={CORE_URL} titulo="CORE" onClose={()=>setCoreOpen(false)}/>}
     </div>
   );
 }
@@ -4755,6 +4877,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const [vistaMenuOpen, setVistaMenuOpen] = useState(false); // submenú del botón "Vista ▾"
   const [mesActual, setMesActual] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }); // primer día del mes (vista mensual)
   const inputFotoTablaRef = useRef(null);
+  const inputExcelTablaRef = useRef(null);
+  const [accionesTablaOpen, setAccionesTablaOpen] = useState(false); // menú "+" (Nueva/Importar/Foto/Vista)
   const [extrayendoTabla, setExtrayendoTabla] = useState(false);
   const [lunesSemana, setLunesSemana] = useState(() => {
     const d = new Date();
@@ -4901,6 +5025,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     };
   };
   const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--fs-3)", background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
+  const menuAccTabla = { padding: "8px 11px", fontSize: "var(--fs-1)", textAlign: "left", background: "none", border: "none", color: "var(--texto)", borderRadius: 6, cursor: "pointer", fontWeight: 500, width: "100%" };
 
   // ============================================================
   // CRUD
@@ -5552,28 +5677,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      {/* Submenú de herramientas (aparece al tocar de nuevo la pestaña "Tabla") */}
-      {toolsOpen && !soloLectura && (
-        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
-          <label style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
-            📊 Importar Excel
-            <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
-          </label>
-          <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
-          <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
-          <div style={{position:"relative",marginLeft:"auto"}}>
-            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
-            {vistaMenuOpen && (
-              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:4,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:2,minWidth:130}}>
-                <button onClick={()=>{setModoVista("mensual");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="mensual"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="mensual"?600:400}}>🗓️ Mensual</button>
-                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Semanal</button>
-                <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Inputs ocultos usados por el menú "+" (importar Excel / foto de tabla) */}
+      <input ref={inputExcelTablaRef} type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
+      <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
 
       {/* Navegación de semana o mes + filtro de estado (siempre visible) */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
@@ -5604,6 +5710,26 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
+        {!soloLectura && (
+          <div style={{position:"relative"}}>
+            <button onClick={()=>setAccionesTablaOpen(v=>!v)} aria-label="Acciones" style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,background:accionesTablaOpen?"var(--primario)":"var(--superficie)",color:accionesTablaOpen?"var(--texto-inv)":"var(--primario)",border:accionesTablaOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",lineHeight:1,padding:0}}>+</button>
+            {accionesTablaOpen && (
+              <>
+                <div onClick={()=>setAccionesTablaOpen(false)} style={{position:"fixed",inset:0,zIndex:19}}/>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:9,padding:5,zIndex:20,boxShadow:"0 8px 22px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",gap:2,minWidth:180}}>
+                  <button onClick={()=>{setAccionesTablaOpen(false);setVista("nuevo");}} style={menuAccTabla}>➕ Nueva cirugía</button>
+                  <button onClick={()=>{setAccionesTablaOpen(false);inputExcelTablaRef.current?.click();}} style={menuAccTabla}>📊 Importar Excel</button>
+                  <button onClick={()=>{setAccionesTablaOpen(false);inputFotoTablaRef.current?.click();}} disabled={extrayendoTabla} style={{...menuAccTabla,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
+                  <div style={{height:"0.5px",background:"var(--borde)",margin:"3px 6px"}}/>
+                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",padding:"3px 10px 1px",letterSpacing:0.4}}>VISTA</div>
+                  <button onClick={()=>{setModoVista("mensual");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="mensual"?"var(--fondo-suave)":"none",fontWeight:modoVista==="mensual"?700:500}}>🗓️ Mensual</button>
+                  <button onClick={()=>{setModoVista("planner");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="planner"?"var(--fondo-suave)":"none",fontWeight:modoVista==="planner"?700:500}}>📅 Semanal</button>
+                  <button onClick={()=>{setModoVista("lista");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="lista"?"var(--fondo-suave)":"none",fontWeight:modoVista==="lista"?700:500}}>☰ Lista</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:"auto"}}>{modoVista==="mensual" ? cirugiasMes.length : cirugiasSemana.length} cx</span>
       </div>
 
@@ -6024,6 +6150,44 @@ function ingresoMatcheaCirugia(ing, cir) {
   return false;
 }
 
+// ─── Selector de carpeta en cascada: Año → Mes → Semana ───
+// Muestra 3 campos claros con sugerencias derivadas de las carpetas ya existentes.
+// El valor final es la ruta "Año/Mes/Semana" (los niveles vacíos se omiten).
+function SelectorCarpetaCascada({ value, onChange, carpetas = [] }) {
+  const segs = (value || "").split("/").map(s => s.trim());
+  const s0 = segs[0] || "", s1 = segs[1] || "", s2 = segs[2] || "";
+  const paths = (carpetas || []).map(c => String(c).split("/").map(x => x.trim()).filter(Boolean));
+  const opts = (idx, prefijo) => {
+    const set = new Set();
+    paths.forEach(parts => { if (prefijo.every((v, i) => parts[i] === v) && parts[idx]) set.add(parts[idx]); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
+  };
+  const setNivel = (idx, val) => {
+    const arr = [s0, s1, s2]; arr[idx] = val;
+    for (let i = idx + 1; i < 3; i++) { if (!arr[i - 1]) arr[i] = ""; }
+    onChange(arr.map(x => x.trim()).filter(Boolean).join("/"));
+  };
+  const inpMini = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box" };
+  const lblMini = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+  const nivel = (idx, label, ph, prefijo, val, dis) => (
+    <div style={{ flex: 1, minWidth: 96, opacity: dis ? 0.5 : 1 }}>
+      <label style={lblMini}>{label}</label>
+      <input list={`carp-l${idx}`} value={val} disabled={dis} onChange={e => setNivel(idx, e.target.value)} placeholder={ph} style={inpMini} />
+      <datalist id={`carp-l${idx}`}>{opts(idx, prefijo).map(o => <option key={o} value={o} />)}</datalist>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {nivel(0, "Año", "2026", [], s0, false)}
+        {nivel(1, "Mes", "Agosto", [s0], s1, !s0)}
+        {nivel(2, "Semana", "primera semana", [s0, s1], s2, !s1)}
+      </div>
+      <div style={{ fontSize: "var(--fs-0)", color: value ? "var(--primario)" : "var(--texto-ter)", marginTop: 5, fontWeight: value ? 600 : 400 }}>{value ? `📁 ${value}` : "Sin carpeta"}</div>
+    </div>
+  );
+}
+
 function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const DEFAULTS = {
@@ -6157,7 +6321,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     let y = 12; const hT = 17; const c1 = M + 22, c2 = R - 42;
     doc.rect(M, y, R - M, hT);
     doc.line(c1, y, c1, y + hT); doc.line(c2, y, c2, y + hT);
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 3, y + 3, 15, 11); } catch {}
+    // Celda del logo: se deja vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
     doc.text("DIRECCION HOSPITAL BASE VALDIVIA", (c1 + c2) / 2, y + 4, { align: "center" });
     doc.setFont("helvetica", "italic"); doc.setFontSize(7);
@@ -6234,7 +6398,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const chk = (x, yy) => doc.rect(x, yy - 2.6, 3, 3);
     // Encabezado
     let y = 8; doc.rect(M, y, R - M, 15); doc.line(R - 70, y, R - 70, y + 15);
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 2, y + 2.5, 11, 9); } catch {}
+    // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     T("MINISTERIO DE SALUD", M + 16, y + 3.5, true, 7); T("REGION DE LOS RIOS", M + 16, y + 6.5, true, 7);
     T("SERVICIO SALUD VALDIVIA", M + 16, y + 9.5, true, 7); T("HOSPITAL BASE VALDIVIA", M + 16, y + 12.5, true, 7);
     doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("EVALUACION PREANESTESIA ANEXO II", R - 35, y + 8.5, { align: "center", maxWidth: 66 });
@@ -6298,7 +6462,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const T = (t, x, yy, b = false, s = 8.5) => { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s); doc.text(t, x, yy); };
     const chk = (x, yy) => { doc.setDrawColor(0, 0, 0); doc.rect(x, yy - 2.8, 3.2, 3.2); };
     let y = 12;
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M, y, 13, 10); } catch {}
+    // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     T("HOSPITAL BASE VALDIVIA", M + 16, y + 6, true, 9); y += 14;
     T("ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)", W / 2, y, true, 9.5); doc.setFontSize(9.5); 
     { const t = "ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)"; doc.text(t, W / 2, y, { align: "center", maxWidth: R - M }); } y += 8;
@@ -6348,7 +6512,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth(), M = 16;
     const box = (x, yy) => { doc.setDrawColor(90, 90, 90); doc.rect(x, yy - 3, 3.5, 3.5); };
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, 12, 16, 16); } catch {}
+    // Sin logo UroSearch: estos anexos son formularios oficiales del HBV.
     let y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
     doc.text("HOSPITAL BASE VALDIVIA", M, y); y += 5;
     doc.text("ANEXO N°1: RIESGO DE ENFERMEDAD TROMBOEMBÓLICA (ETE)", M, y, { maxWidth: W - 2 * M }); y += 8;
@@ -6398,11 +6562,11 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--fondo)", zIndex: 70, display: "flex", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 860, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
           <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
           <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre completo", "nombre")}</div>
@@ -6430,13 +6594,10 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
         {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
         {onGuardarIngreso && (
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>Carpeta</label>
-              <input list="carpetas-list" value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="(sin carpeta)" style={inp} />
-              <datalist id="carpetas-list">{carpetas.map(c => <option key={c} value={c} />)}</datalist>
-            </div>
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
+          <div style={{ marginBottom: 8 }}>
+            <label style={lbl}>Carpeta</label>
+            <SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} />
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -6466,7 +6627,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
 // ─── Comités oncológicos: mismo formato que Ingresos (carpetas/subcarpetas) ───
-function ComiteModal({ comiteExistente, onGuardar, onClose }) {
+function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const D = { fecha: HOY, nombre: "", ficha: "", rut: "", diagnostico: "", presentacion: "", acuerdos: "" };
   const [f, setF] = useState(() => (comiteExistente?.datos ? { ...D, ...comiteExistente.datos } : D));
@@ -6477,9 +6638,9 @@ function ComiteModal({ comiteExistente, onGuardar, onClose }) {
   const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "var(--fondo)", display: "flex", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 760, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
           <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)" }}>{comiteExistente?.id ? "Editar comité" : "Nuevo comité oncológico"}</div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)" }}>✕</button>
         </div>
@@ -6497,8 +6658,8 @@ function ComiteModal({ comiteExistente, onGuardar, onClose }) {
         <textarea rows={4} value={f.presentacion} onChange={e => set("presentacion", e.target.value)} style={{ ...inp, resize: "vertical" }} />
         <label style={lbl}>Acuerdos del comité / plan</label>
         <textarea rows={4} value={f.acuerdos} onChange={e => set("acuerdos", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-        <label style={lbl}>Carpeta (usa / para subcarpeta; vacío = sin carpeta)</label>
-        <input value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="Ej: 2026/Próstata" style={inp} />
+        <label style={lbl}>Carpeta</label>
+        <div style={{ marginBottom: 8 }}><SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} /></div>
         {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{msg}</div>}
         <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
       </div>
@@ -6604,7 +6765,7 @@ function ComitesPanel({ currentUser, contexto }) {
 
   return (
     <div style={{ padding: 16 }}>
-      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} carpetas={todasRutas} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo comité</button>
         <button onClick={() => crearCarpeta("")} style={{ padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
@@ -6734,7 +6895,7 @@ function IngresosPanel({ currentUser, contexto }) {
       return (
         <div key={h.path} style={{ marginLeft: depth ? 12 : 0, marginBottom: 3, borderLeft: depth ? "1px solid var(--borde)" : "none", paddingLeft: depth ? 6 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 2px" }}>
-            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({contar(h)})</span></span>
+            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name}</span>
             <button onClick={() => crearCarpeta(h.path)} title="Nueva subcarpeta" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 5, color: "var(--primario)", cursor: "pointer", fontSize: "var(--fs-2)", width: 22, height: 20, lineHeight: 1, padding: 0 }}>＋</button>
             <button onClick={() => eliminarCarpeta(h.path)} title="Eliminar carpeta" style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)" }}>🗑</button>
           </div>
@@ -7408,8 +7569,8 @@ const cargarMiembrosEquipo = async () => {
       case "todos":     break;
       case "activo":    if (p.estado !== "activo") return false; break;
       case "alta":      if (p.estado !== "alta") return false; break;
-      case "operado":   if (!p.operado) return false; break;
-      case "sin_operar":if (p.operado || p.estado === "alta") return false; break;
+      case "operado":   if (p.estado !== "activo" || !p.operado) return false; break;
+      case "sin_operar":if (p.estado !== "activo" || p.operado) return false; break;
       default: break;
     }
     return true;
@@ -7474,8 +7635,15 @@ const cargarMiembrosEquipo = async () => {
   const toggleOrientacionPac = () => setOrientacionPac(o => {
     const nv = o === "horizontal" ? "vertical" : "horizontal";
     try { localStorage.setItem("uro_orient_pac", nv); } catch {}
+    try { window.dispatchEvent(new CustomEvent("uro-orient-pac-change", { detail: nv })); } catch {}
     return nv;
   });
+  // Si la orientación se cambia desde Configuración, reflejarlo aquí.
+  useEffect(() => {
+    const h = (e) => { const v = e.detail === "horizontal" ? "horizontal" : "vertical"; setOrientacionPac(v); };
+    window.addEventListener("uro-orient-pac-change", h);
+    return () => window.removeEventListener("uro-orient-pac-change", h);
+  }, []);
   const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
   useEffect(() => {
@@ -9532,7 +9700,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   <button onClick={()=>{ setFiltroServicio("todos"); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio==="todos")}>
                     Todos los servicios {filtroServicio==="todos" ? "✓" : ""}
                   </button>
-                  {serviciosDisponibles.map(s => (
+                  {aplicarOrdenNombres(serviciosDisponibles, ordenServiciosKanban).map(s => (
                     <button key={s} onClick={()=>{ setFiltroServicio(s); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio===s)}>
                       {s} {filtroServicio===s ? "✓" : ""}
                     </button>
@@ -9566,11 +9734,17 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* MODAL: distribución de pacientes por encargado */}
       {/* HOJA: mover paciente de servicio (mantén presionado una tarjeta) */}
       {moverPaciente && (() => {
-        const destinos = Array.from(new Set([
-          ...misServiciosLista.map(s => s.nombre),
-          ...serviciosEquipo.map(s => s.nombre),
-          ...Object.keys(porServicio),
-        ])).filter(Boolean).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
+        // TODOS los servicios del contexto (incluidos los que no tienen pacientes),
+        // en el mismo orden que se definió al administrar servicios.
+        const destinos = aplicarOrdenNombres(
+          Array.from(new Set([
+            ...serviciosDisponibles,
+            ...misServiciosLista.map(s => s.nombre),
+            ...serviciosEquipo.map(s => s.nombre),
+            moverPaciente.servicio,
+          ].filter(Boolean))),
+          ordenServiciosKanban
+        );
         return (
           <div onClick={()=>setMoverPaciente(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:65}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"70vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -10188,6 +10362,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     if ((subTabBiblio === "videos" && fnOculta(config, "biblio:videos")) ||
         (subTabBiblio === "preguntas" && fnOculta(config, "biblio:preguntas")) ||
         (subTabBiblio === "medicamentos" && fnOculta(config, "biblio:medicamentos")) ||
+        (subTabBiblio === "protocolos" && fnOculta(config, "biblio:protocolos")) ||
         (subTabBiblio === "scores" && fnOculta(config, "biblio:scores"))) setSubTabBiblio("cirugias");
   }, [config, subTabHospital, subTabBiblio]);
 
@@ -11183,7 +11358,6 @@ if (!currentUser) {
       elegir: setSubTabHospital,
       extras: [
         ["🌐 Abrir CORE", () => accion("abrir-core")],
-        ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
       ],
@@ -11205,6 +11379,7 @@ if (!currentUser) {
         ...(!fnOculta(config, "biblio:videos") ? [["videos", "📚 Videos"]] : []),
         ...(!fnOculta(config, "biblio:preguntas") ? [["preguntas", "❓ Preguntas"]] : []),
         ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
+        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📄 Protocolos"]] : []),
         ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
         ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
       ],

@@ -230,3 +230,69 @@ export async function buscarChunks(consulta, limite = 8) {
 // (Solo si quieres la función de agrupar por libro. Si no la agregas,
 //  todo lo demás funciona igual, solo que la fuente no se guardará.)
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// PROTOCOLOS (documentos Word/PDF — SOLO el admin sube/edita/elimina)
+// ════════════════════════════════════════════════════════════════
+// Requiere la tabla `protocolos` y el bucket de storage `protocolos`
+// (ver protocolos.sql). Los archivos aceptados son PDF y Word; pueden
+// tener varias páginas sin problema (se guardan como un solo archivo).
+// ────────────────────────────────────────────────────────────────
+
+const BUCKET_PROTOCOLOS = 'protocolos';
+
+// Listar todos los protocolos (metadatos, sin descargar el archivo)
+export async function listarProtocolos() {
+  const { data, error } = await supabase
+    .from('protocolos')
+    .select('id, titulo, categoria, archivo_nombre, archivo_path, mime, autor_id, fecha_creacion')
+    .order('titulo', { ascending: true });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, protocolos: data || [] };
+}
+
+// Subir un protocolo (archivo = File de <input type=file>). Solo admin (lo impone la RLS).
+export async function crearProtocolo(autorId, { titulo, categoria, archivo }) {
+  if (!archivo) return { ok: false, error: 'Falta el archivo.' };
+  const ext = (archivo.name.split('.').pop() || 'bin').toLowerCase();
+  const permitidas = ['pdf', 'doc', 'docx'];
+  if (!permitidas.includes(ext)) return { ok: false, error: 'Formato no permitido. Sube PDF o Word (.pdf, .doc, .docx).' };
+  const safe = (titulo || 'protocolo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '_').slice(0, 60);
+  const path = `${autorId}/${Date.now()}_${safe}.${ext}`;
+  const up = await supabase.storage.from(BUCKET_PROTOCOLOS).upload(path, archivo, {
+    contentType: archivo.type || undefined, upsert: false,
+  });
+  if (up.error) return { ok: false, error: up.error.message };
+  const { data, error } = await supabase
+    .from('protocolos')
+    .insert({
+      autor_id: autorId,
+      titulo: titulo,
+      categoria: categoria || 'General',
+      archivo_nombre: archivo.name,
+      archivo_path: path,
+      mime: archivo.type || null,
+    })
+    .select()
+    .single();
+  if (error) {
+    // Si falla la fila, borra el archivo recién subido para no dejar huérfanos.
+    try { await supabase.storage.from(BUCKET_PROTOCOLOS).remove([path]); } catch {}
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, protocolo: data };
+}
+
+// Eliminar un protocolo (fila + archivo). Solo admin (lo impone la RLS).
+export async function eliminarProtocolo(id, archivoPath) {
+  if (archivoPath) { try { await supabase.storage.from(BUCKET_PROTOCOLOS).remove([archivoPath]); } catch {} }
+  const { error } = await supabase.from('protocolos').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// URL firmada para abrir/descargar el archivo (válida 1 hora)
+export async function urlProtocolo(archivoPath) {
+  const { data, error } = await supabase.storage.from(BUCKET_PROTOCOLOS).createSignedUrl(archivoPath, 3600);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, url: data.signedUrl };
+}

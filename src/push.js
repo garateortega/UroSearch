@@ -135,8 +135,8 @@ export async function probarPush() {
   if (!reg) return { ok: false, error: "Primero activa las notificaciones." };
   await reg.showNotification("UroSearch", {
     body: "Las notificaciones están funcionando en este dispositivo.",
-    icon: "/uros/cabeza.webp",   // imagen grande: SOLO la cara de Uros
-    badge: "/icons/badge-72.png",    // ícono chico monocromo (logo UroSearch, no la campana genérica)
+    icon: "/uros/cabeza-192.png",       // imagen grande: SOLO la cara de Uros
+    badge: "/uros/cabeza-badge-72.png", // ícono chico monocromo (silueta de la cara)
     vibrate: [60, 40, 60],
   });
   return { ok: true };
