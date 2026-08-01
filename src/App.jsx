@@ -5,14 +5,13 @@ import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
+import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
 import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
 import { guardarSnapshot, leerSnapshot } from "./offlineCache";
-import { Ico } from "./iconos";
 import { encolar, procesarCola, pendientesCount } from "./offlineQueue";
 
 // ============================================================
@@ -210,7 +209,7 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Authorization": `Bearer ${await tokenFuncionIA()}`,
     },
     body: JSON.stringify({
       model: "claude-sonnet-5",
@@ -268,7 +267,7 @@ Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre complet
 
   const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
     body: JSON.stringify({
       model: "claude-sonnet-5", max_tokens: 3000,
       system: "Eres un extractor de tablas quirúrgicas de urología. Respondes exclusivamente con JSON válido. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
@@ -325,7 +324,7 @@ Reglas:
     const c = [...content, { type: "text", text: instrucciones + (extra || "") }];
     const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
       body: JSON.stringify({
         model: "claude-sonnet-5", max_tokens: 4096,
         system: "Eres un extractor de resultados de exámenes de laboratorio y microbiología. Respondes exclusivamente con JSON válido y compacto, sin explicaciones. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
@@ -366,7 +365,37 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
+  // Seguridad de la cuenta
+  const [segPw1, setSegPw1] = useState("");
+  const [segPw2, setSegPw2] = useState("");
+  const [segCorreo, setSegCorreo] = useState("");
+  const [segMsg, setSegMsg] = useState("");
+  const [segLoading, setSegLoading] = useState(false);
   useBackClose(true, onClose);
+
+  const cambiarPw = async () => {
+    setSegMsg("");
+    const v = validarPasswordSegura(segPw1);
+    if (v) return setSegMsg("⚠️ " + v);
+    if (segPw1 !== segPw2) return setSegMsg("⚠️ Las contraseñas no coinciden");
+    setSegLoading(true);
+    const r = await cambiarPasswordActual(segPw1);
+    setSegLoading(false);
+    if (!r.ok) return setSegMsg("⚠️ " + r.error);
+    setSegPw1(""); setSegPw2("");
+    setSegMsg("✓ Contraseña actualizada.");
+  };
+
+  const cambiarCorreo = async () => {
+    setSegMsg("");
+    const nuevo = segCorreo.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevo)) return setSegMsg("⚠️ El correo nuevo no es válido");
+    setSegLoading(true);
+    const r = await cambiarCorreoUsuario(nuevo);
+    setSegLoading(false);
+    if (!r.ok) return setSegMsg("⚠️ " + r.error);
+    setSegMsg("✓ Solicitud enviada. Revisa el correo nuevo (y el actual) para confirmar el cambio.");
+  };
 
   useEffect(() => {
     let vivo = true;
@@ -448,7 +477,7 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
           </div>
           {campo("Correo de contacto", "correo", "contacto@ejemplo.cl")}
           <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: -6, marginBottom: 10, lineHeight: 1.4 }}>
-            Es el que aparece en tus recetas. Puede ser distinto al correo con que inicias sesión{currentUser?.correo ? ` (${currentUser.correo})` : ""}, que no cambia.
+            Es el que aparece en tus recetas. Puede ser distinto al correo con que inicias sesión{currentUser?.correo ? ` (${currentUser.correo})` : ""}, que se cambia más abajo en «Seguridad de la cuenta».
           </div>
           {campo("Centro / Hospital", "centro", "Hospital Base Valdivia")}
           {campo("Dirección", "direccion", "")}
@@ -458,6 +487,23 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
           </div>
           {msg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
           <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 4 }}>{guardando ? "Guardando…" : "Guardar perfil"}</button>
+
+          {/* ── Seguridad de la cuenta ── */}
+          <div style={{ borderTop: "0.5px solid var(--borde)", marginTop: 18, paddingTop: 14 }}>
+            <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 10 }}>🔐 Seguridad de la cuenta</div>
+
+            <label style={lbl}>Cambiar contraseña</label>
+            <input type="password" value={segPw1} onChange={e => setSegPw1(e.target.value)} placeholder="Nueva contraseña" style={inp} disabled={segLoading} />
+            <MedidorPassword password={segPw1} />
+            <input type="password" value={segPw2} onChange={e => setSegPw2(e.target.value)} placeholder="Confirmar nueva contraseña" style={inp} disabled={segLoading} />
+            <button onClick={cambiarPw} disabled={segLoading || !segPw1} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--primario)", borderRadius: 8, cursor: "pointer", opacity: (segLoading || !segPw1) ? 0.5 : 1, marginBottom: 14 }}>{segLoading ? "Guardando…" : "Actualizar contraseña"}</button>
+
+            <label style={lbl}>Cambiar correo de inicio de sesión</label>
+            <input type="email" autoCapitalize="none" autoCorrect="off" value={segCorreo} onChange={e => setSegCorreo(e.target.value)} placeholder="nuevo.correo@hbv.cl" style={inp} disabled={segLoading} />
+            <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: -6, marginBottom: 8, lineHeight: 1.4 }}>Por seguridad, recibirás un link de confirmación en el correo nuevo (y otro en el actual). El cambio se aplica al confirmar ambos.</div>
+            <button onClick={cambiarCorreo} disabled={segLoading || !segCorreo.trim()} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--primario)", borderRadius: 8, cursor: "pointer", opacity: (segLoading || !segCorreo.trim()) ? 0.5 : 1 }}>{segLoading ? "Enviando…" : "Solicitar cambio de correo"}</button>
+            {segMsg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginTop: 10, background: segMsg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: segMsg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", lineHeight: 1.5 }}>{segMsg}</div>}
+          </div>
         </>)}
       </div>
     </div>
@@ -489,39 +535,6 @@ function useConfig() {
 }
 const fnOculta = (cfg, id) => Array.isArray(cfg?.ocultas) && cfg.ocultas.includes(id);
 
-// ─── Íconos SVG por id de subpestaña (para el submenú de cada sección) ───
-const ICONO_SUBTAB = {
-  // Hospital
-  pacientes: "pacientes", tabla: "tabla", notas: "notas", prescripciones: "recetas",
-  interconsultas: "interconsultas", seguimiento: "seguimiento", comites: "comites", ingresos: "ingresos",
-  // Biblioteca
-  cirugias: "cirugias", videos: "videos", preguntas: "preguntas", medicamentos: "medicamentos",
-  protocolos: "protocolos", scores: "scores", documentos: "notas",
-  // Logbook
-  lista: "logbook", nueva: "foto", metricas: "metricas",
-};
-// Quita el emoji/símbolo inicial de una etiqueta ("💊 Recetas" → "Recetas").
-const _soloTexto = (s) => (s || "").replace(/^[^A-Za-zÀ-ÿ0-9]+\s*/, "");
-// Íconos para botones sueltos del submenú (extras / contexto), mapeados por su emoji líder.
-const ICONO_POR_EMOJI = {
-  "🌐": "web", "🔗": "compartir", "👥": "equipo", "👤": "pacientes",
-  "📊": "metricas", "📷": "foto", "🔔": "notificacion", "⚙️": "config",
-  "🎬": "videos", "📄": "notas", "➕": "nuevo", "🛠️": "config",
-};
-const _emojiLider = (s) => { const m = (s || "").match(/^(\p{Extended_Pictographic}(?:\uFE0F)?)/u); return m ? m[1] : null; };
-const _icoDeLabel = (s) => { const e = _emojiLider(s); return e ? ICONO_POR_EMOJI[e] || null : null; };
-
-// Sirve para que un panel vuelva a donde estabas si sales y regresas a la app.
-function usePersistedState(clave, inicial) {
-  const [val, setVal] = useState(() => {
-    try { const raw = localStorage.getItem(clave); return raw != null ? JSON.parse(raw) : inicial; } catch { return inicial; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(clave, JSON.stringify(val)); } catch {}
-  }, [clave, val]);
-  return [val, setVal];
-}
-
 // Si se apaga una pestaña principal pero se deja activa alguna de sus secciones,
 // esa sección se muestra como pestaña propia (así no queda inalcanzable).
 const SUBFUNCIONES_PROMOVIBLES = {
@@ -532,7 +545,6 @@ const SUBFUNCIONES_PROMOVIBLES = {
   "biblio:videos":       { padre: "conocimiento", sub: "videos",         label: "📚 Videos" },
   "biblio:preguntas":    { padre: "conocimiento", sub: "preguntas",      label: "❓ Preguntas" },
   "biblio:medicamentos": { padre: "conocimiento", sub: "medicamentos",   label: "💊 Medicamentos" },
-  "biblio:protocolos":   { padre: "conocimiento", sub: "protocolos",     label: "📘 Protocolos" },
   "biblio:scores":       { padre: "conocimiento", sub: "scores",         label: "🧮 Scores" },
 };
 
@@ -596,7 +608,6 @@ const FUNCIONES_CONFIGURABLES = [
     ["biblio:videos", "📚 Videos"],
     ["biblio:preguntas", "❓ Preguntas"],
     ["biblio:medicamentos", "💊 Medicamentos"],
-    ["biblio:protocolos", "📘 Protocolos"],
     ["biblio:scores", "🧮 Scores"],
   ]},
 ];
@@ -708,7 +719,7 @@ function SeguridadLock() {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 4 }}>🔒 Bloqueo de la app</div>
-      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8 }}>Protege los datos de pacientes guardados en este dispositivo. Pide clave al abrir y tras 2 min en segundo plano.</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8 }}>Protege los datos de pacientes guardados en este dispositivo. Pide clave al abrir, tras 2 min en segundo plano y tras un período de inactividad.</div>
       {!cfg.enabled ? (
         <>
           <input type="password" inputMode="numeric" value={pin1} onChange={e => setPin1(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="Nueva clave (mín. 4 dígitos)" style={inp} />
@@ -721,6 +732,15 @@ function SeguridadLock() {
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--fs-2)", color: "var(--texto)", marginBottom: 10, cursor: "pointer" }}>
             <input type="checkbox" checked={cfg.bio} onChange={toggleBio} /> Usar biometría (huella / Face ID) si el dispositivo lo permite
           </label>
+          <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: "var(--fs-2)", color: "var(--texto)", marginBottom: 10 }}>
+            <span>Bloquear tras inactividad</span>
+            <select value={(cfg.idleMin === undefined || cfg.idleMin === null) ? 5 : cfg.idleMin} onChange={e => aplicar({ ...cfg, idleMin: Number(e.target.value) })} style={{ padding: "6px 8px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)" }}>
+              <option value={2}>2 min</option>
+              <option value={5}>5 min</option>
+              <option value={10}>10 min</option>
+              <option value={0}>Nunca</option>
+            </select>
+          </label>
           <button onClick={desactivar} style={{ width: "100%", padding: 9, fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--peligro)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Desactivar bloqueo</button>
         </>
       )}
@@ -729,61 +749,173 @@ function SeguridadLock() {
   );
 }
 
-// ─── Editor de sugerencias personalizables (SOAP y recetas), por usuario ───
-function EditorSugerencias({ currentUser }) {
-  const uid = currentUser?.id;
-  const [abierto, setAbierto] = useState(false);
-  const [soap, setSoap] = useState(() => leerSugSOAP(uid));
-  const [rx, setRx] = useState(() => leerSugRx(uid));
-  const [msg, setMsg] = useState("");
-  const catsSOAP = [["subjetivo", "S — Subjetivo"], ["objetivo", "O — Objetivo"], ["examen", "Examen físico"], ["indicaciones", "Indicaciones"]];
-  const area = { width: "100%", minHeight: 82, padding: "8px 10px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5, fontFamily: "inherit" };
-  const bloque = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", margin: "8px 0 3px" };
-  const guardar = () => {
-    const limpiar = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, (Array.isArray(v) ? v : []).map((x) => x.trim()).filter(Boolean)]));
-    guardarSugSOAP(uid, limpiar(soap));
-    guardarSugRx(uid, limpiar(rx));
-    setMsg("✓ Guardado"); setTimeout(() => setMsg(""), 2500);
-  };
-  const restaurar = () => {
-    if (!confirm("¿Restaurar las sugerencias por defecto? Se perderán tus cambios.")) return;
-    setSoap(SUGERENCIAS_SOAP); setRx(_defRx());
-    guardarSugSOAP(uid, SUGERENCIAS_SOAP); guardarSugRx(uid, _defRx());
-    setMsg("Restauradas por defecto"); setTimeout(() => setMsg(""), 2500);
-  };
+// ─── Diálogos y toasts propios (reemplazan alert/confirm nativos) ───
+let _mostrarDialogo = null;   // setter registrado por UroDialogHost
+let _mostrarToast = null;
+
+function uroToast(mensaje, tipo) {
+  // tipo: "ok" | "error" | undefined (neutro). Detecta errores por el texto si no se indica.
+  const t = tipo || (/error|no se pudo|falló|fallo|inválid|incorrect/i.test(String(mensaje)) ? "error" : "ok");
+  if (_mostrarToast) _mostrarToast({ id: Date.now() + Math.random(), texto: String(mensaje), tipo: t });
+  else { try { window.alert(mensaje); } catch {} }   // fallback si el host aún no montó
+}
+
+function uroConfirm(mensaje, opciones = {}) {
+  if (!_mostrarDialogo) return Promise.resolve(window.confirm(mensaje)); // fallback
+  const m = String(mensaje);
+  // Etiqueta del botón inferida de la acción si no se indica
+  const etiqueta = opciones.confirmar
+    || (/expulsar/i.test(m) ? "Expulsar"
+    : /¿salir/i.test(m) ? "Salir"
+    : /importar/i.test(m) ? "Importar"
+    : /borrar/i.test(m) ? "Borrar"
+    : /eliminar/i.test(m) ? "Eliminar"
+    : "Confirmar");
+  const peligro = (opciones.peligro !== undefined)
+    ? opciones.peligro
+    : /eliminar|borrar|expulsar|no se puede deshacer/i.test(m);
+  return new Promise((resolve) => {
+    _mostrarDialogo({ texto: m, confirmar: etiqueta, cancelar: opciones.cancelar || "Cancelar", peligro, resolve });
+  });
+}
+
+function UroDialogHost() {
+  const [dialogo, setDialogo] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  useEffect(() => {
+    _mostrarDialogo = setDialogo;
+    _mostrarToast = (t) => {
+      setToasts(prev => [...prev.slice(-2), t]);
+      const dur = Math.min(8000, Math.max(3500, String(t.texto).length * 45));
+      setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), dur);
+    };
+    return () => { _mostrarDialogo = null; _mostrarToast = null; };
+  }, []);
+  const responder = (ok) => { if (dialogo) { dialogo.resolve(ok); setDialogo(null); } };
   return (
-    <div style={{ border: "0.5px solid var(--borde)", borderRadius: 10, marginBottom: 16, overflow: "hidden" }}>
-      <button onClick={() => setAbierto((o) => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 12px", background: "var(--superficie)", border: "none", cursor: "pointer" }}>
-        <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>✍️ Mis sugerencias (SOAP y recetas)</span>
-        <span style={{ color: "var(--primario)" }}>{abierto ? "▴" : "▾"}</span>
-      </button>
-      {abierto && (
-        <div style={{ padding: "10px 12px", borderTop: "0.5px solid var(--borde)" }}>
-          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.4 }}>Una sugerencia por línea. Aparecen en tu evolución SOAP y en tus recetas. Son solo tuyas.</div>
-
-          <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginTop: 4 }}>Evolución SOAP</div>
-          {catsSOAP.map(([k, label]) => (
-            <div key={k}>
-              <div style={bloque}>{label}</div>
-              <textarea value={(soap[k] || []).join("\n")} onChange={(e) => setSoap((p) => ({ ...p, [k]: e.target.value.split("\n") }))} style={area} />
+    <>
+      {dialogo && (
+        <div onClick={() => responder(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: "20px 18px 16px", width: "min(360px, 100%)", boxShadow: "0 14px 40px rgba(0,0,0,0.35)" }}>
+            <div style={{ fontSize: 26, marginBottom: 8, textAlign: "center" }}>{dialogo.peligro ? "⚠️" : "❓"}</div>
+            <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.5, whiteSpace: "pre-line", textAlign: "center", marginBottom: 16 }}>{dialogo.texto}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => responder(false)} style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>{dialogo.cancelar}</button>
+              <button onClick={() => responder(true)} autoFocus style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: dialogo.peligro ? "var(--peligro)" : "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>{dialogo.confirmar}</button>
             </div>
-          ))}
-
-          <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginTop: 12 }}>Recetas</div>
-          {RX_CATS.map(([k, label]) => (
-            <div key={k}>
-              <div style={bloque}>{label}</div>
-              <textarea value={(rx[k] || []).join("\n")} onChange={(e) => setRx((p) => ({ ...p, [k]: e.target.value.split("\n") }))} style={area} />
-            </div>
-          ))}
-
-          {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--exito)", margin: "8px 0" }}>{msg}</div>}
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button onClick={guardar} style={{ flex: 1, padding: "10px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar sugerencias</button>
-            <button onClick={restaurar} style={{ padding: "10px 12px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Restaurar</button>
           </div>
         </div>
       )}
+      {toasts.length > 0 && (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: "calc(18px + env(safe-area-inset-bottom, 0px))", zIndex: 3100, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "none", padding: "0 16px" }}>
+          {toasts.map(t => (
+            <div key={t.id} style={{ maxWidth: 420, background: t.tipo === "error" ? "var(--peligro)" : "var(--texto)", color: "var(--texto-inv)", borderRadius: 10, padding: "10px 16px", fontSize: "var(--fs-1)", lineHeight: 1.45, whiteSpace: "pre-line", boxShadow: "0 6px 20px rgba(0,0,0,0.3)", textAlign: "center" }}>
+              {t.tipo === "error" ? "⚠️ " : ""}{t.texto}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Seguridad de contraseñas ───
+function validarPasswordSegura(pw) {
+  if (!pw || pw.length < 8) return "La contraseña debe tener al menos 8 caracteres";
+  if (!/[a-záéíóúñA-ZÁÉÍÓÚÑ]/.test(pw)) return "La contraseña debe incluir al menos una letra";
+  if (!/[0-9]/.test(pw)) return "La contraseña debe incluir al menos un número";
+  return null;
+}
+function nivelPassword(pw) {
+  if (!pw) return 0;
+  let n = 0;
+  if (pw.length >= 8) n++;
+  if (pw.length >= 12) n++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) n++;
+  if (/[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw)) n++;
+  return Math.min(n, 4);
+}
+function MedidorPassword({ password }) {
+  if (!password) return null;
+  const n = nivelPassword(password);
+  const colores = ["var(--peligro)", "var(--peligro)", "var(--alerta)", "var(--exito)", "var(--exito)"];
+  const textos = ["Muy débil", "Débil", "Aceptable", "Buena", "Excelente"];
+  return (
+    <div style={{ marginTop: -6, marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 3 }}>
+        {[1, 2, 3, 4].map(i => <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= n ? colores[n] : "var(--borde)" }} />)}
+      </div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{textos[n]} · mínimo 8 caracteres con letras y números</div>
+    </div>
+  );
+}
+
+// ─── Auth: recuperación, cambio de contraseña y de correo ───
+async function enviarRecuperacionPassword(correo) {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(correo.trim(), { redirectTo: window.location.origin });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+async function cambiarPasswordActual(nueva) {
+  try {
+    const { error } = await supabase.auth.updateUser({ password: nueva });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+async function cambiarCorreoUsuario(nuevoCorreo) {
+  try {
+    const { error } = await supabase.auth.updateUser({ email: nuevoCorreo.trim() });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+
+// Token para llamar a la Edge Function de IA: usa la sesión del usuario
+// (la función valida que el usuario exista y esté aprobado antes de llamar a Anthropic).
+async function tokenFuncionIA() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) return data.session.access_token;
+  } catch {}
+  return import.meta.env.VITE_SUPABASE_ANON_KEY;
+}
+
+// Modal que aparece al entrar desde el link de recuperación de contraseña
+function NuevaPasswordModal({ onClose }) {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const guardar = async () => {
+    setErr("");
+    const v = validarPasswordSegura(pw1);
+    if (v) return setErr(v);
+    if (pw1 !== pw2) return setErr("Las contraseñas no coinciden");
+    setLoading(true);
+    const r = await cambiarPasswordActual(pw1);
+    setLoading(false);
+    if (!r.ok) return setErr(r.error);
+    uroToast("✓ Contraseña actualizada. Ya puedes usarla en tu próximo inicio de sesión.");
+    onClose();
+  };
+  const inp = { width: "100%", padding: "10px 12px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--fondo-suave)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 10 };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 2500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: "22px 18px 18px", width: "min(380px, 100%)" }}>
+        <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", marginBottom: 4 }}>🔑 Nueva contraseña</div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginBottom: 14, lineHeight: 1.5 }}>Entraste desde el link de recuperación. Define tu nueva contraseña:</div>
+        <input type="password" autoFocus value={pw1} onChange={e => setPw1(e.target.value)} placeholder="Nueva contraseña" style={inp} disabled={loading} />
+        <MedidorPassword password={pw1} />
+        <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} onKeyDown={e => { if (e.key === "Enter") guardar(); }} placeholder="Confirmar contraseña" style={inp} disabled={loading} />
+        {err && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", background: "var(--peligro-bg)", padding: "8px 10px", borderRadius: 6, marginBottom: 10 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} disabled={loading} style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>Ahora no</button>
+          <button onClick={guardar} disabled={loading} style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer", opacity: loading ? 0.6 : 1 }}>{loading ? "Guardando…" : "Guardar"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -819,16 +951,6 @@ function ConfigModal({ onClose, currentUser }) {
       setPushMsg("⚠️ " + (e.message || String(e)));
     }
     setPushCargando(false);
-  };
-
-  // ─── Vista de pacientes: horizontal (fila deslizable) o vertical (apilada) ───
-  const [orientPac, setOrientPac] = useState(() => {
-    try { return localStorage.getItem("uro_orient_pac") === "horizontal" ? "horizontal" : "vertical"; } catch { return "vertical"; }
-  });
-  const cambiarOrientPac = (v) => {
-    setOrientPac(v);
-    try { localStorage.setItem("uro_orient_pac", v); } catch {}
-    try { window.dispatchEvent(new CustomEvent("uro-orient-pac-change", { detail: v })); } catch {}
   };
 
   const aplicar = (nueva) => { setCfg(nueva); guardarConfig(nueva); };
@@ -900,23 +1022,6 @@ function ConfigModal({ onClose, currentUser }) {
             );
           })}
         </div>
-
-        {/* Vista de pacientes */}
-        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>👥 Vista de pacientes</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["vertical", "↕️ Vertical", "Servicios apilados"], ["horizontal", "↔️ Horizontal", "Servicios en fila deslizable"]].map(([id, label, desc]) => {
-            const on = orientPac === id;
-            return (
-              <div key={id} onClick={() => cambiarOrientPac(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)", textAlign: "center" }}>
-                <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: on ? "var(--primario)" : "var(--texto)" }}>{label}</div>
-                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.3, marginTop: 3 }}>{desc}</div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Sugerencias personalizables */}
-        <EditorSugerencias currentUser={currentUser} />
 
         {/* Funciones */}
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
@@ -1024,7 +1129,6 @@ const RX_CATS = [["medicamentos", "💊 Medicamentos"], ["laboratorio", "🧪 La
 // ─── Panel de Prescripciones (exclusivo urólogo): checklists → PDF tipo receta ───
 function PrescripcionesPanel({ currentUser }) {
   const [cat, setCat] = useState("medicamentos");
-  const sugRx = useSugRx(currentUser?.id); // sugerencias personalizadas por usuario
   const [seleccionados, setSeleccionados] = useState({});   // { "medicamentos": Set(idx), ... } via objeto
   const [extra, setExtra] = useState("");                    // líneas libres adicionales
   const [sugerenciasOpen, setSugerenciasOpen] = useState(false); // checklist de sugeridos colapsado por defecto
@@ -1053,7 +1157,7 @@ function PrescripcionesPanel({ currentUser }) {
   };
 
   const lineasActuales = () => {
-    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => sugRx[cat][i]);
+    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => RX_TEMPLATES[cat].items[i]);
     const libres = extra.split("\n").map(s => s.trim()).filter(Boolean);
     return [...base, ...libres];
   };
@@ -1207,7 +1311,7 @@ function PrescripcionesPanel({ currentUser }) {
 
       {sugerenciasOpen && (
         <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
-          {sugRx[cat].map((it, idx) => {
+          {RX_TEMPLATES[cat].items.map((it, idx) => {
             const on = marcados.includes(idx);
             return (
               <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
@@ -1237,7 +1341,7 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
-  const [abiertoId, setAbiertoId] = usePersistedState("uro_med_abierto", null); // medicamento expandido (recordado)
+  const [abiertoId, setAbiertoId] = useState(null); // medicamento expandido (colapsados por defecto)
   const [form, setForm] = useState({ nombre: "", presentacion: "", posologia: "", indicacion: "", categoria: "", notas: "" });
   const [err, setErr] = useState("");
 
@@ -1268,12 +1372,12 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
   };
 
   const eliminar = async (id) => {
-    if (!window.confirm("¿Eliminar este medicamento?")) return;
+    if (!(await uroConfirm("¿Eliminar este medicamento?"))) return;
     try {
       const { error } = await supabase.from("medicamentos").delete().eq("id", id);
-      if (error) return alert("Error: " + error.message);
+      if (error) return uroToast("Error: " + error.message);
       setLista(prev => prev.filter(m => m.id !== id));
-    } catch (e) { alert(String(e)); }
+    } catch (e) { uroToast(String(e)); }
   };
 
   const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -1378,128 +1482,7 @@ const SCORES = [
     id: "briganti", nombre: "Briganti", desc: "Riesgo de invasión ganglionar (cáncer de próstata)",
     tipo: "custom",
   },
-  {
-    id: "ipssqol", nombre: "IPSS-QoL", desc: "Calidad de vida por síntomas urinarios",
-    tipo: "suma",
-    preguntas: ["¿Cómo se sentiría si tuviera que pasar el resto de su vida con sus síntomas urinarios actuales?"],
-    opciones: ["0 · Encantado", "1 · Complacido", "2 · Más bien satisfecho", "3 · Indiferente", "4 · Más bien insatisfecho", "5 · Muy mal", "6 · Fatal"],
-    interpretar: (s) => s <= 1 ? "Buena calidad de vida (0–1)" : s <= 4 ? "Afectación moderada (2–4)" : "Muy afectada (5–6)",
-  },
-  {
-    id: "mskcc", nombre: "MSKCC (Motzer)", desc: "Pronóstico en cáncer renal metastásico",
-    tipo: "checks",
-    factores: [
-      "Karnofsky < 80 %",
-      "LDH > 1,5× el límite superior normal",
-      "Hemoglobina < límite inferior normal",
-      "Calcio corregido > 10 mg/dL",
-      "< 1 año desde el diagnóstico al tratamiento sistémico",
-    ],
-    interpretar: (s) => s === 0 ? "Riesgo favorable (0 factores)" : s <= 2 ? "Riesgo intermedio (1–2 factores)" : "Riesgo pobre (≥ 3 factores)",
-  },
-  {
-    id: "padua", nombre: "PADUA", desc: "Complejidad anatómica de masa renal",
-    tipo: "custom",
-  },
-  {
-    id: "iief5", nombre: "IIEF-5 (SHIM)", desc: "Severidad de la disfunción eréctil",
-    tipo: "custom",
-  },
 ];
-
-// ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
-function ProtocolosPanel({ currentUser, isAdmin }) {
-  const [items, setItems] = useState([]);
-  const [cargando, setCargando] = useState(true);
-  const [busqueda, setBusqueda] = useState("");
-  const [subiendo, setSubiendo] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [form, setForm] = useState({ titulo: "", categoria: "", archivo: null, archivoNombre: "" });
-  const [abriendo, setAbriendo] = useState(null);
-  const fileRef = useRef(null);
-
-  const cargar = async () => {
-    setCargando(true);
-    const r = await listarProtocolos();
-    if (r.ok) setItems(r.protocolos); else setMsg("⚠️ " + r.error);
-    setCargando(false);
-  };
-  useEffect(() => { cargar(); }, []);
-
-  const abrir = async (p) => {
-    setAbriendo(p.id); setMsg("");
-    const r = await urlProtocolo(p.archivo_path);
-    setAbriendo(null);
-    if (r.ok) abrirExterno(r.url); else setMsg("⚠️ No se pudo abrir: " + r.error);
-  };
-
-  const subir = async () => {
-    if (!form.titulo.trim()) { setMsg("⚠️ Ponle un título al protocolo."); return; }
-    if (!form.archivo) { setMsg("⚠️ Selecciona un archivo Word o PDF."); return; }
-    setSubiendo(true); setMsg("");
-    const r = await crearProtocolo(currentUser.id, { titulo: form.titulo.trim(), categoria: form.categoria.trim() || "General", archivo: form.archivo });
-    setSubiendo(false);
-    if (r.ok) { setForm({ titulo: "", categoria: "", archivo: null, archivoNombre: "" }); if (fileRef.current) fileRef.current.value = ""; setMsg("✓ Protocolo subido."); cargar(); }
-    else setMsg("⚠️ " + r.error);
-  };
-
-  const borrar = async (p) => {
-    if (!confirm(`¿Eliminar el protocolo "${p.titulo}"? Esto no se puede deshacer.`)) return;
-    const r = await eliminarProtocolo(p.id, p.archivo_path);
-    if (r.ok) cargar(); else setMsg("⚠️ " + r.error);
-  };
-
-  const filtrados = items.filter((p) => !busqueda || (p.titulo + " " + (p.categoria || "")).toLowerCase().includes(busqueda.toLowerCase()));
-  const porCat = {};
-  filtrados.forEach((p) => { const c = p.categoria || "General"; (porCat[c] = porCat[c] || []).push(p); });
-  const cats = Object.keys(porCat).sort((a, b) => a.localeCompare(b, "es"));
-  const iconoArchivo = (p) => /pdf/i.test(p.mime || "") || /\.pdf$/i.test(p.archivo_nombre || "") ? "📕" : "📘";
-
-  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
-
-  return (
-    <div style={{ padding: 16 }}>
-      <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Buscar protocolo…" style={{ ...inp, marginBottom: 12 }} />
-
-      {isAdmin && (
-        <div style={{ border: "0.5px solid var(--borde)", borderRadius: 12, padding: 14, background: "var(--superficie)", marginBottom: 16 }}>
-          <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>➕ Subir protocolo (solo admin)</div>
-          <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Título (ej: Prostatectomía radical laparoscópica)" style={{ ...inp, marginBottom: 8 }} />
-          <input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} placeholder="Categoría (ej: Próstata, Litiasis, Riñón…)" style={{ ...inp, marginBottom: 8 }} />
-          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const f = e.target.files?.[0] || null; setForm({ ...form, archivo: f, archivoNombre: f?.name || "" }); }} style={{ display: "none" }} />
-          <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-2)", background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10, textAlign: "left" }}>📎 {form.archivoNombre || "Seleccionar archivo (PDF o Word)…"}</button>
-          <button onClick={subir} disabled={subiendo} style={{ width: "100%", padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: subiendo ? "default" : "pointer", opacity: subiendo ? 0.6 : 1 }}>{subiendo ? "Subiendo…" : "Subir protocolo"}</button>
-        </div>
-      )}
-
-      {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginBottom: 12 }}>{msg}</div>}
-
-      {cargando ? (
-        <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "20px 0" }}>Cargando…</div>
-      ) : filtrados.length === 0 ? (
-        <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "24px 0" }}>{items.length === 0 ? "Aún no hay protocolos subidos." : "Sin resultados."}</div>
-      ) : (
-        cats.map((c) => (
-          <div key={c} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto-sec)", marginBottom: 6 }}>{c}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {porCat[c].map((p) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--fondo-suave)", borderRadius: 10, padding: "10px 12px" }}>
-                  <div onClick={() => abrir(p)} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
-                    <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{iconoArchivo(p)} {p.titulo}</div>
-                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.archivo_nombre || ""}</div>
-                  </div>
-                  <button onClick={() => abrir(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--primario)", fontWeight: 600, whiteSpace: "nowrap" }}>{abriendo === p.id ? "…" : "Abrir ↗"}</button>
-                  {isAdmin && <button onClick={() => borrar(p)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
 
 function ScoresPanel() {
   const [abierto, setAbierto] = useState(null);
@@ -1516,8 +1499,6 @@ function ScoresPanel() {
         {score.tipo === "checks" && <ScoreChecks score={score} />}
         {score.id === "damico" && <ScoreDAmico />}
         {score.id === "renal" && <ScoreRENAL />}
-        {score.id === "padua" && <ScorePADUA />}
-        {score.id === "iief5" && <ScoreIIEF5 />}
         {score.id === "briganti" && <ScoreBriganti />}
       </div>
     );
@@ -1648,74 +1629,6 @@ function ScoreRENAL() {
 // antes de calcular un % real. Mientras estén en null, la calculadora recoge los
 // datos y muestra el punto de corte validado, pero no inventa una probabilidad.
 const BRIGANTI_COEF = { "2012": null, "2019": null };
-
-function ScorePADUA() {
-  const [loc, setLoc] = useState(1), [exo, setExo] = useState(1), [rim, setRim] = useState(1);
-  const [sen, setSen] = useState(1), [col, setCol] = useState(1), [tam, setTam] = useState(1);
-  const [ap, setAp] = useState("x"); // sufijo anterior/posterior (no suma)
-  const total = loc + exo + rim + sen + col + tam;
-  const grupo = total <= 7 ? "Riesgo bajo (6–7)" : total <= 9 ? "Riesgo intermedio (8–9)" : "Riesgo alto (≥ 10)";
-  const color = total <= 7 ? "var(--exito)" : total <= 9 ? "var(--alerta)" : "var(--peligro)";
-  const sel = (val, setter, opts) => (
-    <select value={val} onChange={ev => setter(parseInt(ev.target.value))} style={selScore}>
-      {opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-    </select>
-  );
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div><label style={lblScore}>Localización longitudinal (polar)</label>{sel(loc, setLoc, [[1, "Polo superior o inferior (1 pt)"], [2, "Zona media (2 pt)"]])}</div>
-      <div><label style={lblScore}>Tasa exofítica</label>{sel(exo, setExo, [[1, "≥ 50 % exofítico (1 pt)"], [2, "< 50 % exofítico (2 pt)"], [3, "Totalmente endofítico (3 pt)"]])}</div>
-      <div><label style={lblScore}>Borde renal</label>{sel(rim, setRim, [[1, "Lateral (1 pt)"], [2, "Medial (2 pt)"]])}</div>
-      <div><label style={lblScore}>Relación con el seno renal</label>{sel(sen, setSen, [[1, "No contacta (1 pt)"], [2, "Contacta (2 pt)"]])}</div>
-      <div><label style={lblScore}>Relación con el sistema colector</label>{sel(col, setCol, [[1, "No contacta (1 pt)"], [2, "Desplaza o infiltra (2 pt)"]])}</div>
-      <div><label style={lblScore}>Tamaño tumoral</label>{sel(tam, setTam, [[1, "≤ 4 cm (1 pt)"], [2, "> 4 y ≤ 7 cm (2 pt)"], [3, "> 7 cm (3 pt)"]])}</div>
-      <div><label style={lblScore}>Anterior / posterior (sufijo)</label>
-        <select value={ap} onChange={ev => setAp(ev.target.value)} style={selScore}><option value="x">x (indeterminado)</option><option value="a">a (anterior)</option><option value="p">p (posterior)</option></select></div>
-      <div style={scoreBox}>
-        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}{ap === "x" ? "" : ap}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 14</span></div>
-        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{grupo}</div>
-      </div>
-    </div>
-  );
-}
-
-function ScoreIIEF5() {
-  // 5 ítems, cada uno 1–5; total 5–25.
-  const preguntas = [
-    "1. Confianza para lograr y mantener una erección",
-    "2. Con estimulación, ¿con qué frecuencia las erecciones fueron suficientes para la penetración?",
-    "3. Durante el coito, ¿con qué frecuencia mantuvo la erección tras la penetración?",
-    "4. Durante el coito, ¿qué tan difícil fue mantener la erección hasta terminar?",
-    "5. ¿Con qué frecuencia el coito fue satisfactorio?",
-  ];
-  const opciones = [
-    ["1 · Muy baja / casi nunca", "2 · Baja", "3 · Regular", "4 · Alta", "5 · Muy alta / casi siempre"],
-    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
-    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
-    ["1 · Extremadamente difícil", "2 · Muy difícil", "3 · Difícil", "4 · Poco difícil", "5 · Sin dificultad"],
-    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
-  ];
-  const [vals, setVals] = useState([3, 3, 3, 3, 3]);
-  const total = vals.reduce((s, x) => s + x, 0);
-  const interp = total >= 22 ? "Sin disfunción eréctil (22–25)" : total >= 17 ? "DE leve (17–21)" : total >= 12 ? "DE leve a moderada (12–16)" : total >= 8 ? "DE moderada (8–11)" : "DE severa (5–7)";
-  const color = total >= 22 ? "var(--exito)" : total >= 12 ? "var(--alerta)" : "var(--peligro)";
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {preguntas.map((p, i) => (
-        <div key={i}>
-          <label style={lblScore}>{p}</label>
-          <select value={vals[i]} onChange={e => { const v = [...vals]; v[i] = parseInt(e.target.value); setVals(v); }} style={selScore}>
-            {opciones[i].map((o, j) => <option key={j} value={j + 1}>{o}</option>)}
-          </select>
-        </div>
-      ))}
-      <div style={scoreBox}>
-        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 25</span></div>
-        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{interp}</div>
-      </div>
-    </div>
-  );
-}
 
 function ScoreBriganti() {
   const [ver, setVer] = useState("2019");
@@ -1855,7 +1768,6 @@ function tabsPorRol(rol, pendientesCount = 0) {
   return [chat, hospital, logbook, biblio];                       // urologo, residente, interno
 }
 
-const ADMIN_ACCOUNT = { nombre: "Dr. Sebastián (Admin)", correo: "admin@urosearch.cl", password: "admin2026", especialidad: "Urología", rol: "admin", estado: "aprobado" };
 
 
 const CATEGORIAS_VIDEO = ["Todas", "Oncología", "Litiasis", "Derivaciones", "Trasplante", "Funcional", "Otros"];
@@ -2532,9 +2444,9 @@ function PanelConversaciones({ conversaciones, conversacionActual, onSeleccionar
     return fecha.toLocaleDateString("es-CL");
   };
 
-  const handleEliminar = (e, conv) => {
+  const handleEliminar = async (e, conv) => {
     e.stopPropagation(); // evita que se abra la conversación al hacer click en eliminar
-    if (!confirm(`¿Eliminar la conversación "${conv.titulo}"?\n\nEsto borrará todos sus mensajes y no se puede deshacer.`)) return;
+    if (!(await uroConfirm(`¿Eliminar la conversación "${conv.titulo}"?\n\nEsto borrará todos sus mensajes y no se puede deshacer.`))) return;
     onEliminar(conv.id);
   };
 
@@ -2872,24 +2784,21 @@ function detectarPlataforma() {
   if (/Windows|Macintosh|Linux/.test(ua)) return "windows";
   return "android";
 }
-// ── Apertura externa (CORE u otros sitios) ──
+// ── Visor web dentro de UroSearch (iframe) ──
 // URL del sistema CORE. ⚠️ CÁMBIALA por la dirección real de tu CORE.
 const CORE_URL = "https://www.hbvaldivia.cl/core/";
-// Abre una URL SIEMPRE en el navegador externo, sin visor in-app.
-// Usa un <a target="_blank"> real (más confiable que window.open en PWA/iOS);
-// si por alguna razón fuera bloqueado, cae a location.href como último recurso.
-function abrirExterno(url) {
-  try {
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  } catch {
-    try { window.location.href = url; } catch {}
-  }
+function VistaWebModal({ url, titulo = "Sitio", onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "0.5px solid var(--borde)", background: "var(--superficie)" }}>
+        <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: "var(--fs-2)", color: "var(--primario)", cursor: "pointer", fontWeight: 600 }}>← Volver</button>
+        <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
+        <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "var(--fs-1)", color: "var(--primario)", textDecoration: "none", fontWeight: 600 }}>Abrir afuera ↗</a>
+      </div>
+      <iframe src={url} title={titulo} style={{ flex: 1, width: "100%", border: "none" }} sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads" />
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", textAlign: "center", padding: "6px 10px", borderTop: "0.5px solid var(--borde)" }}>Si la página aparece en blanco, ese sitio no permite abrirse dentro de otra app. Usa “Abrir afuera”.</div>
+    </div>
+  );
 }
 
 // ── Términos y Condiciones / Política de Privacidad ──
@@ -3036,7 +2945,8 @@ function AuthScreen({ onLogin }) {
     setError(""); setInfo("");
     if (!form.nombre.trim()) return setError("Ingresa tu nombre completo");
     if (!form.correo.trim() || !form.correo.includes("@")) return setError("Correo electrónico inválido");
-    if (form.password.length < 6) return setError("La contraseña debe tener al menos 6 caracteres");
+    const errPw = validarPasswordSegura(form.password);
+    if (errPw) return setError(errPw);
     if (form.password !== form.password2) return setError("Las contraseñas no coinciden");
     if (!form.documento) return setError("Debes adjuntar tu título o carta de aceptación");
 
@@ -3055,7 +2965,7 @@ function AuthScreen({ onLogin }) {
       return;
     }
 
-    setInfo("Tu solicitud fue enviada. Recibirás acceso una vez sea aprobada por el administrador.");
+    setInfo("Tu solicitud fue enviada. Si la confirmación por correo está activada, te llegará un link para verificar tu dirección; luego recibirás acceso una vez que el administrador apruebe tu cuenta.");
     setForm({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   };
 
@@ -3093,14 +3003,14 @@ function AuthScreen({ onLogin }) {
         </div>
         <div style={{fontSize:"var(--fs-1)", color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
         <button onClick={()=>setTutorialOpen(true)} style={{marginTop:20,background:"transparent",border:"0.5px solid var(--borde)",borderRadius:9,padding:"10px 16px",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--primario)",cursor:"pointer"}}>📲 Cómo instalar la app</button>
+        <div style={{marginTop:16,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
+          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
+          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
+        </div>
         {tutorialOpen && <TutorialInstalacion onClose={()=>setTutorialOpen(false)}/>}
         {terminosOpen && <TerminosModal onClose={()=>setTerminosOpen(false)}/>}
         {privacidadOpen && <PrivacidadModal onClose={()=>setPrivacidadOpen(false)}/>}
         <div style={{fontSize:"var(--fs-1)", fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
-        <div style={{marginTop:10,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
-          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
-          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
-        </div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
     );
@@ -3122,7 +3032,38 @@ function AuthScreen({ onLogin }) {
         <button onClick={handleLogin} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
+        <div style={{textAlign:"center",marginTop:12}}><button onClick={()=>{setView("reset");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:"var(--fs-1)"}}>¿Olvidaste tu contraseña?</button></div>
         <div style={{textAlign:"center",fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginTop:14}}>¿No tienes cuenta? <button onClick={()=>{setView("register");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--primario)",fontWeight:500,cursor:"pointer",padding:0,fontSize:"var(--fs-1)"}}>Solicítala aquí</button></div>
+      </div>
+    );
+  }
+
+  if (view === "reset") {
+    const handleReset = async () => {
+      setError(""); setInfo("");
+      const correo = form.correo.trim();
+      if (!correo || !correo.includes("@")) return setError("Ingresa tu correo electrónico");
+      setLoading(true);
+      await enviarRecuperacionPassword(correo);
+      setLoading(false);
+      // Mensaje neutro siempre: no revelamos si el correo existe o no en el sistema.
+      setInfo("Si el correo está registrado en UroSearch, recibirás un link para restablecer tu contraseña en unos minutos. Revisa también el spam.");
+    };
+    return (
+      <div style={{padding:"24px 24px 32px"}}>
+        <button onClick={()=>{setView("login");setError("");setInfo("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:14,padding:0}}>← Volver</button>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <LogoUroSearch size={36}/>
+          <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Recuperar contraseña</div>
+        </div>
+        <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)",marginBottom:18,lineHeight:1.5}}>Te enviaremos un link a tu correo para definir una contraseña nueva.</div>
+        <label style={labelStyle}>Correo electrónico</label>
+        <input type="email" autoCapitalize="none" autoCorrect="off" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleReset();}} placeholder="tu.correo@hbv.cl" style={inputStyle} disabled={loading}/>
+        {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
+        {info && <div style={{fontSize:"var(--fs-1)",color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
+        <button onClick={handleReset} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
+          {loading ? "Enviando…" : "Enviar link de recuperación"}
+        </button>
       </div>
     );
   }
@@ -3148,7 +3089,8 @@ function AuthScreen({ onLogin }) {
       <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} style={{display:"none"}} disabled={loading}/>
       <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
       <label style={labelStyle}>Contraseña</label>
-      <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 6 caracteres" style={inputStyle} disabled={loading}/>
+      <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 8 caracteres, letras y números" style={inputStyle} disabled={loading}/>
+      <MedidorPassword password={form.password}/>
       <label style={labelStyle}>Confirmar contraseña</label>
       <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle} disabled={loading}/>
       {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
@@ -3203,7 +3145,7 @@ function AdminPanel() {
   const cambiar = async (userId, nuevoEstado) => {
     const result = await cambiarEstadoUsuario(userId, nuevoEstado);
     if (!result.ok) {
-      alert("Error al cambiar estado: " + result.error);
+      uroToast("Error al cambiar estado: " + result.error);
       return;
     }
     // Actualizar localmente sin recargar todo
@@ -3212,15 +3154,15 @@ function AdminPanel() {
 
   const cambiarRol = async (userId, nuevoRol) => {
     const { error } = await supabase.from("perfiles").update({ rol: nuevoRol }).eq("id", userId);
-    if (error) { alert("Error al cambiar el perfil: " + error.message); return; }
+    if (error) { uroToast("Error al cambiar el perfil: " + error.message); return; }
     setPerfiles(perfiles.map(u => u.id === userId ? {...u, rol: nuevoRol} : u));
   };
 
   const eliminar = async (userId) => {
-    if (!confirm("¿Eliminar definitivamente esta cuenta?\n\nNota: el usuario seguirá registrado en el sistema de autenticación pero no podrá acceder a UroSearch hasta que un admin lo vuelva a aprobar.")) return;
+    if (!(await uroConfirm("¿Eliminar definitivamente esta cuenta?\n\nNota: el usuario seguirá registrado en el sistema de autenticación pero no podrá acceder a UroSearch hasta que un admin lo vuelva a aprobar."))) return;
     const result = await eliminarUsuario(userId);
     if (!result.ok) {
-      alert("Error al eliminar: " + result.error);
+      uroToast("Error al eliminar: " + result.error);
       return;
     }
     setPerfiles(perfiles.filter(u => u.id !== userId));
@@ -3321,11 +3263,11 @@ function borrarHistorialQuiz(userId) {
 function PreguntasPanel({ currentUser, isAdmin }) {
   const [preguntas, setPreguntas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [vista, setVista] = usePersistedState("uro_preg_vista", "quiz"); // "quiz" | "nueva" | "lista" (recordada)
+  const [vista, setVista] = useState("quiz"); // "quiz" | "nueva" | "lista"
   const [idx, setIdx] = useState(0);          // índice de la pregunta actual en quiz
   const [seleccion, setSeleccion] = useState(null); // alternativa elegida
   const [mostrarResp, setMostrarResp] = useState(false);
-  const [filtroCat, setFiltroCat] = usePersistedState("uro_preg_cat", "Todas");
+  const [filtroCat, setFiltroCat] = useState("Todas");
   const [form, setForm] = useState({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
   const [errorForm, setErrorForm] = useState("");
   // #13: importar preguntas desde Word / PDF / imagen / texto (solo admin)
@@ -3412,9 +3354,9 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   };
 
   const eliminar = async (id) => {
-    if (!confirm("¿Eliminar esta pregunta?")) return;
+    if (!(await uroConfirm("¿Eliminar esta pregunta?"))) return;
     const result = await eliminarPregunta(id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPreguntas(preguntas.filter(p => p.id !== id));
   };
 
@@ -3457,7 +3399,7 @@ Reglas: transcribe el texto tal cual; si una pregunta tiene menos de 4 alternati
     }
     const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
       body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 8000, system: "Extraes preguntas de opción múltiple de documentos clínicos. Respondes exclusivamente con un array JSON válido.", messages: [{ role: "user", content }] }),
     });
     if (!res.ok) throw new Error("el servidor de IA respondió " + res.status);
@@ -3647,7 +3589,7 @@ Reglas: transcribe el texto tal cual; si una pregunta tiene menos de 4 alternati
               ))}
             </div>
 
-            <button onClick={()=>{ if(confirm("¿Borrar tu historial de respuestas? Las métricas volverán a cero.")){ borrarHistorialQuiz(currentUser.id); setHistorial([]); } }} style={{padding:"8px 12px",fontSize:"var(--fs-1)",background:"none",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>
+            <button onClick={async ()=>{ if(await uroConfirm("¿Borrar tu historial de respuestas? Las métricas volverán a cero.")){ borrarHistorialQuiz(currentUser.id); setHistorial([]); } }} style={{padding:"8px 12px",fontSize:"var(--fs-1)",background:"none",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>
               Reiniciar mi progreso
             </button>
           </>
@@ -3768,9 +3710,9 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   };
 
   const eliminar = async (id) => {
-    if (!confirm("¿Eliminar este documento de la base de conocimiento?")) return;
+    if (!(await uroConfirm("¿Eliminar este documento de la base de conocimiento?"))) return;
     const result = await eliminarConocimiento(id);
-    if (!result.ok) return alert("Error al eliminar: " + result.error);
+    if (!result.ok) return uroToast("Error al eliminar: " + result.error);
     setConocimiento(conocimiento.filter(d => d.id !== id));
     setVista("lista");
     setSeleccionado(null);
@@ -4047,181 +3989,16 @@ const PROTOCOLOS_CIRUGIAS = [
     postoperatorio: ["Foley con irrigación continua 24h", "Retiro Foley 24-48h", "ATB profilaxis 3 días", "Estudio anatomopatológico"],
     complicaciones: ["Perforación vesical (intraperitoneal o extraperitoneal)", "Sangrado postoperatorio", "ITU", "Estenosis uretral", "Síndrome de RTU (raro con bipolar)"],
     duracion: "30-90 min", anestesia: "Espinal o General"
-  },
-  {
-    id: "pc9", titulo: "RTU-Próstata (RTU-P)", categoria: "HBP / Obstructivo",
-    descripcion: "Resección transuretral del adenoma prostático para desobstrucción en hiperplasia benigna sintomática.",
-    indicaciones: ["HBP con síntomas moderados-severos refractarios a fármacos", "Retención urinaria recurrente", "ITU a repetición por obstrucción", "Hematuria de origen prostático", "Litiasis vesical secundaria", "Próstata 30–80 cc"],
-    contraindicaciones: ["Próstata muy grande (>80–100 cc, preferir alternativas)", "ITU activa no tratada", "Coagulopatía no corregida"],
-    preparacion: ["Urocultivo negativo o tratado", "Suspender antiagregantes/anticoagulantes según riesgo", "Profilaxis ATB monodosis", "Consentimiento (riesgo de eyaculación retrógrada)"],
-    tecnica: ["Posición litotomía", "Cistoscopia y evaluación de lóbulos", "Resección por lóbulos con asa (monopolar con glicina o bipolar con suero fisiológico)", "Referencia distal en veru montanum para proteger esfínter", "Hemostasia cuidadosa", "Evacuación de fragmentos (Ellik)", "Instalación de sonda de 3 vías con irrigación"],
-    postoperatorio: ["Irrigación vesical continua 12–24 h", "Retiro de sonda 24–72 h según claridad de orina", "Hidratación", "Control de micción espontánea"],
-    complicaciones: ["Eyaculación retrógrada (frecuente)", "Sangrado / retención por coágulos", "Síndrome post-RTU (hiponatremia, con monopolar)", "Estenosis uretral o de cuello vesical", "Incontinencia (raro)", "Disfunción eréctil"],
-    duracion: "45-90 min", anestesia: "Espinal o General"
-  },
-  {
-    id: "pc10", titulo: "Adenomectomía Prostática Abierta / Simple", categoria: "HBP / Obstructivo",
-    descripcion: "Enucleación del adenoma prostático para HBP de gran volumen; por vía abierta (Millin/transvesical) o laparoscópica/robótica.",
-    indicaciones: ["Próstata >80–100 cc", "Divertículo vesical o litiasis vesical concomitante que requiera abordaje", "Contraindicación de posición de litotomía prolongada"],
-    contraindicaciones: ["Sospecha de cáncer de próstata no estudiado", "Coagulopatía no corregida"],
-    preparacion: ["Estudio de próstata (PSA, tacto, imágenes)", "Urocultivo tratado", "Reserva de hemoderivados", "Profilaxis ATB y TVP"],
-    tecnica: ["Abordaje transvesical (Freyer) o retropúbico (Millin)", "Enucleación digital/con instrumento del adenoma", "Hemostasia del lecho y cuello", "Sonda Foley con tracción suave inicial", "Cistostomía según técnica"],
-    postoperatorio: ["Irrigación vesical", "Retiro de sonda 5–7 días", "Deambulación precoz", "Control de sangrado"],
-    complicaciones: ["Sangrado con requerimiento transfusional", "ITU", "Incontinencia transitoria", "Estenosis de cuello", "Eyaculación retrógrada"],
-    duracion: "1.5-3 horas", anestesia: "General o Espinal"
-  },
-  {
-    id: "pc11", titulo: "Nefrectomía Radical", categoria: "Oncología",
-    descripcion: "Extirpación completa del riñón con la grasa perirrenal (± adrenalectomía / linfadenectomía) por cáncer renal.",
-    indicaciones: ["Masa renal T2 o mayor", "Tumores centrales no aptos para preservación", "Trombo tumoral venoso (con manejo específico)"],
-    contraindicaciones: ["Enfermedad metastásica sin rol de citorreducción", "Comorbilidad prohibitiva"],
-    preparacion: ["UroTAC/RM de estadificación", "Función renal contralateral", "Profilaxis ATB y TVP", "Reserva de sangre"],
-    tecnica: ["Abordaje laparoscópico/robótico o abierto", "Control precoz del pedículo (arteria y vena renal)", "Disección extrafascial (fascia de Gerota)", "Adrenalectomía solo si compromiso o tumor polar superior", "Linfadenectomía en casos seleccionados", "Extracción de la pieza en bolsa"],
-    postoperatorio: ["Deambulación precoz", "Control de función renal", "Retiro de drenaje según débito", "Seguimiento oncológico por estadio"],
-    complicaciones: ["Sangrado / lesión vascular", "Lesión de órganos vecinos (bazo, colon, páncreas)", "Insuficiencia renal", "Hernia incisional", "TVP/TEP"],
-    duracion: "2-4 horas", anestesia: "General"
-  },
-  {
-    id: "pc12", titulo: "Nefroureterectomía Radical", categoria: "Oncología",
-    descripcion: "Resección del riñón, uréter y rodete vesical por carcinoma urotelial de vía urinaria superior.",
-    indicaciones: ["Tumor urotelial de pelvis renal o uréter de alto riesgo", "Tumores voluminosos, multifocales o de alto grado"],
-    contraindicaciones: ["Metástasis sin control local requerido", "Comorbilidad severa"],
-    preparacion: ["UroTAC con fase excretora", "Citología / ureteroscopia diagnóstica", "Profilaxis ATB y TVP"],
-    tecnica: ["Nefrectomía (laparoscópica/robótica/abierta)", "Disección ureteral completa hasta la vejiga", "Resección del rodete vesical periureteral", "Cierre vesical y drenaje", "Instilación intravesical postoperatoria de quimioterapia (dosis única)"],
-    postoperatorio: ["Sonda vesical según cierre", "Cistografía si dudas antes de retiro", "Seguimiento cistoscópico (riesgo de recidiva vesical)"],
-    complicaciones: ["Recidiva vesical", "Fuga urinaria", "Sangrado", "Lesión de órganos vecinos"],
-    duracion: "2.5-4 horas", anestesia: "General"
-  },
-  {
-    id: "pc13", titulo: "Ureterolitotomía / URS Semirrígida con Láser", categoria: "Litiasis",
-    descripcion: "Tratamiento endoscópico de litiasis ureteral con fragmentación láser y/o extracción con canastillo.",
-    indicaciones: ["Litiasis ureteral que no expulsa o sintomática", "Cálculos ureterales medios/distales", "Fracaso de LEOC"],
-    contraindicaciones: ["ITU activa no tratada", "Estenosis ureteral infranqueable", "Coagulopatía no corregida"],
-    preparacion: ["Urocultivo tratado", "Imagen actualizada (UroTAC)", "Profilaxis ATB"],
-    tecnica: ["Posición litotomía", "Cistoscopia y cateterización ureteral", "Ascenso de ureteroscopio semirrígido con guía de seguridad", "Fragmentación con láser Holmium", "Extracción de fragmentos con canastillo", "Instalación de catéter doble J"],
-    postoperatorio: ["Retiro de sonda vesical precoz", "Retiro de doble J 1–4 semanas", "Analgesia", "Control imagenológico de fragmentos residuales"],
-    complicaciones: ["Lesión / perforación ureteral", "Avulsión ureteral (rara, grave)", "ITU / urosepsis", "Estenosis ureteral", "Migración de fragmentos"],
-    duracion: "30-75 min", anestesia: "Espinal o General"
-  },
-  {
-    id: "pc14", titulo: "Instalación / Retiro de Catéter Doble J (JJ)", categoria: "Derivaciones",
-    descripcion: "Colocación endoscópica de catéter ureteral interno para asegurar drenaje del tracto urinario superior.",
-    indicaciones: ["Obstrucción ureteral (litiasis, tumor, estenosis)", "Protección de anastomosis", "Post-cirugía endourológica", "Hidronefrosis sintomática"],
-    contraindicaciones: ["ITU activa no controlada (preferir nefrostomía)", "Uretra/uréter infranqueable"],
-    preparacion: ["Urocultivo tratado", "Profilaxis ATB", "Imagen para tallar longitud del catéter"],
-    tecnica: ["Cistoscopia", "Cateterización del meato ureteral con guía", "Ascenso de guía bajo fluoroscopia", "Colocación del doble J sobre la guía", "Verificación de rizos (renal y vesical)"],
-    postoperatorio: ["Registro de fecha de instalación y retiro", "Educar síntomas del catéter (disuria, dolor lumbar miccional, hematuria leve)", "Programar retiro (evitar 'JJ olvidado')"],
-    complicaciones: ["Síntomas irritativos", "Migración / incrustación", "ITU", "Reflujo con dolor lumbar", "Olvido del catéter con incrustación grave"],
-    duracion: "15-30 min", anestesia: "Sedación / Espinal"
-  },
-  {
-    id: "pc15", titulo: "Cistostomía Suprapúbica (Talla Vesical)", categoria: "Derivaciones",
-    descripcion: "Drenaje vesical percutáneo por vía suprapúbica cuando el acceso uretral no es posible.",
-    indicaciones: ["Retención urinaria con imposibilidad de sondaje uretral", "Traumatismo uretral", "Necesidad de derivación vesical prolongada"],
-    contraindicaciones: ["Vejiga no distendida / no palpable (relativa; usar guía ecográfica)", "Cirugía abdominal baja previa (precaución)", "Coagulopatía"],
-    preparacion: ["Vejiga llena / guía ecográfica", "Asepsia", "Anestesia local"],
-    tecnica: ["Punción suprapúbica en línea media 2 cm sobre pubis", "Verificación de salida de orina", "Colocación de catéter suprapúbico", "Fijación a piel"],
-    postoperatorio: ["Cuidado del sitio de inserción", "Recambio programado del catéter", "Vigilar obstrucción"],
-    complicaciones: ["Lesión intestinal (raro)", "Sangrado", "Infección del trayecto", "Salida accidental del catéter"],
-    duracion: "10-20 min", anestesia: "Local ± Sedación"
-  },
-  {
-    id: "pc16", titulo: "Pieloplastia Desmembrada (Anderson-Hynes)", categoria: "Reconstructiva",
-    descripcion: "Reparación de la estenosis de la unión pieloureteral con resección del segmento estenótico y anastomosis.",
-    indicaciones: ["Estenosis pieloureteral sintomática", "Deterioro de función renal o dolor / ITU asociados", "Litiasis secundaria a la obstrucción"],
-    contraindicaciones: ["Riñón sin función recuperable (considerar nefrectomía)", "Comorbilidad prohibitiva"],
-    preparacion: ["Cintigrama renal (DTPA/MAG3) para función y drenaje", "UroTAC", "Profilaxis ATB"],
-    tecnica: ["Abordaje laparoscópico/robótico o abierto", "Identificación de la unión pieloureteral y vasos polares", "Resección del segmento estenótico", "Espatulación del uréter", "Anastomosis pielo-ureteral sobre catéter doble J", "Drenaje"],
-    postoperatorio: ["Doble J 4–6 semanas", "Retiro de sonda vesical precoz", "Cintigrama de control diferido"],
-    complicaciones: ["Fuga urinaria", "Reestenosis", "ITU", "Sangrado"],
-    duracion: "2-3 horas", anestesia: "General"
-  },
-  {
-    id: "pc17", titulo: "Orquiectomía (Radical Inguinal / Simple)", categoria: "Oncología",
-    descripcion: "Extirpación testicular: radical por vía inguinal ante sospecha de tumor, o simple/subalbugínea (paliativa/hormonal).",
-    indicaciones: ["Masa testicular sospechosa de tumor (radical inguinal)", "Bloqueo androgénico en cáncer de próstata avanzado (simple bilateral)", "Testículo no viable (torsión tardía, absceso)"],
-    contraindicaciones: ["Coagulopatía no corregida"],
-    preparacion: ["Marcadores tumorales (AFP, β-hCG, LDH) si sospecha tumoral", "Ecografía testicular", "Discutir prótesis y banco de semen si aplica"],
-    tecnica: ["Radical: incisión inguinal, control precoz del cordón en anillo inguinal interno, extracción sin violar la bolsa escrotal", "Simple/subalbugínea: vía escrotal (indicaciones no oncológicas)"],
-    postoperatorio: ["Analgesia", "Soporte escrotal", "Seguimiento oncológico y estadificación si tumor"],
-    complicaciones: ["Hematoma escrotal", "Infección", "Dolor crónico", "Impacto en fertilidad/hormonal"],
-    duracion: "30-60 min", anestesia: "General o Espinal"
-  },
-  {
-    id: "pc18", titulo: "Hidrocelectomía", categoria: "Genital / Escrotal",
-    descripcion: "Corrección quirúrgica del hidrocele mediante técnica de Jaboulay (eversión) o Lord (plicatura).",
-    indicaciones: ["Hidrocele sintomático o voluminoso", "Molestias, impacto estético o funcional"],
-    contraindicaciones: ["Sospecha de tumor subyacente (estudiar antes)", "Infección activa"],
-    preparacion: ["Ecografía escrotal", "Descartar causa secundaria", "Profilaxis ATB según caso"],
-    tecnica: ["Incisión escrotal", "Apertura de la vaginal y evacuación del líquido", "Eversión (Jaboulay) o plicatura (Lord) del saco", "Hemostasia prolija", "Cierre por planos ± drenaje"],
-    postoperatorio: ["Soporte escrotal", "Hielo local y analgesia", "Vigilar hematoma"],
-    complicaciones: ["Hematoma escrotal", "Infección", "Recidiva", "Edema prolongado"],
-    duracion: "30-60 min", anestesia: "Espinal o General"
-  },
-  {
-    id: "pc19", titulo: "Varicocelectomía (Subinguinal Microquirúrgica)", categoria: "Genital / Escrotal",
-    descripcion: "Ligadura de las venas espermáticas dilatadas, preferentemente con técnica microquirúrgica subinguinal.",
-    indicaciones: ["Varicocele con dolor", "Infertilidad con alteración seminal y varicocele palpable", "Hipotrofia testicular en adolescentes"],
-    contraindicaciones: ["Varicocele asintomático sin repercusión (relativa)"],
-    preparacion: ["Espermiograma", "Examen físico de pie y Valsalva", "Ecografía doppler si dudas"],
-    tecnica: ["Incisión subinguinal", "Disección del cordón bajo microscopio", "Ligadura de venas preservando arteria testicular y linfáticos", "Preservación de conductos deferentes"],
-    postoperatorio: ["Soporte escrotal", "Analgesia", "Control seminal diferido (3 meses)"],
-    complicaciones: ["Hidrocele reactivo", "Recidiva/persistencia", "Lesión arterial (atrofia, raro)", "Hematoma"],
-    duracion: "45-90 min", anestesia: "General o Espinal"
-  },
-  {
-    id: "pc20", titulo: "Circuncisión", categoria: "Genital / Escrotal",
-    descripcion: "Resección del prepucio por indicaciones médicas (fimosis, parafimosis recurrente, balanopostitis).",
-    indicaciones: ["Fimosis sintomática o cicatricial", "Parafimosis recurrente", "Balanopostitis a repetición", "Motivos médicos o culturales"],
-    contraindicaciones: ["Hipospadias no corregido (prepucio necesario para reconstrucción)", "Infección local activa"],
-    preparacion: ["Aseo local", "Anestesia (bloqueo peneano ± general en niños)"],
-    tecnica: ["Marcación del surco balanoprepucial", "Resección del prepucio", "Hemostasia meticulosa", "Afrontamiento mucocutáneo con sutura reabsorbible"],
-    postoperatorio: ["Analgesia", "Aseo local", "Evitar erecciones/actividad según edad"],
-    complicaciones: ["Sangrado", "Infección", "Edema", "Resección excesiva/insuficiente", "Estenosis del meato (tardía)"],
-    duracion: "20-45 min", anestesia: "Local/Bloqueo o General"
-  },
-  {
-    id: "pc21", titulo: "Biopsia Prostática (Transrectal / Transperineal)", categoria: "Diagnóstica",
-    descripcion: "Toma de muestras prostáticas guiada por ecografía (± fusión con RM) para diagnóstico de cáncer.",
-    indicaciones: ["PSA elevado o en ascenso", "Tacto rectal sospechoso", "Lesión PI-RADS 3–5 en RM multiparamétrica", "Seguimiento en vigilancia activa"],
-    contraindicaciones: ["ITU/prostatitis activa", "Coagulopatía no corregida", "Patología anorrectal que impida acceso transrectal"],
-    preparacion: ["Profilaxis ATB (transrectal) / preparación según vía", "Suspender antiagregantes según riesgo", "Consentimiento", "Enema si transrectal"],
-    tecnica: ["Ecografía transrectal", "Anestesia local (bloqueo periprostático)", "Toma sistemática de cilindros ± dirigida por fusión RM/eco", "Vía transperineal reduce riesgo de sepsis"],
-    postoperatorio: ["Vigilar hematuria, hematospermia y rectorragia autolimitadas", "Consultar si fiebre o retención", "Resultado histopatológico (ISUP/Gleason)"],
-    complicaciones: ["Sepsis urinaria (mayor en transrectal)", "Sangrado (hematuria, rectorragia, hematospermia)", "Retención urinaria", "Dolor"],
-    duracion: "15-30 min", anestesia: "Local ± Sedación"
-  },
-  {
-    id: "pc22", titulo: "Cistolitotomía / Litotricia Vesical Endoscópica", categoria: "Litiasis",
-    descripcion: "Tratamiento de litiasis vesical por vía endoscópica (litotricia) o cirugía abierta según tamaño.",
-    indicaciones: ["Litiasis vesical sintomática", "Cálculos secundarios a obstrucción (tratar la causa)", "Cálculos grandes no fragmentables endoscópicamente (abierta)"],
-    contraindicaciones: ["ITU activa no tratada", "Coagulopatía"],
-    preparacion: ["Urocultivo tratado", "Evaluar obstrucción de salida vesical", "Profilaxis ATB"],
-    tecnica: ["Endoscópica: cistolitotripsia (neumática/láser) y evacuación", "Abierta: cistotomía, extracción del cálculo y cierre vesical", "Corregir la causa obstructiva en el mismo acto si procede"],
-    postoperatorio: ["Sonda vesical según técnica", "Irrigación si sangrado", "Tratar la obstrucción de base"],
-    complicaciones: ["Sangrado", "Perforación vesical", "ITU", "Recidiva si no se corrige la causa"],
-    duracion: "30-90 min", anestesia: "Espinal o General"
-  },
-  {
-    id: "pc23", titulo: "Adrenalectomía (Laparoscópica)", categoria: "Oncología",
-    descripcion: "Extirpación de la glándula suprarrenal por masa funcionante o sospechosa, habitualmente laparoscópica.",
-    indicaciones: ["Adenoma funcionante (feocromocitoma, aldosteronoma, Cushing)", "Masa suprarrenal >4 cm o sospechosa", "Metástasis única resecable seleccionada"],
-    contraindicaciones: ["Carcinoma suprarrenal voluminoso con invasión (valorar abierta)", "Comorbilidad prohibitiva"],
-    preparacion: ["Estudio hormonal completo", "Bloqueo alfa preoperatorio en feocromocitoma", "Manejo anestésico de crisis hipertensivas", "Reserva de sangre"],
-    tecnica: ["Abordaje transperitoneal o retroperitoneal", "Control precoz de la vena suprarrenal (clave en feocromocitoma)", "Disección de la glándula con su grasa", "Extracción en bolsa"],
-    postoperatorio: ["Monitorización hemodinámica y glicemia", "Suplencia esteroidal si corresponde", "Control de presión arterial"],
-    complicaciones: ["Crisis hipertensiva intraoperatoria (feocromocitoma)", "Sangrado", "Lesión de órganos vecinos", "Insuficiencia suprarrenal (bilateral)"],
-    duracion: "2-3 horas", anestesia: "General"
   }
 ];
 
 const CATEGORIAS_CIRUGIAS = ["Todas", "Oncología", "Litiasis", "Derivaciones", "Trasplante", "Funcional", "Otras"];
 
 function CirugiasBiblioteca() {
-  const [seleccionado, setSeleccionado] = usePersistedState("uro_cir_sel", null);
+  const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(!!seleccionado, () => setSeleccionado(null));
   const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = usePersistedState("uro_cir_filtro", "Todas");
+  const [filtro, setFiltro] = useState("Todas");
 
   const filtrados = PROTOCOLOS_CIRUGIAS.filter(p => {
     const matchCat = filtro === "Todas" || p.categoria === filtro;
@@ -4426,7 +4203,6 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
       {subTab === "cirugias" && <CirugiasBiblioteca/>}
       {subTab === "preguntas" && <PreguntasPanel currentUser={currentUser} isAdmin={isAdmin}/>}
       {subTab === "medicamentos" && <MedicamentosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
-      {subTab === "protocolos" && <ProtocolosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
       {subTab === "scores" && <ScoresPanel/>}
 
       {subTab === "documentos" && isAdmin && <ConocimientoPanel conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin}/>}
@@ -4532,40 +4308,40 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
   };
 
   const expulsar = async (userId) => {
-    if (!confirm("¿Expulsar a este miembro del equipo?")) return;
+    if (!(await uroConfirm("¿Expulsar a este miembro del equipo?"))) return;
     const result = await expulsarMiembro(seleccionado.id, userId);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     await recargarMiembros(seleccionado.id);
   };
 
   const aceptar = async (inv) => {
     const sesionResult = await getSession();
     const result = await aceptarInvitacion(inv.id, inv.equipo_id, sesionResult.session.user.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setInvitacionesPendientes(prev => prev.filter(i => i.id !== inv.id));
     await recargarEquipos();
   };
 
   const rechazar = async (inv) => {
     const result = await rechazarInvitacion(inv.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setInvitacionesPendientes(prev => prev.filter(i => i.id !== inv.id));
   };
 
   const salir = async (equipo) => {
-    if (equipo.dueno_id === currentUser.id) return alert("Como dueño no puedes salir, debes eliminar el equipo");
-    if (!confirm("¿Salir del equipo?")) return;
+    if (equipo.dueno_id === currentUser.id) return uroToast("Como dueño no puedes salir, debes eliminar el equipo");
+    if (!(await uroConfirm("¿Salir del equipo?"))) return;
     const result = await salirDelEquipo(equipo.id, currentUser.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     await recargarEquipos();
     setSeleccionado(null);
     setVista("lista");
   };
 
   const eliminarEquipoHandler = async (equipo) => {
-    if (!confirm(`¿Eliminar definitivamente "${equipo.nombre}"?\n\nEsto borrará el equipo, sus miembros y sus invitaciones.`)) return;
+    if (!(await uroConfirm(`¿Eliminar definitivamente "${equipo.nombre}"?\n\nEsto borrará el equipo, sus miembros y sus invitaciones.`))) return;
     const result = await eliminarEquipo(equipo.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     await recargarEquipos();
     setSeleccionado(null);
     setVista("lista");
@@ -4748,6 +4524,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto }) {
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false); // herramientas de la sección (desde el submenú)
+  const [coreOpen, setCoreOpen] = useState(false);   // visor web CORE dentro de la app
   const config = useConfig();
 
   // Acciones enviadas desde el submenú de la pestaña Hospital
@@ -4756,7 +4533,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       if (e.detail?.tab !== "hospital") return;
       if (e.detail.accion === "equipos") setMostrarEquipos(true);
       if (e.detail.accion === "tools") setToolsOpen(o => !o);
-      if (e.detail.accion === "abrir-core") { abrirExterno(CORE_URL); }
+      if (e.detail.accion === "abrir-core") { const w = window.open(CORE_URL, "_blank", "noopener,noreferrer"); if (!w) setCoreOpen(true); }
     };
     window.addEventListener("uro-submenu-accion", h);
     return () => window.removeEventListener("uro-submenu-accion", h);
@@ -4793,6 +4570,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "ingresos" && <IngresosPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "comites" && <ComitesPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "seguimiento" && <SeguimientoPanel currentUser={currentUser} contexto={contexto}/>}
+      {coreOpen && <VistaWebModal url={CORE_URL} titulo="CORE" onClose={()=>setCoreOpen(false)}/>}
     </div>
   );
 }
@@ -4846,7 +4624,7 @@ function NotasPanel({ currentUser, contexto, equipos }) {
   const guardarEdit = async (n) => {
     const t = editT.trim(); if (!t || t === n.texto) { setEditId(null); return; }
     const { error } = await supabase.from("notas").update({ texto: t }).eq("id", n.id);
-    if (error) return alert("No se pudo editar: " + error.message);
+    if (error) return uroToast("No se pudo editar: " + error.message);
     setNotas(prev => prev.map(x => x.id === n.id ? { ...x, texto: t } : x)); setEditId(null);
   };
   const imprimirNotaPDF = async (n) => {
@@ -4878,13 +4656,13 @@ function NotasPanel({ currentUser, contexto, equipos }) {
       // En contexto de equipo, filtrar: las de visibilidad "equipo" las ven todos; las "personal" solo su autor
       const visibles = (data || []).filter(n => n.visibilidad === "equipo" || n.autor_id === currentUser.id);
       setNotas(visibles);
-    } catch (e) { alert("Error cargando notas: " + (e.message || e)); }
+    } catch (e) { uroToast("Error cargando notas: " + (e.message || e)); }
     setCargando(false);
   };
   useEffect(() => { cargar(); setNueva(n => ({ ...n, visibilidad: esEquipo ? "equipo" : "personal" })); }, [contexto]);
 
   const guardar = async () => {
-    if (!nueva.texto.trim()) return alert("Escribe la nota");
+    if (!nueva.texto.trim()) return uroToast("Escribe la nota");
     try {
       const { data, error } = await supabase.from("notas").insert({
         autor_id: currentUser.id,
@@ -4911,16 +4689,16 @@ function NotasPanel({ currentUser, contexto, equipos }) {
       }
       setNueva({ titulo: "", texto: "", visibilidad: esEquipo ? "equipo" : "personal" });
       setFormAbierto(false);
-    } catch (e) { alert("Error: " + (e.message || e)); }
+    } catch (e) { uroToast("Error: " + (e.message || e)); }
   };
 
   const eliminar = async (nota) => {
-    if (!confirm("¿Eliminar esta nota?")) return;
+    if (!(await uroConfirm("¿Eliminar esta nota?"))) return;
     try {
       const { error } = await supabase.from("notas").delete().eq("id", nota.id);
       if (error) throw error;
       setNotas(prev => prev.filter(n => n.id !== nota.id));
-    } catch (e) { alert("Error: " + (e.message || e)); }
+    } catch (e) { uroToast("Error: " + (e.message || e)); }
   };
 
   return (
@@ -5019,7 +4797,7 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
     const agregando = !actuales.includes(userId);
     const nuevos = agregando ? [...actuales, userId] : actuales.filter(id => id !== userId);
     const result = await actualizarPendiente(pendiente.id, { encargados: nuevos });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPendientes(prev => prev.map(x => x.id === pendiente.id ? result.pendiente : x));
     if (agregando && userId !== currentUser.id) {
       crearNotificacion(userId, `Te asignaron un pendiente: "${pendiente.texto.slice(0,80)}"${pendiente.fecha_objetivo ? ` (para el ${pendiente.fecha_objetivo})` : ""} — por ${currentUser.nombre}`, "pendiente");
@@ -5047,7 +4825,7 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
   // ============================================================
 
   const guardar = async () => {
-    if (!nuevo.texto.trim()) return alert("Escribe algo");
+    if (!nuevo.texto.trim()) return uroToast("Escribe algo");
     const datos = {
       autor_id: currentUser.id,
       equipo_id: esEquipo ? contexto : null,
@@ -5056,7 +4834,7 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
       fecha_objetivo: nuevo.fecha_objetivo || null,
     };
     const result = await crearPendiente(datos);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPendientes(prev => [result.pendiente, ...prev]);
     setNuevo({ texto: "", prioridad: "normal", fecha_objetivo: "" });
   };
@@ -5064,14 +4842,14 @@ function PendientesPanel({ pendientes, setPendientes, currentUser, contexto, equ
   const toggleCompletar = async (p) => {
     const nuevoEstado = p.estado === "completado" ? "pendiente" : "completado";
     const result = await actualizarPendiente(p.id, { estado: nuevoEstado });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPendientes(prev => prev.map(x => x.id === p.id ? result.pendiente : x));
   };
 
   const eliminar = async (p) => {
-    if (!confirm("¿Eliminar este pendiente?")) return;
+    if (!(await uroConfirm("¿Eliminar este pendiente?"))) return;
     const result = await eliminarPendiente(p.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPendientes(prev => prev.filter(x => x.id !== p.id));
   };
 
@@ -5236,8 +5014,6 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const [vistaMenuOpen, setVistaMenuOpen] = useState(false); // submenú del botón "Vista ▾"
   const [mesActual, setMesActual] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }); // primer día del mes (vista mensual)
   const inputFotoTablaRef = useRef(null);
-  const inputExcelTablaRef = useRef(null);
-  const [accionesTablaOpen, setAccionesTablaOpen] = useState(false); // menú "+" (Nueva/Importar/Foto/Vista)
   const [extrayendoTabla, setExtrayendoTabla] = useState(false);
   const [lunesSemana, setLunesSemana] = useState(() => {
     const d = new Date();
@@ -5274,7 +5050,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     const eqId = esEquipo ? contexto : null;
     const fila = { user_id: currentUser.id, equipo_id: eqId, carpeta: null, nombre: f.nombre || null, ficha: f.ficha || null, datos: f, updated_at: new Date().toISOString() };
     const { data: nuevo, error } = await supabase.from("ingresos").insert(fila).select().single();
-    if (error || !nuevo) { alert("No se pudo guardar el ingreso: " + (error?.message || "")); return; }
+    if (error || !nuevo) { uroToast("No se pudo guardar el ingreso: " + (error?.message || "")); return; }
     const rc = await actualizarCirugia(cir.id, { ingreso_id: nuevo.id });
     if (rc.ok) {
       setTablaCirugias(prev => prev.map(c => c.id === cir.id ? rc.cirugia : c));
@@ -5384,7 +5160,6 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     };
   };
   const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--fs-3)", background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
-  const menuAccTabla = { padding: "8px 11px", fontSize: "var(--fs-1)", textAlign: "left", background: "none", border: "none", color: "var(--texto)", borderRadius: 6, cursor: "pointer", fontWeight: 500, width: "100%" };
 
   // ============================================================
   // CRUD
@@ -5481,7 +5256,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   const cambiarEstado = async (cirugia, nuevoEstado) => {
     const result = await actualizarCirugia(cirugia.id, { estado: nuevoEstado });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
     if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
 
@@ -5499,7 +5274,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           });
         } catch {}
       }
-      if (!confirm(`¿Crear a ${cirugia.iniciales} como paciente hospitalizado en la pestaña Pacientes?`)) return;
+      if (!(await uroConfirm(`¿Crear a ${cirugia.iniciales} como paciente hospitalizado en la pestaña Pacientes?`))) return;
       // #15: si la cirugía tiene un ingreso vinculado, su historia pasa a la ficha del paciente.
       let ingresoLink = null;
       if (cirugia.ingreso_id) {
@@ -5524,17 +5299,17 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         cirugias_realizadas: [{ fecha: cirugia.fecha || new Date().toISOString().slice(0, 10), nombre: cirugia.procedimiento }],
       };
       const rp = await crearPaciente(datosPaciente);
-      if (!rp.ok) return alert("Cirugía completada, pero no se pudo crear el paciente: " + rp.error);
+      if (!rp.ok) return uroToast("Cirugía completada, pero no se pudo crear el paciente: " + rp.error);
       if (setPacientes) setPacientes(prev => [rp.paciente, ...prev]);
       // El ingreso queda ligado al paciente y desaparece de la lista de Ingresos (para ahorrar espacio).
       if (ingresoLink) { try { await supabase.from("ingresos").update({ paciente_id: rp.paciente.id }).eq("id", ingresoLink.id); } catch {} }
-      alert(`✓ ${cirugia.iniciales} creado como paciente hospitalizado${ingresoLink ? " con su historia de ingreso" : ""}. Edítalo en Pacientes para asignar cama y encargados.`);
+      uroToast(`✓ ${cirugia.iniciales} creado como paciente hospitalizado${ingresoLink ? " con su historia de ingreso" : ""}. Edítalo en Pacientes para asignar cama y encargados.`);
     }
   };
 
   const asignarPrimerAyudante = async (cirugia, nombre) => {
     const result = await actualizarCirugia(cirugia.id, { primer_ayudante: nombre || null });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? result.cirugia : c));
     if (seleccionado?.id === cirugia.id) setSeleccionado(result.cirugia);
     // Notificar al asignado (si es otro miembro)
@@ -5548,9 +5323,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   };
 
   const eliminar = async (cirugia) => {
-    if (!confirm(`¿Eliminar cirugía de ${cirugia.iniciales}?`)) return;
+    if (!(await uroConfirm(`¿Eliminar cirugía de ${cirugia.iniciales}?`))) return;
     const result = await eliminarCirugia(cirugia.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setTablaCirugias(prev => prev.filter(c => c.id !== cirugia.id));
     setSeleccionado(null);
     setVista("tabla");
@@ -5588,7 +5363,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           estado: "programada",
           observaciones: c.diagnostico ? ("Dg: " + c.diagnostico).slice(0, 500) : null,
         }));
-      if (filas.length === 0) { alert("No se pudo extraer ninguna cirugía de la foto. Intenta con mejor luz o encuadre."); return; }
+      if (filas.length === 0) { uroToast("No se pudo extraer ninguna cirugía de la foto. Intenta con mejor luz o encuadre."); return; }
       // Evita duplicar si se re-sube la misma tabla: descarta las que ya existen
       // (misma fecha + nombre + procedimiento, ignorando tildes y mayúsculas).
       const _norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -5596,17 +5371,17 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       const _existentes = new Set(tablaCirugias.map(_clave));
       const nuevas = filas.filter(f => !_existentes.has(_clave(f)));
       const dup = filas.length - nuevas.length;
-      if (nuevas.length === 0) { alert(`Las ${filas.length} cirugías detectadas ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); return; }
+      if (nuevas.length === 0) { uroToast(`Las ${filas.length} cirugías detectadas ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); return; }
       const msgConf = dup > 0
         ? `Se detectaron ${filas.length} cirugías (${dup} ya existían y se omitirán). ¿Importar las ${nuevas.length} nuevas?`
         : `Se detectaron ${nuevas.length} cirugías en la foto. ¿Importarlas?`;
-      if (!window.confirm(msgConf)) return;
+      if (!(await uroConfirm(msgConf))) return;
       const result = await crearCirugiasBulk(nuevas);
-      if (!result.ok) { alert("Error al importar: " + result.error); return; }
+      if (!result.ok) { uroToast("Error al importar: " + result.error); return; }
       setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora)));
-      alert(`✓ ${result.cirugias.length} cirugías importadas${dup > 0 ? ` · ${dup} omitidas por duplicado` : ""}`);
+      uroToast(`✓ ${result.cirugias.length} cirugías importadas${dup > 0 ? ` · ${dup} omitidas por duplicado` : ""}`);
     } catch (err) {
-      alert("No se pudo leer la foto de la tabla: " + (err?.message || err));
+      uroToast("No se pudo leer la foto de la tabla: " + (err?.message || err));
     } finally {
       setExtrayendoTabla(false);
     }
@@ -5629,7 +5404,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       const matriz = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
       
       if (matriz.length === 0) {
-        alert("El archivo está vacío");
+        uroToast("El archivo está vacío");
         return;
       }
 
@@ -5667,7 +5442,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       }
 
       if (filaHeaders === -1) {
-        alert("No se encontraron encabezados válidos. El Excel debe tener una fila con FECHA y DIAGNOSTICO.");
+        uroToast("No se encontraron encabezados válidos. El Excel debe tener una fila con FECHA y DIAGNOSTICO.");
         return;
       }
 
@@ -5809,7 +5584,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       }
 
       if (filas.length === 0) {
-        alert("No se pudo extraer ninguna cirugía válida del Excel.");
+        uroToast("No se pudo extraer ninguna cirugía válida del Excel.");
         return;
       }
 
@@ -5822,25 +5597,25 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       const _existX = new Set(tablaCirugias.map(_claveX));
       const nuevasX = filas.filter(f => !_existX.has(_claveX(f)));
       const dupX = filas.length - nuevasX.length;
-      if (nuevasX.length === 0) { alert(`Las ${filas.length} cirugías del Excel ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); e.target.value = ""; return; }
-      if (!confirm(`Se importarán ${nuevasX.length} cirugías${dupX > 0 ? ` (${dupX} ya existían y se omiten)` : ""}${resumenCCV}. ¿Continuar?`)) {
+      if (nuevasX.length === 0) { uroToast(`Las ${filas.length} cirugías del Excel ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); e.target.value = ""; return; }
+      if (!(await uroConfirm(`Se importarán ${nuevasX.length} cirugías${dupX > 0 ? ` (${dupX} ya existían y se omiten)` : ""}${resumenCCV}. ¿Continuar?`))) {
         e.target.value = "";
         return;
       }
 
       const result = await crearCirugiasBulk(nuevasX);
       if (!result.ok) {
-        alert("Error al importar: " + result.error);
+        uroToast("Error al importar: " + result.error);
         return;
       }
 
       setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
-      alert(`✓ ${result.cirugias.length} cirugías importadas${dupX > 0 ? ` · ${dupX} omitidas por duplicado` : ""}`);
+      uroToast(`✓ ${result.cirugias.length} cirugías importadas${dupX > 0 ? ` · ${dupX} omitidas por duplicado` : ""}`);
       e.target.value = "";
     };
     reader.readAsArrayBuffer(file);
   } catch (err) {
-    alert("Error al leer Excel: " + err.message);
+    uroToast("Error al leer Excel: " + err.message);
     console.error(err);
   }
 };
@@ -6036,9 +5811,28 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      {/* Inputs ocultos usados por el menú "+" (importar Excel / foto de tabla) */}
-      <input ref={inputExcelTablaRef} type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
-      <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
+      {/* Submenú de herramientas (aparece al tocar de nuevo la pestaña "Tabla") */}
+      {toolsOpen && !soloLectura && (
+        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
+          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
+          <label style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
+            📊 Importar Excel
+            <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
+          </label>
+          <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
+          <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
+          <div style={{position:"relative",marginLeft:"auto"}}>
+            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
+            {vistaMenuOpen && (
+              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:4,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:2,minWidth:130}}>
+                <button onClick={()=>{setModoVista("mensual");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="mensual"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="mensual"?600:400}}>🗓️ Mensual</button>
+                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Semanal</button>
+                <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Navegación de semana o mes + filtro de estado (siempre visible) */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
@@ -6069,26 +5863,6 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
-        {!soloLectura && (
-          <div style={{position:"relative"}}>
-            <button onClick={()=>setAccionesTablaOpen(v=>!v)} aria-label="Acciones" style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,background:accionesTablaOpen?"var(--primario)":"var(--superficie)",color:accionesTablaOpen?"var(--texto-inv)":"var(--primario)",border:accionesTablaOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",lineHeight:1,padding:0}}>+</button>
-            {accionesTablaOpen && (
-              <>
-                <div onClick={()=>setAccionesTablaOpen(false)} style={{position:"fixed",inset:0,zIndex:19}}/>
-                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:9,padding:5,zIndex:20,boxShadow:"0 8px 22px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",gap:2,minWidth:180}}>
-                  <button onClick={()=>{setAccionesTablaOpen(false);setVista("nuevo");}} style={menuAccTabla}>➕ Nueva cirugía</button>
-                  <button onClick={()=>{setAccionesTablaOpen(false);inputExcelTablaRef.current?.click();}} style={menuAccTabla}>📊 Importar Excel</button>
-                  <button onClick={()=>{setAccionesTablaOpen(false);inputFotoTablaRef.current?.click();}} disabled={extrayendoTabla} style={{...menuAccTabla,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
-                  <div style={{height:"0.5px",background:"var(--borde)",margin:"3px 6px"}}/>
-                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",padding:"3px 10px 1px",letterSpacing:0.4}}>VISTA</div>
-                  <button onClick={()=>{setModoVista("mensual");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="mensual"?"var(--fondo-suave)":"none",fontWeight:modoVista==="mensual"?700:500}}>🗓️ Mensual</button>
-                  <button onClick={()=>{setModoVista("planner");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="planner"?"var(--fondo-suave)":"none",fontWeight:modoVista==="planner"?700:500}}>📅 Semanal</button>
-                  <button onClick={()=>{setModoVista("lista");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="lista"?"var(--fondo-suave)":"none",fontWeight:modoVista==="lista"?700:500}}>☰ Lista</button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
         <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:"auto"}}>{modoVista==="mensual" ? cirugiasMes.length : cirugiasSemana.length} cx</span>
       </div>
 
@@ -6509,44 +6283,6 @@ function ingresoMatcheaCirugia(ing, cir) {
   return false;
 }
 
-// ─── Selector de carpeta en cascada: Año → Mes → Semana ───
-// Muestra 3 campos claros con sugerencias derivadas de las carpetas ya existentes.
-// El valor final es la ruta "Año/Mes/Semana" (los niveles vacíos se omiten).
-function SelectorCarpetaCascada({ value, onChange, carpetas = [] }) {
-  const segs = (value || "").split("/").map(s => s.trim());
-  const s0 = segs[0] || "", s1 = segs[1] || "", s2 = segs[2] || "";
-  const paths = (carpetas || []).map(c => String(c).split("/").map(x => x.trim()).filter(Boolean));
-  const opts = (idx, prefijo) => {
-    const set = new Set();
-    paths.forEach(parts => { if (prefijo.every((v, i) => parts[i] === v) && parts[idx]) set.add(parts[idx]); });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
-  };
-  const setNivel = (idx, val) => {
-    const arr = [s0, s1, s2]; arr[idx] = val;
-    for (let i = idx + 1; i < 3; i++) { if (!arr[i - 1]) arr[i] = ""; }
-    onChange(arr.map(x => x.trim()).filter(Boolean).join("/"));
-  };
-  const inpMini = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box" };
-  const lblMini = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
-  const nivel = (idx, label, ph, prefijo, val, dis) => (
-    <div style={{ flex: 1, minWidth: 96, opacity: dis ? 0.5 : 1 }}>
-      <label style={lblMini}>{label}</label>
-      <input list={`carp-l${idx}`} value={val} disabled={dis} onChange={e => setNivel(idx, e.target.value)} placeholder={ph} style={inpMini} />
-      <datalist id={`carp-l${idx}`}>{opts(idx, prefijo).map(o => <option key={o} value={o} />)}</datalist>
-    </div>
-  );
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {nivel(0, "Año", "2026", [], s0, false)}
-        {nivel(1, "Mes", "Agosto", [s0], s1, !s0)}
-        {nivel(2, "Semana", "primera semana", [s0, s1], s2, !s1)}
-      </div>
-      <div style={{ fontSize: "var(--fs-0)", color: value ? "var(--primario)" : "var(--texto-ter)", marginTop: 5, fontWeight: value ? 600 : 400 }}>{value ? `📁 ${value}` : "Sin carpeta"}</div>
-    </div>
-  );
-}
-
 function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const DEFAULTS = {
@@ -6680,7 +6416,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     let y = 12; const hT = 17; const c1 = M + 22, c2 = R - 42;
     doc.rect(M, y, R - M, hT);
     doc.line(c1, y, c1, y + hT); doc.line(c2, y, c2, y + hT);
-    // Celda del logo: se deja vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 3, y + 3, 15, 11); } catch {}
     doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
     doc.text("DIRECCION HOSPITAL BASE VALDIVIA", (c1 + c2) / 2, y + 4, { align: "center" });
     doc.setFont("helvetica", "italic"); doc.setFontSize(7);
@@ -6757,7 +6493,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const chk = (x, yy) => doc.rect(x, yy - 2.6, 3, 3);
     // Encabezado
     let y = 8; doc.rect(M, y, R - M, 15); doc.line(R - 70, y, R - 70, y + 15);
-    // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 2, y + 2.5, 11, 9); } catch {}
     T("MINISTERIO DE SALUD", M + 16, y + 3.5, true, 7); T("REGION DE LOS RIOS", M + 16, y + 6.5, true, 7);
     T("SERVICIO SALUD VALDIVIA", M + 16, y + 9.5, true, 7); T("HOSPITAL BASE VALDIVIA", M + 16, y + 12.5, true, 7);
     doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("EVALUACION PREANESTESIA ANEXO II", R - 35, y + 8.5, { align: "center", maxWidth: 66 });
@@ -6821,7 +6557,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const T = (t, x, yy, b = false, s = 8.5) => { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s); doc.text(t, x, yy); };
     const chk = (x, yy) => { doc.setDrawColor(0, 0, 0); doc.rect(x, yy - 2.8, 3.2, 3.2); };
     let y = 12;
-    // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M, y, 13, 10); } catch {}
     T("HOSPITAL BASE VALDIVIA", M + 16, y + 6, true, 9); y += 14;
     T("ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)", W / 2, y, true, 9.5); doc.setFontSize(9.5); 
     { const t = "ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)"; doc.text(t, W / 2, y, { align: "center", maxWidth: R - M }); } y += 8;
@@ -6862,73 +6598,6 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     T("Justificar excepciones:", M, y, false); line(M + 38, y + 0.5, R - M - 38); y += 9;
     T("NOMBRE MEDICO:", M, y, true); line(M + 32, y + 0.5, 55); if (currentUser?.nombre) T(currentUser.nombre, M + 34, y - 0.5); T("FIRMA:", R - 55, y, true); line(R - 42, y + 0.5, 40); y += 6;
     T("Fecha:", M, y, true); line(M + 13, y + 0.5, 40); if (f.fingreso) T(f.fingreso, M + 15, y - 0.5);
-
-    // ───────────── PÁGINA 2: INDICACIONES POR TIPO DE INTERVENCIÓN Y RIESGO ─────────────
-    doc.addPage();
-    let y2 = 14;
-    const wrapT = (t, x, yy, w, s = 6.6, b = false, lh = 3.3) => {
-      doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s);
-      const ls = doc.splitTextToSize(t, w); ls.forEach((l) => { doc.text(l, x, yy); yy += lh; }); return yy;
-    };
-    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
-    doc.text("INDICACIONES RECOMENDADAS SEGÚN TIPO DE INTERVENCIÓN QUIRÚRGICA Y RIESGO ETE:", M, y2, { maxWidth: R - M }); y2 += 4;
-    doc.setFont("helvetica", "italic"); doc.setFontSize(7);
-    doc.text("(Marque con una x las indicaciones correspondientes)", M, y2); y2 += 4;
-
-    // Tabla: columna izquierda (tipo de intervención) · derecha (indicaciones por riesgo)
-    const colX = M, colW1 = 46, colX2 = M + colW1, colW2 = R - colX2;
-    const filas = [
-      ["TODA INTERVENCIÓN", [
-        ["RIESGO ETE MUY BAJO", "Deambulación precoz."],
-        ["RIESGO ETE BAJO", "Métodos mecánicos: medias elásticas de compresión gradual antes de la intervención."],
-      ]],
-      ["Cirugía General, Ginecológica, Urológica, de tórax, Cabeza y cuello, Mama, plástica y reconstructiva, vascular (NO ONCOLÓGICO, NO BARIÁTRICO)", [
-        ["RIESGO ETE MODERADO", "Métodos farmacológicos a bajas dosis + métodos mecánicos: HNF 5000 UI c/12 h SC (última dosis 12 h pre y reiniciar 12 h post) ó HNF 5000 UI c/8 h; ó Dalteparina 2500 UI/día (última 24 h pre); ó Enoxaparina 20 mg (2000 UI)/día (última 24 h pre, reiniciar ≥12 h post)."],
-        ["RIESGO ETE ALTO", "Métodos farmacológicos a alta dosis + mecánicos: HNF 5000 UI c/8 h; ó Dalteparina 2500 UI/día aumentando a 5000 UI desde la 2ª dosis post-op; ó Enoxaparina 40 mg (4000 UI)/día (última 24 h pre, reiniciar ≥12 h post)."],
-      ]],
-      ["Cirugía Oncológica o con neoplasia no resuelta", [
-        ["RIESGO ETE ALTO", "Farmacológico a altas dosis + métodos físicos si están disponibles: HNF 5000 UI c/8 h SC; ó Enoxaparina 40 mg SC/día; ó Dalteparina 5000 UI SC/día (última dosis 12 h pre, reiniciar 12 h post)."],
-      ]],
-      ["Cirugía Bariátrica", [
-        ["RIESGO ETE ALTO", "HNF 5000 UI (IMC 40–50) ó 7500 UI (IMC > 50) c/8 h SC, inicio 6 h post; ó Enoxaparina 40 mg c/12 h (< 150 kg) ó 60 mg c/12 h (> 150 kg), inicio 6 h post."],
-      ]],
-      ["Cirugía Ortopédica (fractura de pelvis, fémur o pierna; artroplastia de rodilla o cadera)", [
-        ["RIESGO ETE ALTO", "HNF 5000 UI c/8 h (última 24 h pre, reiniciar ≥8 h post); ó Enoxaparina 40 mg/día; ó Dalteparina 5000 UI/día (reiniciar ≥8 h post). Ajustar dosis en obesos."],
-      ]],
-      ["Politraumatizados (HDN estables, sin sangrado activo ni requerimiento transfusional)", [
-        ["RIESGO ETE ALTO", "Inicio de medidas farmacológicas a criterio del médico tratante (evaluar riesgo hemorrágico); ideal antes de 48 h: Enoxaparina 40 mg c/12 h SC; ó Dalteparina 5000 UI/día SC (2ª opción)."],
-      ]],
-    ];
-
-    // Encabezado de la tabla
-    doc.setLineWidth(0.2);
-    filas.forEach(([tipo, indic]) => {
-      // altura de la fila = alto del bloque de indicaciones
-      const yIni = y2;
-      let yInd = y2 + 3.5;
-      indic.forEach(([riesgo, texto]) => {
-        chk(colX2 + 1.5, yInd);
-        doc.setFont("helvetica", "bold"); doc.setFontSize(6.4); doc.text(riesgo, colX2 + 6, yInd);
-        yInd = wrapT(texto, colX2 + 6, yInd + 3, colW2 - 8, 6.2, false, 3);
-        yInd += 1.5;
-      });
-      const yTipoFin = wrapT(tipo, colX + 1.5, y2 + 3.5, colW1 - 3, 6.2, true, 3);
-      const yFin = Math.max(yInd, yTipoFin) + 1.5;
-      // bordes de la fila
-      doc.rect(colX, yIni, colW1, yFin - yIni);
-      doc.rect(colX2, yIni, colW2, yFin - yIni);
-      y2 = yFin;
-    });
-
-    // Notas al pie
-    y2 += 3;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6);
-    y2 = wrapT("LA ADMINISTRACIÓN PREOPERATORIA PARA PACIENTES CON ANESTESIA REGIONAL (RAQUÍDEA/PERIDURAL) DEBE REALIZARSE AL MENOS 12 HORAS PRE-INTERVENCIÓN.", M, y2, R - M, 6, true, 3) + 2;
-    doc.setFont("helvetica", "normal");
-    y2 = wrapT("(*) Si no están disponibles los métodos mecánicos, evaluar el riesgo hemorrágico e iniciar profilaxis farmacológica como si fuera de riesgo moderado.", M, y2, R - M, 5.8) + 1;
-    y2 = wrapT("(**) En alto riesgo hemorrágico, iniciar métodos mecánicos y agregar medidas farmacológicas una vez disminuido el riesgo de hemorragia.", M, y2, R - M, 5.8) + 1;
-    y2 = wrapT("(***) En pacientes con clearance de creatinina < 30 ml/min está contraindicada la Enoxaparina; privilegiar HNF.", M, y2, R - M, 5.8);
-
     doc.save(`ete_caprini_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
   };
 
@@ -6938,7 +6607,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth(), M = 16;
     const box = (x, yy) => { doc.setDrawColor(90, 90, 90); doc.rect(x, yy - 3, 3.5, 3.5); };
-    // Sin logo UroSearch: estos anexos son formularios oficiales del HBV.
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, 12, 16, 16); } catch {}
     let y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
     doc.text("HOSPITAL BASE VALDIVIA", M, y); y += 5;
     doc.text("ANEXO N°1: RIESGO DE ENFERMEDAD TROMBOEMBÓLICA (ETE)", M, y, { maxWidth: W - 2 * M }); y += 8;
@@ -6988,11 +6657,11 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--fondo)", zIndex: 70, display: "flex", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 860, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
           <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre completo", "nombre")}</div>
@@ -7020,10 +6689,13 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
         {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
         {onGuardarIngreso && (
-          <div style={{ marginBottom: 8 }}>
-            <label style={lbl}>Carpeta</label>
-            <SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} />
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Carpeta</label>
+              <input list="carpetas-list" value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="(sin carpeta)" style={inp} />
+              <datalist id="carpetas-list">{carpetas.map(c => <option key={c} value={c} />)}</datalist>
+            </div>
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -7053,7 +6725,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
 // ─── Comités oncológicos: mismo formato que Ingresos (carpetas/subcarpetas) ───
-function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
+function ComiteModal({ comiteExistente, onGuardar, onClose }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const D = { fecha: HOY, nombre: "", ficha: "", rut: "", diagnostico: "", presentacion: "", acuerdos: "" };
   const [f, setF] = useState(() => (comiteExistente?.datos ? { ...D, ...comiteExistente.datos } : D));
@@ -7064,9 +6736,9 @@ function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
   const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "var(--fondo)", display: "flex", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 760, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)" }}>{comiteExistente?.id ? "Editar comité" : "Nuevo comité oncológico"}</div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)" }}>✕</button>
         </div>
@@ -7084,8 +6756,8 @@ function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
         <textarea rows={4} value={f.presentacion} onChange={e => set("presentacion", e.target.value)} style={{ ...inp, resize: "vertical" }} />
         <label style={lbl}>Acuerdos del comité / plan</label>
         <textarea rows={4} value={f.acuerdos} onChange={e => set("acuerdos", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-        <label style={lbl}>Carpeta</label>
-        <div style={{ marginBottom: 8 }}><SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} /></div>
+        <label style={lbl}>Carpeta (usa / para subcarpeta; vacío = sin carpeta)</label>
+        <input value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="Ej: 2026/Próstata" style={inp} />
         {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{msg}</div>}
         <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
       </div>
@@ -7138,11 +6810,11 @@ function ComitesPanel({ currentUser, contexto }) {
     const hermanos = carpetas.filter(c => c.ruta.split("/").slice(0, -1).join("/") === (padre || ""));
     const orden = hermanos.length ? Math.max(...hermanos.map(h => h.orden || 0)) + 1 : 0;
     const { error } = await supabase.from("carpetas_comites").insert({ user_id: currentUser.id, equipo_id: equipoId, ruta, orden });
-    if (error) { alert("No se pudo crear la carpeta.\n\nProbablemente falta ejecutar la migración 'comites.sql' en Supabase → SQL Editor.\n\nDetalle: " + error.message); return; }
+    if (error) { uroToast("No se pudo crear la carpeta.\n\nProbablemente falta ejecutar la migración 'comites.sql' en Supabase → SQL Editor.\n\nDetalle: " + error.message); return; }
     await cargar();
   };
   const eliminarCarpeta = async (ruta) => {
-    if (!confirm(`¿Eliminar la carpeta "${ruta}" y sus subcarpetas? Los comités dentro quedarán sin carpeta.`)) return;
+    if (!(await uroConfirm(`¿Eliminar la carpeta "${ruta}" y sus subcarpetas? Los comités dentro quedarán sin carpeta.`))) return;
     const ids = carpetas.filter(c => c.ruta === ruta || c.ruta.startsWith(ruta + "/")).map(c => c.id);
     if (ids.length) await supabase.from("carpetas_comites").delete().in("id", ids);
     const it = items.filter(i => i.carpeta === ruta || (i.carpeta || "").startsWith(ruta + "/")).map(i => i.id);
@@ -7159,7 +6831,7 @@ function ComitesPanel({ currentUser, contexto }) {
     if (id) await supabase.from("comites").update(fila).eq("id", id); else await supabase.from("comites").insert(fila);
     await cargar();
   };
-  const eliminar = async (id) => { if (!confirm("¿Eliminar este comité?")) return; await supabase.from("comites").delete().eq("id", id); await cargar(); };
+  const eliminar = async (id) => { if (!(await uroConfirm("¿Eliminar este comité?"))) return; await supabase.from("comites").delete().eq("id", id); await cargar(); };
 
   const filaItem = (item) => (
     <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "9px 12px", marginBottom: 5 }}>
@@ -7191,7 +6863,7 @@ function ComitesPanel({ currentUser, contexto }) {
 
   return (
     <div style={{ padding: 16 }}>
-      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} carpetas={todasRutas} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo comité</button>
         <button onClick={() => crearCarpeta("")} style={{ padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
@@ -7261,11 +6933,11 @@ function IngresosPanel({ currentUser, contexto }) {
     const hermanos = carpetas.filter(c => c.ruta.split("/").slice(0, -1).join("/") === (padre || ""));
     const orden = hermanos.length ? Math.max(...hermanos.map(h => h.orden || 0)) + 1 : 0;
     const { error } = await supabase.from("carpetas_ingresos").insert({ user_id: currentUser.id, equipo_id: equipoId, ruta, orden });
-    if (error) { alert("No se pudo crear la carpeta.\n\nProbablemente falta ejecutar la migración 'migracion_carpetas_ingresos.sql' en Supabase → SQL Editor.\n\nDetalle: " + error.message); return; }
+    if (error) { uroToast("No se pudo crear la carpeta.\n\nProbablemente falta ejecutar la migración 'migracion_carpetas_ingresos.sql' en Supabase → SQL Editor.\n\nDetalle: " + error.message); return; }
     await cargar();
   };
   const eliminarCarpeta = async (ruta) => {
-    if (!confirm(`¿Eliminar la carpeta "${ruta}" y sus subcarpetas? Los ingresos dentro quedarán sin carpeta.`)) return;
+    if (!(await uroConfirm(`¿Eliminar la carpeta "${ruta}" y sus subcarpetas? Los ingresos dentro quedarán sin carpeta.`))) return;
     const ids = carpetas.filter(c => c.ruta === ruta || c.ruta.startsWith(ruta + "/")).map(c => c.id);
     if (ids.length) await supabase.from("carpetas_ingresos").delete().in("id", ids);
     const ing = ingresos.filter(i => i.carpeta === ruta || (i.carpeta || "").startsWith(ruta + "/")).map(i => i.id);
@@ -7301,7 +6973,7 @@ function IngresosPanel({ currentUser, contexto }) {
     }
     await cargar();
   };
-  const eliminar = async (id) => { if (!confirm("¿Eliminar este ingreso?")) return; await supabase.from("ingresos").delete().eq("id", id); await cargar(); };
+  const eliminar = async (id) => { if (!(await uroConfirm("¿Eliminar este ingreso?"))) return; await supabase.from("ingresos").delete().eq("id", id); await cargar(); };
 
   const filaIngreso = (ing) => (
     <div key={ing.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "9px 12px", marginBottom: 5 }}>
@@ -7321,7 +6993,7 @@ function IngresosPanel({ currentUser, contexto }) {
       return (
         <div key={h.path} style={{ marginLeft: depth ? 12 : 0, marginBottom: 3, borderLeft: depth ? "1px solid var(--borde)" : "none", paddingLeft: depth ? 6 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 2px" }}>
-            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name}</span>
+            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({contar(h)})</span></span>
             <button onClick={() => crearCarpeta(h.path)} title="Nueva subcarpeta" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 5, color: "var(--primario)", cursor: "pointer", fontSize: "var(--fs-2)", width: 22, height: 20, lineHeight: 1, padding: 0 }}>＋</button>
             <button onClick={() => eliminarCarpeta(h.path)} title="Eliminar carpeta" style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)" }}>🗑</button>
           </div>
@@ -7616,7 +7288,8 @@ function compararCama(a, b) {
   return ca.localeCompare(cb, "es", { numeric: true, sensitivity: "base" });
 }
 
-// Plantillas SOAP completas
+function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
+  // Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
 function normalizarExamen(ex) {
   if (!ex) return ex;
@@ -7753,50 +7426,6 @@ const SUGERENCIAS_SOAP = {
     "Solicitar exámenes de control",
   ]
 };
-
-// ─── Sugerencias personalizables por usuario (SOAP y recetas) ───
-// Se guardan por usuario en localStorage. Si no hay nada guardado, se usan
-// las listas por defecto. Al cambiarlas en Configuración se emite un evento
-// para que los paneles abiertos se actualicen al instante.
-function _leerSugJSON(clave, def) { try { const r = localStorage.getItem(clave); const v = r ? JSON.parse(r) : null; return v && typeof v === "object" ? v : def; } catch { return def; } }
-const _claveSOAP = (uid) => `uro_sug_soap_${uid || "anon"}`;
-const _claveRx = (uid) => `uro_sug_rx_${uid || "anon"}`;
-const _defRx = () => Object.fromEntries(Object.entries(RX_TEMPLATES).map(([k, v]) => [k, v.items]));
-function leerSugSOAP(uid) { const d = _leerSugJSON(_claveSOAP(uid), null); return d ? { ...SUGERENCIAS_SOAP, ...d } : SUGERENCIAS_SOAP; }
-function leerSugRx(uid) { const def = _defRx(); const d = _leerSugJSON(_claveRx(uid), null); return d ? { ...def, ...d } : def; }
-// Guarda en localStorage (inmediato) y sincroniza a Supabase (entre dispositivos).
-function guardarSugSOAP(uid, obj) {
-  try { localStorage.setItem(_claveSOAP(uid), JSON.stringify(obj)); window.dispatchEvent(new CustomEvent("uro-sug-cambio")); } catch {}
-  if (uid) { try { supabase.from("preferencias_sugerencias").upsert({ user_id: uid, soap: obj, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).then(() => {}); } catch {} }
-}
-function guardarSugRx(uid, obj) {
-  try { localStorage.setItem(_claveRx(uid), JSON.stringify(obj)); window.dispatchEvent(new CustomEvent("uro-sug-cambio")); } catch {}
-  if (uid) { try { supabase.from("preferencias_sugerencias").upsert({ user_id: uid, rx: obj, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).then(() => {}); } catch {} }
-}
-// Trae las sugerencias guardadas en Supabase y actualiza la caché local (sincroniza).
-async function sincronizarSugerencias(uid) {
-  if (!uid) return;
-  try {
-    const { data } = await supabase.from("preferencias_sugerencias").select("soap, rx").eq("user_id", uid).maybeSingle();
-    if (!data) return;
-    let cambio = false;
-    if (data.soap && typeof data.soap === "object") { localStorage.setItem(_claveSOAP(uid), JSON.stringify(data.soap)); cambio = true; }
-    if (data.rx && typeof data.rx === "object") { localStorage.setItem(_claveRx(uid), JSON.stringify(data.rx)); cambio = true; }
-    if (cambio) window.dispatchEvent(new CustomEvent("uro-sug-cambio"));
-  } catch {}
-}
-function useSugSOAP(uid) {
-  const [v, setV] = useState(() => leerSugSOAP(uid));
-  useEffect(() => { const h = () => setV(leerSugSOAP(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
-  return v;
-}
-function useSugRx(uid) {
-  const [v, setV] = useState(() => leerSugRx(uid));
-  useEffect(() => { const h = () => setV(leerSugRx(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
-  return v;
-}
-
-function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
@@ -7841,7 +7470,6 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     try { setEvoLibre(localStorage.getItem("uro_evo_draft_" + seleccionado.id) || ""); } catch { setEvoLibre(""); }
   }, [seleccionado?.id]);
   const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
-  const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
   const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
   const [seccionAbierta, setSeccionAbierta] = useState(null); // qué bloque de sugerencias está desplegado
@@ -7920,7 +7548,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
         });
         if (nuevaLista) {
           const r = await reordenarServiciosEquipo(nuevaLista);
-          if (!r.ok) alert("No se pudo guardar el orden: " + r.error);
+          if (!r.ok) uroToast("No se pudo guardar el orden: " + r.error);
         }
       } else {
         setMisServiciosLista(prev => {
@@ -8039,8 +7667,8 @@ const cargarMiembrosEquipo = async () => {
       case "todos":     break;
       case "activo":    if (p.estado !== "activo") return false; break;
       case "alta":      if (p.estado !== "alta") return false; break;
-      case "operado":   if (p.estado !== "activo" || !p.operado) return false; break;
-      case "sin_operar":if (p.estado !== "activo" || p.operado) return false; break;
+      case "operado":   if (!p.operado) return false; break;
+      case "sin_operar":if (p.operado || p.estado === "alta") return false; break;
       default: break;
     }
     return true;
@@ -8105,15 +7733,8 @@ const cargarMiembrosEquipo = async () => {
   const toggleOrientacionPac = () => setOrientacionPac(o => {
     const nv = o === "horizontal" ? "vertical" : "horizontal";
     try { localStorage.setItem("uro_orient_pac", nv); } catch {}
-    try { window.dispatchEvent(new CustomEvent("uro-orient-pac-change", { detail: nv })); } catch {}
     return nv;
   });
-  // Si la orientación se cambia desde Configuración, reflejarlo aquí.
-  useEffect(() => {
-    const h = (e) => { const v = e.detail === "horizontal" ? "horizontal" : "vertical"; setOrientacionPac(v); };
-    window.addEventListener("uro-orient-pac-change", h);
-    return () => window.removeEventListener("uro-orient-pac-change", h);
-  }, []);
   const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
   useEffect(() => {
@@ -8127,10 +7748,10 @@ const cargarMiembrosEquipo = async () => {
   const [ingresoPacienteMenu, setIngresoPacienteMenu] = useState(null); // Adjuntar ingreso desde el menú
   const [autoEditId, setAutoEditId] = useState(null);
   const eliminarPacienteDirecto = async (p) => {
-    if (!confirm(`¿Eliminar a ${p.iniciales}? Esta acción no se puede deshacer.`)) return;
+    if (!(await uroConfirm(`¿Eliminar a ${p.iniciales}? Esta acción no se puede deshacer.`))) return;
     const r = await eliminarPaciente(p.id);
     if (r.ok) setPacientes(prev => prev.filter(x => x.id !== p.id));
-    else alert("No se pudo eliminar: " + (r.error || ""));
+    else uroToast("No se pudo eliminar: " + (r.error || ""));
   };
   const [moverInfo, setMoverInfo] = useState(null); // { pacienteId, iniciales, servicio, prevServicio, prevCama } tras un movimiento
   const [camaInput, setCamaInput] = useState("");
@@ -8173,7 +7794,7 @@ const cargarMiembrosEquipo = async () => {
       setCamaInput(""); setMoverInfo({ pacienteId: pac.id, iniciales: pac.iniciales, servicio: nuevoServicio, prevServicio: pac.servicio, prevCama: pac.cama });
       resortCamasServicio(nuevoServicio);
     }
-    else alert("No se pudo mover el paciente: " + r.error);
+    else uroToast("No se pudo mover el paciente: " + r.error);
   };
   const reordenarPaciente = async (p, dir) => {
     const col = [...(porServicio[p.servicio] || [])];
@@ -8420,16 +8041,16 @@ const cargarMiembrosEquipo = async () => {
       const result = await actualizarPaciente(target.id, patch);
       if (!result.ok) {
         if (enFicha) setExtraccionMsg("⚠️ Error al guardar: " + result.error);
-        else alert("⚠️ Error al guardar el ingreso: " + result.error);
+        else uroToast("⚠️ Error al guardar el ingreso: " + result.error);
         return;
       }
       if (seleccionado?.id === result.paciente.id) setSeleccionado(result.paciente);
       setPacientes(prev => prev.map(p => p.id === result.paciente.id ? result.paciente : p));
       if (enFicha) setExtraccionMsg("✓ Ingreso agregado a la historia desde la foto.");
-      else alert("✓ Ingreso agregado a la historia de " + (result.paciente.iniciales || "el paciente") + ".");
+      else uroToast("✓ Ingreso agregado a la historia de " + (result.paciente.iniciales || "el paciente") + ".");
     } catch (err) {
       if (enFicha) setExtraccionMsg("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
-      else alert("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
+      else uroToast("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
     } finally {
       if (enFicha) setExtrayendoIngreso(false);
       else setFotoMenuCargando(false);
@@ -8483,7 +8104,7 @@ const cargarMiembrosEquipo = async () => {
 
   const cambiarEstado = async (paciente, nuevoEstado) => {
     const result = await actualizarPaciente(paciente.id, { estado: nuevoEstado });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === paciente.id ? result.paciente : p));
     if (seleccionado?.id === paciente.id) setSeleccionado(result.paciente);
     // Avisar a los encargados cuando se da de alta
@@ -8526,7 +8147,7 @@ const guardarEdicion = async () => {
     alergias: (editForm.alergias || "").trim(),
   };
   const result = await actualizarPaciente(seleccionado.id, datos);
-  if (!result.ok) return alert("Error: " + result.error);
+  if (!result.ok) return uroToast("Error: " + result.error);
   setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
   setSeleccionado(result.paciente);
   setEditandoFicha(false);
@@ -8535,7 +8156,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const paciente = pacientes.find(p => p.id === pacienteId);
   const previos = Array.isArray(paciente?.encargados) ? paciente.encargados : [];
   const result = await actualizarPaciente(pacienteId, { encargados: nuevosEncargados });
-  if (!result.ok) return alert("Error: " + result.error);
+  if (!result.ok) return uroToast("Error: " + result.error);
   setPacientes(prev => prev.map(p => p.id === pacienteId ? result.paciente : p));
   // Notificar a los recién agregados (no a quien se auto-asigna)
   nuevosEncargados.filter(id => !previos.includes(id) && id !== currentUser.id).forEach(id => {
@@ -8544,13 +8165,13 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 };
   const toggleOperado = async () => {
     const result = await actualizarPaciente(seleccionado.id, { operado: !seleccionado.operado });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
     setSeleccionado(result.paciente);
   };
   const cambiarEstadoClinico = async (nuevoEstado) => {
     const result = await actualizarPaciente(seleccionado.id, { estado_clinico: nuevoEstado });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
     setSeleccionado(result.paciente);
   };
@@ -8562,7 +8183,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const actuales = Array.isArray(seleccionado.cirugias_realizadas) ? seleccionado.cirugias_realizadas : [];
     const nuevas = [...actuales, { fecha: formCirugia.fecha, nombre: formCirugia.nombre.trim() }];
     const result = await actualizarPaciente(seleccionado.id, { cirugias_realizadas: nuevas });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
     setSeleccionado(result.paciente);
     setFormCirugia(null);
@@ -8571,7 +8192,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const actuales = Array.isArray(seleccionado.cirugias_realizadas) ? seleccionado.cirugias_realizadas : [];
     const nuevas = actuales.filter((_, i) => i !== idx);
     const result = await actualizarPaciente(seleccionado.id, { cirugias_realizadas: nuevas });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
     setSeleccionado(result.paciente);
   };
@@ -8584,9 +8205,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     return diff;
   };
   const eliminarPacienteHandler = async (paciente) => {
-    if (!confirm(`¿Eliminar paciente ${paciente.iniciales}?\n\nEsto borra evoluciones y exámenes asociados.`)) return;
+    if (!(await uroConfirm(`¿Eliminar paciente ${paciente.iniciales}?\n\nEsto borra evoluciones y exámenes asociados.`))) return;
     const result = await eliminarPaciente(paciente.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.filter(p => p.id !== paciente.id));
     setSeleccionado(null);
     setVista("lista");
@@ -8640,7 +8261,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     doc.save(`nota_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}_${(ev.fecha_evolucion || "").replace(/-/g, "")}.pdf`);
   };
   const descargarEvolucionesPDF = async () => {
-    if (!evoluciones || evoluciones.length === 0) { alert("Este paciente aún no tiene evoluciones para exportar."); return; }
+    if (!evoluciones || evoluciones.length === 0) { uroToast("Este paciente aún no tiene evoluciones para exportar."); return; }
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
     const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
@@ -8665,8 +8286,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const delDia = (evoluciones || [])
       .filter(e => (e.fecha_evolucion || "") === hoy)
       .sort((a, b) => (a.hora_evolucion || "").localeCompare(b.hora_evolucion || ""));
-    if (delDia.length === 0) { alert("No hay evoluciones registradas hoy para este paciente."); return; }
-    let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { alert("No se pudo cargar el generador de PDF."); return; }
+    if (delDia.length === 0) { uroToast("No hay evoluciones registradas hoy para este paciente."); return; }
+    let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { uroToast("No se pudo cargar el generador de PDF."); return; }
     const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 18;
     // Logo de UroSearch, solo, arriba a la derecha.
     try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 20, 10, 20, 20); } catch {}
@@ -8718,7 +8339,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   // ============================================================
   const guardarHistoria = async () => {
     const result = await actualizarPaciente(seleccionado.id, { historia: historiaDraft.trim() || null });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === seleccionado.id ? result.paciente : p));
     setSeleccionado(result.paciente);
     setEditandoHistoria(false);
@@ -8733,7 +8354,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   };
 
   const guardarPendientePaciente = async () => {
-    if (!nuevoPendientePac.texto.trim()) return alert("Escribe el pendiente");
+    if (!nuevoPendientePac.texto.trim()) return uroToast("Escribe el pendiente");
     const datos = {
       autor_id: currentUser.id,
       equipo_id: esEquipo ? contexto : null,
@@ -8744,7 +8365,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       encargados: nuevoPendientePac.encargados,
     };
     const result = await crearPendiente(datos);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPendientesPaciente(prev => [result.pendiente, ...prev]);
     // Notificar encargados asignados
     nuevoPendientePac.encargados.filter(id => id !== currentUser.id).forEach(id => {
@@ -8756,7 +8377,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const togglePendientePacCompletado = async (p) => {
     const nuevoEstado = p.estado === "completado" ? "pendiente" : "completado";
     const result = await actualizarPendiente(p.id, { estado: nuevoEstado });
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setPendientesPaciente(prev => prev.map(x => x.id === p.id ? result.pendiente : x));
     // Avisar a los encargados cuando se completa
     if (nuevoEstado === "completado" && Array.isArray(p.encargados)) {
@@ -8773,7 +8394,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const guardarEvolucion = async () => {
     let texto = "";
     if (tipoEvo === "libre") {
-      if (!evoLibre.trim()) return alert("Escribe la evolución");
+      if (!evoLibre.trim()) return uroToast("Escribe la evolución");
       texto = evoLibre.trim();
     } else {
       const partes = [];
@@ -8804,7 +8425,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       }
       if (evoEstructurada.examen.trim()) partes.push(`EXAMEN FÍSICO:\n${evoEstructurada.examen.trim()}`);
       if (evoEstructurada.indicaciones.trim()) partes.push(`INDICACIONES:\n${evoEstructurada.indicaciones.trim()}`);
-      if (partes.length === 0) return alert("Completa al menos una sección");
+      if (partes.length === 0) return uroToast("Completa al menos una sección");
       texto = partes.join("\n\n");
     }
 
@@ -8825,9 +8446,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   };
 
   const eliminarEvo = async (evoId) => {
-    if (!confirm("¿Eliminar esta evolución?")) return;
+    if (!(await uroConfirm("¿Eliminar esta evolución?"))) return;
     const result = await eliminarEvolucion(evoId);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setEvoluciones(prev => prev.filter(e => e.id !== evoId));
   };
   const [editandoEvoId, setEditandoEvoId] = useState(null);
@@ -8837,7 +8458,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const t = editTexto.trim();
     if (!t || t === ev.texto) { setEditandoEvoId(null); return; }
     const { error } = await supabase.from("evoluciones").update({ texto: t }).eq("id", ev.id);
-    if (error) return alert("No se pudo editar: " + error.message);
+    if (error) return uroToast("No se pudo editar: " + error.message);
     setEvoluciones(prev => prev.map(e => e.id === ev.id ? { ...e, texto: t } : e));
     setEditandoEvoId(null);
   };
@@ -8851,8 +8472,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     let nombreExamen = nuevoEx.nombre.trim();
     if (nuevoEx.tipo === "Anatomía patológica" && nuevoEx.lugar) nombreExamen = nombreExamen || `Biopsia ${nuevoEx.lugar}`;
     if (nuevoEx.tipo === "Cultivo" && nuevoEx.tipoCultivo) nombreExamen = nombreExamen || nuevoEx.tipoCultivo;
-    if (!nombreExamen) return alert("Selecciona o ingresa el examen");
-    if (!nuevoEx.fecha_examen) return alert("Ingresa la fecha");
+    if (!nombreExamen) return uroToast("Selecciona o ingresa el examen");
+    if (!nuevoEx.fecha_examen) return uroToast("Ingresa la fecha");
 
     // Datos estructurados según el tipo
     const estructurados = {};
@@ -8947,9 +8568,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   };
 
   const eliminarEx = async (exId) => {
-    if (!confirm("¿Eliminar este examen?")) return;
+    if (!(await uroConfirm("¿Eliminar este examen?"))) return;
     const result = await eliminarExamen(exId);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setExamenes(prev => prev.filter(e => e.id !== exId));
   };
 
@@ -8961,11 +8582,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (!nuevoServicio.trim()) return;
     if (esEquipo) {
       const result = await crearServicioEquipo(contexto, currentUser.id, nuevoServicio.trim(), serviciosEquipo.length);
-      if (!result.ok) return alert(result.error);
+      if (!result.ok) return uroToast(result.error);
       setServiciosEquipo(prev => [...prev, result.servicio]);
     } else {
       const result = await crearServicio(currentUser.id, nuevoServicio.trim());
-      if (!result.ok) return alert(result.error);
+      if (!result.ok) return uroToast(result.error);
       setMisServiciosLista(prev => [...prev, result.servicio]);
     }
     setNuevoServicio("");
@@ -8980,9 +8601,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     // con el servicio para que no reaparezca luego como "servicio sin formalizar".
     const pacientesDelServicio = nombre ? pacientes.filter(p => p.servicio === nombre) : [];
     if (pacientesDelServicio.length > 0) {
-      if (!confirm(`El servicio "${nombre}" tiene ${pacientesDelServicio.length} paciente(s) asignado(s).\n\nAl eliminar el servicio se ELIMINARÁN también esos pacientes con sus evoluciones y exámenes. Esta acción no se puede deshacer.\n\n¿Continuar?`)) return;
+      if (!(await uroConfirm(`El servicio "${nombre}" tiene ${pacientesDelServicio.length} paciente(s) asignado(s).\n\nAl eliminar el servicio se ELIMINARÁN también esos pacientes con sus evoluciones y exámenes. Esta acción no se puede deshacer.\n\n¿Continuar?`))) return;
     } else {
-      if (!confirm(`¿Eliminar el servicio "${nombre || ""}"?`)) return;
+      if (!(await uroConfirm(`¿Eliminar el servicio "${nombre || ""}"?`))) return;
     }
 
     // 1) Eliminar los pacientes del servicio
@@ -8998,11 +8619,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     // 2) Eliminar el servicio propiamente tal
     if (esEquipo) {
       const result = await eliminarServicioEquipo(servicioId);
-      if (!result.ok) return alert("Error: " + result.error);
+      if (!result.ok) return uroToast("Error: " + result.error);
       setServiciosEquipo(prev => prev.filter(s => s.id !== servicioId));
     } else {
       const result = await eliminarServicio(servicioId);
-      if (!result.ok) return alert("Error: " + result.error);
+      if (!result.ok) return uroToast("Error: " + result.error);
       setMisServiciosLista(prev => prev.filter(s => s.id !== servicioId));
     }
   };
@@ -9016,11 +8637,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     try {
       if (esEquipo) {
         const r = await crearServicioEquipo(contexto, currentUser.id, nombre, serviciosEquipo.length);
-        if (!r.ok) { alert(r.error); return; }
+        if (!r.ok) { uroToast(r.error); return; }
         setServiciosEquipo(prev => [...prev, r.servicio]);
       } else {
         const r = await crearServicio(currentUser.id, nombre);
-        if (!r.ok) { alert(r.error); return; }
+        if (!r.ok) { uroToast(r.error); return; }
         setMisServiciosLista(prev => [...prev, r.servicio]);
       }
       setNuevo(n => ({ ...n, servicio: nombre }));   // queda elegido
@@ -9035,12 +8656,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const migrarServicios = async () => {
     if (!esEquipo) return;
     const nombres = misServiciosLista.map(s => s.nombre);
-    if (nombres.length === 0) return alert("No tienes servicios personales para copiar.");
+    if (nombres.length === 0) return uroToast("No tienes servicios personales para copiar.");
     const result = await migrarServiciosAlEquipo(contexto, currentUser.id, nombres);
-    if (!result.ok) return alert("Error: " + result.error);
-    if (result.migrados === 0) return alert("El equipo ya tenía todos tus servicios.");
+    if (!result.ok) return uroToast("Error: " + result.error);
+    if (result.migrados === 0) return uroToast("El equipo ya tenía todos tus servicios.");
     setServiciosEquipo(prev => [...prev, ...result.servicios]);
-    alert(`Se copiaron ${result.migrados} servicio(s) al equipo.`);
+    uroToast(`Se copiaron ${result.migrados} servicio(s) al equipo.`);
   };
 
   // ============================================================
@@ -9129,7 +8750,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {esEquipo && nuevo.servicio && serviciosSinFormalizar.includes(nuevo.servicio) && (
           <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:4,lineHeight:1.4}}>
             «{nuevo.servicio}» ya lo usan otros pacientes pero no está en la lista formal del equipo.{" "}
-            <button type="button" onClick={async()=>{const r=await crearServicioEquipo(contexto,currentUser.id,nuevo.servicio,serviciosEquipo.length); if(r.ok) setServiciosEquipo(p=>[...p,r.servicio]); else alert(r.error);}} style={{background:"none",border:"none",color:"var(--primario)",textDecoration:"underline",cursor:"pointer",fontSize:"var(--fs-xs)",padding:0}}>Formalizarlo ahora</button>
+            <button type="button" onClick={async()=>{const r=await crearServicioEquipo(contexto,currentUser.id,nuevo.servicio,serviciosEquipo.length); if(r.ok) setServiciosEquipo(p=>[...p,r.servicio]); else uroToast(r.error);}} style={{background:"none",border:"none",color:"var(--primario)",textDecoration:"underline",cursor:"pointer",fontSize:"var(--fs-xs)",padding:0}}>Formalizarlo ahora</button>
           </div>
         )}
 
@@ -9205,7 +8826,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {esEquipo && serviciosSinFormalizar.length > 0 && (
           <button onClick={async()=>{
             const r = await crearServiciosEquipoBulk(contexto, currentUser.id, serviciosSinFormalizar);
-            if (!r.ok) return alert(r.error);
+            if (!r.ok) return uroToast(r.error);
             setServiciosEquipo(prev => [...prev, ...r.servicios]);
           }} style={{width:"100%",marginBottom:12,padding:"9px 12px",fontSize:"var(--fs-1)",fontWeight:500,background:"var(--fondo-suave)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer"}}>
             📋 Formalizar {serviciosSinFormalizar.length} servicio(s) ya usados en pacientes ({serviciosSinFormalizar.join(", ")})
@@ -9773,7 +9394,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
     {seccionAbierta==="subjetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {sugSOAP.subjetivo.map(s => (
+        {SUGERENCIAS_SOAP.subjetivo.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9786,7 +9407,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
     {seccionAbierta==="objetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {sugSOAP.objetivo.map(s => (
+        {SUGERENCIAS_SOAP.objetivo.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9875,7 +9496,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
     {seccionAbierta==="examen" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {sugSOAP.examen.map(s => (
+        {SUGERENCIAS_SOAP.examen.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9888,7 +9509,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
     {seccionAbierta==="indicaciones" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {sugSOAP.indicaciones.map(s => (
+        {SUGERENCIAS_SOAP.indicaciones.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -10072,7 +9693,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   </div>
                 </div>
                 <button onClick={()=>{
-                  if (!formLitiasis.ubicacion) return alert("Selecciona la ubicación");
+                  if (!formLitiasis.ubicacion) return uroToast("Selecciona la ubicación");
                   setLitiasis([...litiasis, formLitiasis]);
                   setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
                 }} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar litiasis</button>
@@ -10122,7 +9743,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>cm</span>
                 </div>
                 <button onClick={()=>{
-                  if (!formTumor.organo) return alert("Selecciona el órgano");
+                  if (!formTumor.organo) return uroToast("Selecciona el órgano");
                   setTumores([...tumores, formTumor]);
                   setFormTumor({ organo: "", sublocalizacion: "", tamano: "" });
                 }} style={{padding:"7px 12px",fontSize:"var(--fs-1)",background:"var(--exito)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Agregar tumor</button>
@@ -10170,7 +9791,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   <button onClick={()=>{ setFiltroServicio("todos"); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio==="todos")}>
                     Todos los servicios {filtroServicio==="todos" ? "✓" : ""}
                   </button>
-                  {aplicarOrdenNombres(serviciosDisponibles, ordenServiciosKanban).map(s => (
+                  {serviciosDisponibles.map(s => (
                     <button key={s} onClick={()=>{ setFiltroServicio(s); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio===s)}>
                       {s} {filtroServicio===s ? "✓" : ""}
                     </button>
@@ -10204,17 +9825,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* MODAL: distribución de pacientes por encargado */}
       {/* HOJA: mover paciente de servicio (mantén presionado una tarjeta) */}
       {moverPaciente && (() => {
-        // TODOS los servicios del contexto (incluidos los que no tienen pacientes),
-        // en el mismo orden que se definió al administrar servicios.
-        const destinos = aplicarOrdenNombres(
-          Array.from(new Set([
-            ...serviciosDisponibles,
-            ...misServiciosLista.map(s => s.nombre),
-            ...serviciosEquipo.map(s => s.nombre),
-            moverPaciente.servicio,
-          ].filter(Boolean))),
-          ordenServiciosKanban
-        );
+        const destinos = Array.from(new Set([
+          ...misServiciosLista.map(s => s.nombre),
+          ...serviciosEquipo.map(s => s.nombre),
+          ...Object.keys(porServicio),
+        ])).filter(Boolean).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
         return (
           <div onClick={()=>setMoverPaciente(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:65}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"70vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -10519,7 +10134,7 @@ function VideoPlayer({ video, onClose }) {
 }
 
 function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
-  const [filtro, setFiltro] = usePersistedState("uro_vid_filtro", "Todas");
+  const [filtro, setFiltro] = useState("Todas");
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
   const [nuevo, setNuevo] = useState({ titulo:"", categoria:"Oncología", url:"", autor:"", descripcion:"", keywords:"" });
@@ -10553,9 +10168,9 @@ function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
   setAgregando(false);
 };
  const eliminarVideo = async (id) => {
-  if (confirm("¿Eliminar?")) {
+  if (await uroConfirm("¿Eliminar?")) {
     const result = await eliminarVideoSupabase(id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     setVideos(videos.filter(v => v.id !== id));
   }
 };
@@ -10733,6 +10348,21 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [mostrarOnboardingPush, setMostrarOnboardingPush] = useState(false);
   const [bloqueado, setBloqueado] = useState(() => leerLock().enabled);
+  const [recuperandoPassword, setRecuperandoPassword] = useState(false);
+  // Bloqueo por inactividad: si el bloqueo está activo y no hay interacción
+  // durante N minutos (configurable en Seguridad), la app se bloquea sola.
+  useEffect(() => {
+    let ultimaActividad = Date.now();
+    const marcar = () => { ultimaActividad = Date.now(); };
+    const eventos = ["pointerdown", "keydown", "touchstart", "scroll"];
+    eventos.forEach(ev => window.addEventListener(ev, marcar, { passive: true }));
+    const timer = setInterval(() => {
+      const cfg = leerLock();
+      const min = (cfg.idleMin === undefined || cfg.idleMin === null) ? 5 : cfg.idleMin;
+      if (cfg.enabled && min > 0 && Date.now() - ultimaActividad > min * 60000) setBloqueado(true);
+    }, 30000);
+    return () => { eventos.forEach(ev => window.removeEventListener(ev, marcar)); clearInterval(timer); };
+  }, []);
   useEffect(() => {
     let ocultoEn = 0;
     const onVis = () => {
@@ -10832,7 +10462,6 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     if ((subTabBiblio === "videos" && fnOculta(config, "biblio:videos")) ||
         (subTabBiblio === "preguntas" && fnOculta(config, "biblio:preguntas")) ||
         (subTabBiblio === "medicamentos" && fnOculta(config, "biblio:medicamentos")) ||
-        (subTabBiblio === "protocolos" && fnOculta(config, "biblio:protocolos")) ||
         (subTabBiblio === "scores" && fnOculta(config, "biblio:scores"))) setSubTabBiblio("cirugias");
   }, [config, subTabHospital, subTabBiblio]);
 
@@ -11004,6 +10633,22 @@ useEffect(() => {
 
   // Suscribirse a cambios futuros (login, logout)
   const unsubscribe = onAuthChange((event, newSession) => {
+    // Usuario llegó desde el link de "recuperar contraseña": abrir modal para definir la nueva.
+    if (event === "PASSWORD_RECOVERY") setRecuperandoPassword(true);
+    // Cambio de correo confirmado: mantener perfiles.correo sincronizado
+    // (necesario para que el login por RUT siga resolviendo al correo correcto).
+    if (event === "USER_UPDATED" && newSession?.user?.id && newSession?.user?.email) {
+      setCurrentUser(prev => {
+        if (prev && prev.id === newSession.user.id && prev.correo && prev.correo !== newSession.user.email) {
+          // Sincroniza perfiles.correo solo si seguía siendo el correo de login antiguo
+          // (si el usuario lo personalizó como correo de contacto distinto, se respeta).
+          supabase.from("perfiles").update({ correo: newSession.user.email })
+            .eq("id", newSession.user.id).eq("correo", prev.correo).then(() => {});
+          return { ...prev, correo: newSession.user.email };
+        }
+        return prev;
+      });
+    }
     if (newSession) {
       setSession(newSession);
       cargarPerfil(newSession);
@@ -11043,7 +10688,21 @@ useEffect(() => {
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, loading]);
 
   const isAdmin = currentUser?.rol === "admin";
-  const pendientesCount = 0; // TODO: cargar desde Supabase con un useEffect propio
+  const [pendientesCount, setPendientesCount] = useState(0);
+  useEffect(() => {
+    if (!isAdmin) { setPendientesCount(0); return; }
+    let cancelado = false;
+    const cargarPendientes = async () => {
+      try {
+        const { count, error } = await supabase.from("perfiles").select("id", { count: "exact", head: true }).eq("estado", "pendiente");
+        if (!cancelado && !error && typeof count === "number") setPendientesCount(count);
+      } catch {}
+    };
+    cargarPendientes();
+    const onVis = () => { if (document.visibilityState === "visible") cargarPendientes(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { cancelado = true; document.removeEventListener("visibilitychange", onVis); };
+  }, [isAdmin]);
 
  const handleLogout = async () => {
   // Abrir una conversación existente (cargar sus mensajes)
@@ -11056,7 +10715,7 @@ const abrirConversacion = async (conversacionId) => {
     setMessages(result.mensajes);
     setConversacionActual(conversacionId);
   } else {
-    alert("Error al cargar la conversación: " + result.error);
+    uroToast("Error al cargar la conversación: " + result.error);
   }
   setLoadingConversaciones(false);
 };
@@ -11079,7 +10738,7 @@ const nuevaConversacion = () => {
 const eliminarConv = async (conversacionId) => {
   const result = await eliminarConversacion(conversacionId);
   if (!result.ok) {
-    alert("Error al eliminar: " + result.error);
+    uroToast("Error al eliminar: " + result.error);
     return;
   }
   
@@ -11117,7 +10776,7 @@ const abrirConversacion = async (conversacionId) => {
     setMessages(result.mensajes);
     setConversacionActual(conversacionId);
   } else {
-    alert("Error al cargar la conversación: " + result.error);
+    uroToast("Error al cargar la conversación: " + result.error);
   }
   setLoadingConversaciones(false);
 };
@@ -11140,7 +10799,7 @@ const nuevaConversacion = () => {
 const eliminarConv = async (conversacionId) => {
   const result = await eliminarConversacion(conversacionId);
   if (!result.ok) {
-    alert("Error al eliminar: " + result.error);
+    uroToast("Error al eliminar: " + result.error);
     return;
   }
   
@@ -11224,7 +10883,7 @@ const cargarPerfil = async (sessionData) => {
     else if (perfil.estado === "rechazado") mensaje = "Tu cuenta fue rechazada. Contacta al administrador.";
     else mensaje = "Tu cuenta no está activa.";
     
-    alert(mensaje);
+    uroToast(mensaje);
     await logoutUser();
     setCurrentUser(null);
     setSession(null);
@@ -11569,7 +11228,7 @@ if (videosResult.ok) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        "Authorization": `Bearer ${await tokenFuncionIA()}`,
       },
       body: JSON.stringify({
         model: "claude-sonnet-5",
@@ -11629,7 +11288,7 @@ if (videosResult.ok) {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    "Authorization": `Bearer ${await tokenFuncionIA()}`,
   },
   body: JSON.stringify({
     model: "claude-sonnet-5",
@@ -11656,7 +11315,7 @@ const handleGuardarMapa = async () => {
   // Obtener sesión actual
   const sesionResult = await getSession();
   if (!sesionResult.ok || !sesionResult.session) {
-    alert("Error: no se pudo obtener tu sesión");
+    uroToast("Error: no se pudo obtener tu sesión");
     setGuardandoMapa(false);
     return;
   }
@@ -11671,9 +11330,9 @@ const handleGuardarMapa = async () => {
   if (result.ok) {
     // Agregar al inicio de la lista local
     setMapasGuardados(prev => [result.mapa, ...prev]);
-    alert("✓ Mapa guardado correctamente");
+    uroToast("✓ Mapa guardado correctamente");
   } else {
-    alert("Error al guardar el mapa: " + result.error);
+    uroToast("Error al guardar el mapa: " + result.error);
   }
   
   setGuardandoMapa(false);
@@ -11681,11 +11340,11 @@ const handleGuardarMapa = async () => {
 
 // Eliminar un mapa guardado
 const handleEliminarMapa = async (mapaId) => {
-  if (!confirm("¿Eliminar este mapa?\n\nNo podrás recuperarlo después.")) return;
+  if (!(await uroConfirm("¿Eliminar este mapa?\n\nNo podrás recuperarlo después."))) return;
   
   const result = await eliminarMapa(mapaId);
   if (!result.ok) {
-    alert("Error al eliminar: " + result.error);
+    uroToast("Error al eliminar: " + result.error);
     return;
   }
   
@@ -11705,7 +11364,7 @@ const cargarMapaGuardado = async (mapa) => {
     setMapaActual(r.mapa.contenido);
     setMapaTema(r.mapa.tema || r.mapa.titulo);
   } else {
-    alert("No se pudo cargar el mapa: " + r.error);
+    uroToast("No se pudo cargar el mapa: " + r.error);
   }
 };
   // Pantalla de carga mientras se verifica la sesión inicial
@@ -11726,6 +11385,8 @@ if (!currentUser) {
       <div style={{width:"100%",maxWidth:480,background:"var(--superficie)",borderRadius:16,boxShadow:"0 4px 24px rgba(26,58,92,0.10)",padding:"8px"}}>
         <AuthScreen/>
       </div>
+      <UroDialogHost/>
+      {recuperandoPassword && <NuevaPasswordModal onClose={()=>setRecuperandoPassword(false)}/>}
     </div>
   );
 }
@@ -11828,6 +11489,7 @@ if (!currentUser) {
       elegir: setSubTabHospital,
       extras: [
         ["🌐 Abrir CORE", () => accion("abrir-core")],
+        ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
       ],
@@ -11849,7 +11511,6 @@ if (!currentUser) {
         ...(!fnOculta(config, "biblio:videos") ? [["videos", "📚 Videos"]] : []),
         ...(!fnOculta(config, "biblio:preguntas") ? [["preguntas", "❓ Preguntas"]] : []),
         ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
-        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📘 Protocolos"]] : []),
         ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
         ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
       ],
@@ -11863,6 +11524,8 @@ if (!currentUser) {
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
       <OfflineBanner/>
       {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
+      <UroDialogHost/>
+      {recuperandoPassword && <NuevaPasswordModal onClose={()=>setRecuperandoPassword(false)}/>}
       {mostrarOnboardingPush && <OnboardingPushModal currentUser={currentUser} onClose={()=>setMostrarOnboardingPush(false)} />}
       <style>{`
         html, body, #root { background: var(--fondo); overscroll-behavior: none; }
@@ -11971,37 +11634,27 @@ if (!currentUser) {
             <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>{submenu.titulo}</div>
             {submenu.secciones.map(([id,label]) => {
               const activo = submenu.activo === id;
-              const ico = ICONO_SUBTAB[id];
               return (
-                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500,display:"flex",alignItems:"center",gap:10}}>
-                  {ico ? <Ico name={ico} size={18}/> : null}
-                  <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
-                  {activo ? <span style={{color:"var(--primario)"}}>✓</span> : null}
+                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
+                  {label}{activo ? "  ✓" : ""}
                 </button>
               );
             })}
             {submenu.extras.length > 0 && <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>}
-            {submenu.extras.map(([label,fn]) => {
-              const ico = _icoDeLabel(label);
-              return (
-                <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
-                  {ico ? <Ico name={ico} size={18}/> : null}
-                  <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
-                </button>
-              );
-            })}
+            {submenu.extras.map(([label,fn]) => (
+              <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
+                {label}
+              </button>
+            ))}
             {submenu.contexto && (
               <>
                 <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>
                 <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>Viendo: {equipoActualNombre}</div>
                 {submenu.contexto.opciones.map(([id,label]) => {
                   const activo = submenu.contexto.actual === id;
-                  const ico = _icoDeLabel(label);
                   return (
-                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500,display:"flex",alignItems:"center",gap:10}}>
-                      {ico ? <Ico name={ico} size={17}/> : null}
-                      <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
-                      {activo ? <span style={{color:"var(--primario)"}}>✓</span> : null}
+                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
+                      {label}{activo ? "  ✓" : ""}
                     </button>
                   );
                 })}
