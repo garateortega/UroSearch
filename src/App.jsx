@@ -3476,6 +3476,208 @@ function AuthScreen({ onLogin }) {
   );
 }
 
+// ─── Buzón de feedback: botón flotante siempre accesible ───
+// Cualquier usuario puede enviar comentarios, sugerencias o reportar problemas,
+// con una foto opcional. El admin los revisa en su panel de Cuentas.
+function BotonFeedback({ currentUser, tabActual }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setAbierto(true)}
+        title="Enviar comentario o sugerencia"
+        aria-label="Enviar comentario o sugerencia"
+        style={{
+          position: "fixed", right: 14,
+          bottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
+          zIndex: 900, width: 46, height: 46, borderRadius: "50%",
+          background: "var(--superficie)", color: "var(--primario)",
+          border: "0.5px solid var(--borde)", boxShadow: "0 4px 14px rgba(0,0,0,0.22)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+        <Ico name="chat" size={22} />
+      </button>
+      {abierto && <FeedbackModal currentUser={currentUser} tabActual={tabActual} onClose={() => setAbierto(false)} />}
+    </>
+  );
+}
+
+function FeedbackModal({ currentUser, tabActual, onClose }) {
+  const [tipo, setTipo] = useState("sugerencia");
+  const [mensaje, setMensaje] = useState("");
+  const [archivo, setArchivo] = useState(null);
+  const [archivoNombre, setArchivoNombre] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const fileRef = useRef(null);
+  useBackClose(true, onClose);
+
+  const TIPOS = [
+    ["sugerencia", "💡 Sugerencia"],
+    ["problema", "🐞 Problema"],
+    ["comentario", "💬 Comentario"],
+  ];
+
+  const onFile = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) { setMsg("⚠️ La imagen no debe superar 10 MB."); return; }
+    setArchivo(f); setArchivoNombre(f.name); setMsg("");
+  };
+
+  const enviar = async () => {
+    if (!mensaje.trim()) { setMsg("⚠️ Escribe tu mensaje antes de enviar."); return; }
+    setEnviando(true); setMsg("");
+    try {
+      let imagen_path = null;
+      if (archivo) {
+        // Se comprime antes de subir para no gastar almacenamiento ni datos móviles.
+        const b64 = await comprimirImagenPac(archivo, 1400, 0.8);
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const path = `${currentUser.id}/${Date.now()}.jpg`;
+        const up = await supabase.storage.from("feedback").upload(path, new Blob([bytes], { type: "image/jpeg" }), { contentType: "image/jpeg" });
+        if (up.error) throw new Error(up.error.message);
+        imagen_path = path;
+      }
+      const { error } = await supabase.from("feedback").insert({
+        user_id: currentUser.id,
+        tipo,
+        mensaje: mensaje.trim(),
+        imagen_path,
+        contexto: `${tabActual || "-"} · ${VERSION}`,
+      });
+      if (error) throw new Error(error.message);
+      uroToast("✓ ¡Gracias! Tu mensaje llegó al equipo de UroSearch.");
+      onClose();
+    } catch (e) {
+      setMsg("⚠️ No se pudo enviar: " + (e.message || String(e)));
+    }
+    setEnviando(false);
+  };
+
+  const inp = { width: "100%", padding: "10px 12px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--fondo-suave)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 10 };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 20, width: "100%", maxWidth: 440, maxHeight: "88vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)" }}>Tu opinión</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginBottom: 14, lineHeight: 1.5 }}>Cuéntanos qué mejorarías, qué no funcionó o qué te gustaría ver. Lo leemos todo.</div>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          {TIPOS.map(([id, label]) => (
+            <button key={id} onClick={() => setTipo(id)} style={{ flex: 1, padding: "8px 4px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: tipo === id ? "none" : "0.5px solid var(--borde)", background: tipo === id ? "var(--primario)" : "var(--superficie)", color: tipo === id ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
+          ))}
+        </div>
+
+        <textarea value={mensaje} onChange={e => setMensaje(e.target.value)} rows={5} placeholder="Escribe aquí…" style={{ ...inp, resize: "vertical" }} disabled={enviando} />
+
+        <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} disabled={enviando} />
+        <button onClick={() => fileRef.current?.click()} disabled={enviando} style={{ width: "100%", padding: 10, fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10, textAlign: "left" }}>
+          📎 {archivoNombre || "Adjuntar una captura (opcional)"}
+        </button>
+        {archivoNombre && <button onClick={() => { setArchivo(null); setArchivoNombre(""); }} style={{ background: "none", border: "none", color: "var(--texto-ter)", fontSize: "var(--fs-0)", cursor: "pointer", padding: 0, marginBottom: 10 }}>Quitar imagen</button>}
+
+        {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", background: "var(--peligro-bg)", padding: "8px 10px", borderRadius: 6, marginBottom: 10, lineHeight: 1.45 }}>{msg}</div>}
+
+        <button onClick={enviar} disabled={enviando || !mensaje.trim()} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer", opacity: (enviando || !mensaje.trim()) ? 0.5 : 1 }}>{enviando ? "Enviando…" : "Enviar"}</button>
+        <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: 8, textAlign: "center", lineHeight: 1.4 }}>Se envía tu nombre y la sección desde la que escribes. No incluyas datos de pacientes.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Bandeja de feedback (solo admin) ───
+function FeedbackAdmin() {
+  const [items, setItems] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [filtro, setFiltro] = useState("nuevo");
+  const [urls, setUrls] = useState({});
+
+  const cargar = async () => {
+    setCargando(true);
+    try {
+      const { data } = await supabase.from("feedback").select("*, perfiles:user_id(nombre, correo)").order("fecha_creacion", { ascending: false });
+      setItems(data || []);
+    } catch {}
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const verImagen = async (item) => {
+    if (urls[item.id]) { window.open(urls[item.id], "_blank"); return; }
+    const { data, error } = await supabase.storage.from("feedback").createSignedUrl(item.imagen_path, 3600);
+    if (error || !data) { uroToast("No se pudo abrir la imagen"); return; }
+    setUrls(u => ({ ...u, [item.id]: data.signedUrl }));
+    window.open(data.signedUrl, "_blank");
+  };
+
+  const cambiarEstado = async (item, estado) => {
+    const { error } = await supabase.from("feedback").update({ estado }).eq("id", item.id);
+    if (error) { uroToast("Error: " + error.message); return; }
+    setItems(prev => prev.map(x => x.id === item.id ? { ...x, estado } : x));
+  };
+
+  const eliminar = async (item) => {
+    if (!(await uroConfirm("¿Eliminar este mensaje del buzón?"))) return;
+    if (item.imagen_path) { try { await supabase.storage.from("feedback").remove([item.imagen_path]); } catch {} }
+    const { error } = await supabase.from("feedback").delete().eq("id", item.id);
+    if (error) { uroToast("Error: " + error.message); return; }
+    setItems(prev => prev.filter(x => x.id !== item.id));
+  };
+
+  const filtrados = filtro === "todos" ? items : items.filter(x => x.estado === filtro);
+  const cuenta = (e) => items.filter(x => x.estado === e).length;
+  const TIPO_LABEL = { sugerencia: "💡 Sugerencia", problema: "🐞 Problema", comentario: "💬 Comentario" };
+
+  return (
+    <div style={{ marginTop: 22, paddingTop: 18, borderTop: "0.5px solid var(--borde)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: "var(--fs-3)", fontWeight: 600, color: "var(--texto)" }}>Buzón de sugerencias</div>
+        <button onClick={cargar} style={{ padding: "6px 12px", fontSize: "var(--fs-0)", background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--primario)", borderRadius: 6, cursor: "pointer" }}>↻ Actualizar</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["nuevo", `Nuevos (${cuenta("nuevo")})`], ["visto", `Vistos (${cuenta("visto")})`], ["resuelto", `Resueltos (${cuenta("resuelto")})`], ["todos", "Todos"]].map(([id, label]) => (
+          <button key={id} onClick={() => setFiltro(id)} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", borderRadius: 6, cursor: "pointer", border: filtro === id ? "none" : "0.5px solid var(--borde)", background: filtro === id ? "var(--primario)" : "var(--superficie)", color: filtro === id ? "var(--texto-inv)" : "var(--texto-sec)" }}>{label}</button>
+        ))}
+      </div>
+
+      {cargando ? (
+        <div style={{ textAlign: "center", padding: 24, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 24, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>No hay mensajes en esta categoría.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtrados.map(f => (
+            <div key={f.id} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                <span style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{TIPO_LABEL[f.tipo] || f.tipo}</span>
+                <span style={{ fontSize: "var(--fs-xs)", padding: "1px 7px", borderRadius: 20, background: f.estado === "nuevo" ? "var(--alerta-bg)" : f.estado === "resuelto" ? "var(--exito-bg)" : "var(--fondo-suave)", color: f.estado === "nuevo" ? "var(--alerta)" : f.estado === "resuelto" ? "var(--exito)" : "var(--texto-sec)" }}>{f.estado}</span>
+                <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginLeft: "auto" }}>{new Date(f.fecha_creacion).toLocaleString("es-CL")}</span>
+              </div>
+              <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.55, whiteSpace: "pre-wrap", marginBottom: 8 }}>{f.mensaje}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8 }}>
+                {f.perfiles?.nombre || "Usuario"}{f.perfiles?.correo ? ` · ${f.perfiles.correo}` : ""}{f.contexto ? ` · ${f.contexto}` : ""}
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {f.imagen_path && <button onClick={() => verImagen(f)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer" }}>🖼️ Ver captura</button>}
+                {f.estado !== "visto" && <button onClick={() => cambiarEstado(f, "visto")} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer" }}>Marcar visto</button>}
+                {f.estado !== "resuelto" && <button onClick={() => cambiarEstado(f, "resuelto")} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--exito)", color: "var(--texto-inv)", border: "none", borderRadius: 6, cursor: "pointer" }}>✓ Resuelto</button>}
+                <button onClick={() => eliminar(f)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--superficie)", color: "var(--peligro)", border: "0.5px solid var(--peligro)", borderRadius: 6, cursor: "pointer", marginLeft: "auto" }}>Eliminar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPanel() {
   const [perfiles, setPerfiles] = useState([]);
   const [filtro, setFiltro] = useState("pendiente");
@@ -3606,6 +3808,8 @@ function AdminPanel() {
           ))}
         </div>
       )}
+
+      <FeedbackAdmin />
     </div>
   );
 }
@@ -12387,6 +12591,7 @@ if (!currentUser) {
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
       <OfflineBanner/>
       {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
+      {!bloqueado && <BotonFeedback currentUser={currentUser} tabActual={tab}/>}
       <UroDialogHost/>
       {recuperandoPassword && <NuevaPasswordModal onClose={()=>setRecuperandoPassword(false)}/>}
       {mostrarOnboardingPush && <OnboardingPushModal currentUser={currentUser} onClose={()=>setMostrarOnboardingPush(false)} />}

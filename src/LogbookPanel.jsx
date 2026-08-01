@@ -849,9 +849,15 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([label, n]) => ({ label, n }));
 
+    // Distribución por rol asumido (cirujano / 1er ay. / 2do ay. / observador)
+    const porRol = ROLES
+      .map(([id, label]) => ({ label, n: base.filter((r) => r.rol === id).length }))
+      .filter((x) => x.n > 0)
+      .sort((a, b) => b.n - a.n);
+
     // Procedimiento más frecuente (reemplaza a la duración promedio global)
     const masFrecuente = detalleProc.length ? detalleProc[0] : null;
-    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, detalleProc, ayudantiasPorProc, onco };
+    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, porRol, detalleProc, ayudantiasPorProc, onco };
   }, [registros, criterioMet]);
 
   // ─── Estilos compartidos ───
@@ -888,7 +894,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     try {
       const criterioTxt = criterioMet === "onco" ? "solo cirugías oncológicas" : criterioMet === "noonco" ? "solo cirugías no oncológicas" : "todas las cirugías";
       const lineas = [
-        `Casuística (${criterioTxt}). Total: ${met.total}. Como cirujano principal: ${met.comoCirujano}. Como ayudante: ${met.comoAyudante}. Con complicación: ${met.conComplicacion} (Clavien-Dindo alto: ${met.clavienAlto}).`,
+        `Casuística (${criterioTxt}). Total: ${met.total}. Como cirujano principal: ${met.comoCirujano}. Como ayudante: ${met.comoAyudante}.`,
         "Por procedimiento (valores = medianas):",
         ...met.detalleProc.map((d) => `- ${d.label}: ${d.n} cx (cirujano ${d.cx}, ayudante ${d.ayud})${d.dur ? `, duración ${d.dur.med} min (n=${d.dur.n})` : ""}${d.sangrado ? `, sangrado ${d.sangrado.med} ml` : ""}${d.litiasis ? `, litiasis ${d.litiasis.med} mm` : ""}${d.prostata ? `, próstata ${d.prostata.med} cc` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}`),
       ].join("\n");
@@ -897,8 +903,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
         body: JSON.stringify({
           model: "claude-sonnet-5",
-          max_tokens: 500,
-          system: "Eres un urólogo cercano y de buen humor que revisa la casuística de un colega residente. Escribe un resumen MUY breve (2 a 4 frases), cálido y motivador, en español y con un toque simpático pero profesional: cuánto lleva, en qué va más sólido y una sugerencia concreta de qué reforzar. Máximo un emoji. Básate SOLO en los datos entregados, no inventes cifras. Sin markdown ni viñetas.",
+          max_tokens: 300,
+          system: "Eres un urólogo cercano y de buen humor que mira la casuística de un colega residente. Escribe 2 o 3 frases como máximo, cálidas, simpáticas y motivadoras: cuánto lleva, en qué va más sólido y una sugerencia amable de qué reforzar. Nada de complicaciones ni cifras de riesgo. Máximo un emoji. Básate SOLO en los datos entregados, no inventes cifras. Sin markdown ni viñetas.",
           messages: [{ role: "user", content: `Analiza esta casuística de logbook de urología y dame conclusiones:\n\n${lineas}` }],
         }),
       });
@@ -1287,10 +1293,6 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.comoAyudante}</div>
               <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
             </div>
-            <div style={kpi}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--alerta)" }}>{registros.filter(r => r.fecha && (Date.now() - new Date(r.fecha).getTime()) < 30 * 864e5).length}</div>
-              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Últimos 30 días</div>
-            </div>
             <div style={{ ...kpi, minWidth: 180 }}>
               <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--primario)", lineHeight: 1.25 }}>{met.masFrecuente ? met.masFrecuente.label : "—"}</div>
               <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 3 }}>Procedimiento más frecuente{met.masFrecuente ? ` (${met.masFrecuente.n})` : ""}</div>
@@ -1317,6 +1319,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             <div style={card}>
               <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
               <BarrasHorizontales items={met.cats} color="var(--exito)" />
+            </div>
+            <div style={card}>
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por rol asumido</div>
+              <BarrasHorizontales items={met.porRol} color="var(--primario)" />
             </div>
           </div>
 
@@ -1377,7 +1383,6 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             </div>
             {resumenError && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)" }}>{resumenError}</div>}
             {resumenIA && <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{resumenIA}</div>}
-            {!resumenIA && !resumenError && !resumenCargando && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>La IA analiza tus medianas y conteos (no envía fotos) y escribe conclusiones sobre este logbook. Consume muy pocos tokens.</div>}
           </div>
 
           {registros.length > 0 && (
