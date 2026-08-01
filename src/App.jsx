@@ -1631,6 +1631,14 @@ const SCORES = [
     id: "iief5", nombre: "IIEF-5 (SHIM)", desc: "Severidad de la disfunción eréctil",
     tipo: "custom",
   },
+  {
+    id: "stone", nombre: "STONE", desc: "Complejidad de nefrolitotomía percutánea (NLP)",
+    tipo: "custom",
+  },
+  {
+    id: "clavien", nombre: "Clavien-Dindo", desc: "Clasificación de complicaciones quirúrgicas",
+    tipo: "custom",
+  },
 ];
 
 // ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
@@ -1744,6 +1752,8 @@ function ScoresPanel() {
         {score.id === "renal" && <ScoreRENAL />}
         {score.id === "padua" && <ScorePADUA />}
         {score.id === "iief5" && <ScoreIIEF5 />}
+        {score.id === "stone" && <ScoreSTONE />}
+        {score.id === "clavien" && <ScoreClavien />}
         {score.id === "briganti" && <ScoreBriganti />}
       </div>
     );
@@ -1874,6 +1884,60 @@ function ScoreRENAL() {
 // antes de calcular un % real. Mientras estén en null, la calculadora recoge los
 // datos y muestra el punto de corte validado, pero no inventa una probabilidad.
 const BRIGANTI_COEF = { "2012": null, "2019": null };
+
+// ─── STONE (Okhunov 2013): complejidad anatómica para NLP ───
+function ScoreSTONE() {
+  const [v, setV] = useState({ s: 1, t: 1, o: 1, n: 1, e: 1 });
+  const total = v.s + v.t + v.o + v.n + v.e;
+  const interp = total <= 6 ? "Complejidad baja (5–6): alta probabilidad de stone-free" : total <= 8 ? "Complejidad moderada (7–8)" : "Complejidad alta (9–13): mayor riesgo de residuos y complicaciones";
+  const campo = (label, key, opciones) => (
+    <div><label style={lblScore}>{label}</label>
+      <select value={v[key]} onChange={e => setV({ ...v, [key]: Number(e.target.value) })} style={selScore}>
+        {opciones.map(([pts, txt]) => <option key={pts} value={pts}>{txt} — {pts} pt{pts > 1 ? "s" : ""}</option>)}
+      </select></div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {campo("S · Tamaño del cálculo (área = largo × ancho, mm²)", "s", [[1, "0–399 mm²"], [2, "400–799 mm²"], [3, "800–1599 mm²"], [4, "≥ 1600 mm²"]])}
+      {campo("T · Distancia piel–cálculo (tracto)", "t", [[1, "≤ 100 mm"], [2, "> 100 mm"]])}
+      {campo("O · Obstrucción / hidronefrosis", "o", [[1, "Ausente o leve"], [2, "Moderada o severa"]])}
+      {campo("N · Número de cálices comprometidos", "n", [[1, "1–2 cálices"], [2, "3 cálices"], [3, "Coraliforme"]])}
+      {campo("E · Densidad (esencia, UH en TC sin contraste)", "e", [[1, "≤ 950 UH"], [2, "> 950 UH"]])}
+      <div style={{ background: "var(--fondo-suave)", borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+        <div style={{ fontSize: 26, fontWeight: 700, color: "var(--primario)" }}>{total} <span style={{ fontSize: "var(--fs-1)", fontWeight: 500, color: "var(--texto-ter)" }}>/ 13</span></div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginTop: 4 }}>{interp}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Clavien-Dindo: clasificación de complicaciones postoperatorias ───
+function ScoreClavien() {
+  const grados = [
+    ["I", "Desviación del curso postoperatorio normal SIN necesidad de tratamiento farmacológico ni intervenciones. Se permiten: antieméticos, antipiréticos, analgésicos, diuréticos, electrolitos y kinesioterapia. Incluye infección de herida drenada en la cama del paciente."],
+    ["II", "Requiere tratamiento farmacológico distinto a los permitidos en grado I. Incluye transfusiones y nutrición parenteral total."],
+    ["IIIa", "Requiere intervención quirúrgica, endoscópica o radiológica SIN anestesia general."],
+    ["IIIb", "Requiere intervención quirúrgica, endoscópica o radiológica BAJO anestesia general."],
+    ["IVa", "Complicación con riesgo vital que requiere manejo en UCI/intermedio, con disfunción de UN órgano (incluye diálisis)."],
+    ["IVb", "Complicación con riesgo vital con disfunción MULTIORGÁNICA."],
+    ["V", "Muerte del paciente."],
+  ];
+  const [g, setG] = useState("I");
+  const sel = grados.find(x => x[0] === g);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div><label style={lblScore}>Grado de la complicación</label>
+        <select value={g} onChange={e => setG(e.target.value)} style={selScore}>
+          {grados.map(([id]) => <option key={id} value={id}>Grado {id}</option>)}
+        </select></div>
+      <div style={{ background: "var(--fondo-suave)", borderRadius: 10, padding: "12px 14px" }}>
+        <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: g === "V" ? "var(--peligro)" : "var(--primario)", marginBottom: 6 }}>Clavien-Dindo {sel[0]}</div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.55 }}>{sel[1]}</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 8, lineHeight: 1.45 }}>Sufijo «d» (disability): si el paciente presenta la complicación al alta, indica necesidad de seguimiento para evaluarla completamente.</div>
+      </div>
+    </div>
+  );
+}
 
 function ScorePADUA() {
   const [loc, setLoc] = useState(1), [exo, setExo] = useState(1), [rim, setRim] = useState(1);
@@ -2256,21 +2320,6 @@ function Uros({ expresion = "hola", size = 96, alt = "", style = {} }) {
     />
   );
 }
-// Uros "pensando" animado para la espera del chat: rota pose y texto.
-function UrosCargando() {
-  const pasos = [
-    { e: "pensando", t: "Consultando…" },
-    { e: "estudiando", t: "Revisando guías…" },
-    { e: "investigando", t: "Buscando en la biblioteca…" },
-    { e: "explicando", t: "Ordenando la respuesta…" },
-  ];
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setI(x => (x + 1) % pasos.length), 1800);
-    return () => clearInterval(t);
-  }, []);
-  return (<><Uros expresion={pasos[i].e} size={26}/> {pasos[i].t}</>);
-}
 // Avatar circular (cabeza) para el chat. Cae al logo SVG si falta el asset.
 function UrosAvatar({ size = 30 }) {
   const [ok, setOk] = useState(true);
@@ -2287,6 +2336,11 @@ function PortadaChat({ nombre }) {
   const movil = useIsMobile();
   // Un saludo al azar, fijo mientras la portada esté montada
   const saludo = useMemo(() => saludoAleatorio(nombre), [nombre]);
+  // Y una pose de Uros al azar, para que cada entrada al chat se sienta distinta
+  const pose = useMemo(() => {
+    const poses = ["hola", "hero", "frente", "guinando", "explicando", "bienhecho", "tres-cuartos"];
+    return poses[Math.floor(Math.random() * poses.length)];
+  }, [nombre]);
 
   // En móvil: apilado (Uros arriba grande, mensaje abajo, colita hacia arriba).
   // En escritorio: en fila (mensaje a la izquierda, Uros a la derecha, colita al lado).
@@ -2308,7 +2362,7 @@ function PortadaChat({ nombre }) {
       minHeight:"48vh"
     }}>
       <Uros
-        expresion="hola"
+        expresion={pose}
         size={movil ? 220 : 260}
         style={ movil
           ? { order:1, flex:"0 0 auto", width:"auto", maxWidth:"72%", maxHeight:"34vh" }
@@ -3585,6 +3639,113 @@ function PreguntasPanel({ currentUser, isAdmin }) {
   const [importando, setImportando] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [importPreview, setImportPreview] = useState([]);
+  // ── Generador de preguntas desde la bibliografía / protocolos locales ──
+  const [genFuente, setGenFuente] = useState("");        // id del documento o "prot:<id>"
+  const [genDocs, setGenDocs] = useState([]);            // documentos de la biblioteca
+  const [genProts, setGenProts] = useState([]);          // protocolos locales
+  const [genDificultad, setGenDificultad] = useState("mixta");
+  const [genCantidad, setGenCantidad] = useState(10);
+  const [genCargando, setGenCargando] = useState(false);
+  const [genMsg, setGenMsg] = useState("");
+  const [genPreview, setGenPreview] = useState([]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    (async () => {
+      try {
+        const r = await listarConocimiento();
+        if (r.ok) setGenDocs(r.conocimiento || []);
+        const p = await listarProtocolos();
+        if (p.ok) setGenProts(p.protocolos || []);
+      } catch {}
+    })();
+  }, [isAdmin]);
+
+  // Genera preguntas a partir del texto real del documento elegido.
+  const generarPreguntas = async () => {
+    if (!genFuente) { setGenMsg("Elige primero un documento."); return; }
+    setGenCargando(true); setGenMsg(""); setGenPreview([]);
+    try {
+      let texto = "", titulo = "", fuente = "";
+      if (genFuente.startsWith("prot:")) {
+        // Protocolo local: el archivo vive en Storage (PDF/Word). Sin extracción
+        // de texto en el cliente, usamos título + categoría como contexto mínimo.
+        const p = genProts.find(x => String(x.id) === genFuente.slice(5));
+        if (!p) throw new Error("Protocolo no encontrado");
+        titulo = p.titulo; fuente = "Protocolo local · " + (p.categoria || "General");
+        setGenMsg("Para protocolos en PDF/Word conviene pegar el texto en la Biblioteca; genero desde el título y la categoría, revisa con cuidado.");
+        texto = `Protocolo institucional: ${p.titulo}. Categoría: ${p.categoria || "General"}.`;
+      } else {
+        const r = await obtenerConocimiento(genFuente);
+        if (!r.ok) throw new Error(r.error);
+        titulo = r.item.titulo || "Documento";
+        fuente = r.item.fuente || r.item.categoria || "Biblioteca";
+        texto = (r.item.contenido || "").slice(0, 60000);   // recorte defensivo de tokens
+        if (!texto.trim()) throw new Error("El documento no tiene texto guardado.");
+      }
+
+      const instrucciones = `A partir del siguiente material de urología, redacta ${genCantidad} preguntas de alternativas para evaluar a residentes.
+
+REGLAS OBLIGATORIAS:
+- Cada pregunta tiene EXACTAMENTE 4 alternativas.
+- La alternativa correcta NO debe ser sistemáticamente la más larga: iguala la extensión de las 4 opciones (± pocas palabras) y varía la posición de la correcta.
+- Los distractores deben ser plausibles y del mismo tipo semántico que la correcta (nada de opciones absurdas ni "todas las anteriores").
+- La explicación ("feedback") debe fundamentarse SOLO en el material entregado, citando el dato o la frase del texto que la sustenta. Si el material no alcanza para fundamentar una pregunta, no la incluyas.
+- "categoria": el tema urológico específico (ej: "Litiasis", "NMIBC", "HBP", "Trauma", "Andrología").
+- "dificultad": ${genDificultad === "mixta" ? 'reparte entre "facil", "media" y "dificil"' : `todas "${genDificultad}"`}.
+  · facil = recuerdo directo de un dato explícito · media = aplicación clínica · dificil = razonamiento, matices o comparación entre opciones.
+
+Responde SOLO con un array JSON válido, sin markdown ni texto extra:
+[{"enunciado":"...","alternativas":["a","b","c","d"],"correcta":0,"feedback":"...","categoria":"...","dificultad":"media"}]
+
+MATERIAL (título: ${titulo}):
+${texto}`;
+
+      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
+        body: JSON.stringify({
+          model: "claude-sonnet-5",
+          max_tokens: 8000,
+          system: "Eres un docente de urología que redacta preguntas de alternativas rigurosas para residentes. Respondes exclusivamente con JSON válido.",
+          messages: [{ role: "user", content: instrucciones }],
+        }),
+      });
+      const data = await res.json();
+      const txt = data.content?.find(b => b.type === "text")?.text || "";
+      const limpio = txt.replace(/```json|```/g, "").trim();
+      const arr = JSON.parse(limpio);
+      const validas = (Array.isArray(arr) ? arr : []).filter(q =>
+        q && q.enunciado && Array.isArray(q.alternativas) && q.alternativas.length === 4 &&
+        typeof q.correcta === "number" && q.correcta >= 0 && q.correcta < 4
+      ).map(q => ({ ...q, fuente }));
+      if (validas.length === 0) throw new Error("La IA no devolvió preguntas utilizables.");
+      setGenPreview(validas);
+      setGenMsg(`✓ ${validas.length} pregunta(s) generada(s). Revísalas antes de agregarlas.`);
+    } catch (e) {
+      setGenMsg("No se pudo generar: " + (e.message || String(e)));
+    }
+    setGenCargando(false);
+  };
+
+  const confirmarGeneradas = async () => {
+    setGenCargando(true);
+    let ok = 0;
+    for (const q of genPreview) {
+      const r = await crearPregunta(currentUser.id, {
+        enunciado: q.enunciado,
+        alternativas: q.alternativas,
+        correcta: q.correcta,
+        feedback: (q.feedback || "") + (q.fuente ? `\n\nFuente: ${q.fuente}` : ""),
+        categoria: q.categoria || "General",
+        dificultad: q.dificultad || null,
+      });
+      if (r.ok) { ok++; setPreguntas(prev => [r.pregunta, ...prev]); }
+    }
+    setGenPreview([]);
+    setGenMsg(`✓ ${ok} pregunta(s) agregadas al pool.`);
+    setGenCargando(false);
+  };
   const [historial, setHistorial] = useState(() => leerHistorialQuiz(currentUser.id)); // respuestas previas
   const metricasQuiz = useMemo(() => {
     const total = historial.length;
@@ -3764,6 +3925,72 @@ Reglas: transcribe el texto tal cual; si una pregunta tiene menos de 4 alternati
       <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
         <button onClick={()=>{setVista("quiz");setErrorForm("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nueva pregunta</div>
+
+        {/* Generador de preguntas desde la bibliografía / protocolos locales */}
+        <div style={{border:"0.5px solid var(--primario)",borderRadius:10,padding:12,marginBottom:14,background:"var(--fondo-suave)"}}>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)",marginBottom:4}}>✨ Generar desde la biblioteca</div>
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8,lineHeight:1.4}}>Elige un documento que ya subiste y la IA redacta preguntas fundamentadas en su contenido, con la explicación citando el material.</div>
+
+          <label style={labelStyle}>Documento</label>
+          <select value={genFuente} onChange={e=>setGenFuente(e.target.value)} style={inputStyle} disabled={genCargando}>
+            <option value="">— Elige un documento —</option>
+            {genDocs.length > 0 && (
+              <optgroup label="Biblioteca">
+                {genDocs.map(d => <option key={d.id} value={d.id}>{d.titulo}{d.categoria ? ` · ${d.categoria}` : ""}</option>)}
+              </optgroup>
+            )}
+            {genProts.length > 0 && (
+              <optgroup label="Protocolos locales">
+                {genProts.map(p => <option key={p.id} value={`prot:${p.id}`}>{p.titulo}</option>)}
+              </optgroup>
+            )}
+          </select>
+
+          <div style={{display:"flex",gap:8}}>
+            <div style={{flex:1}}>
+              <label style={labelStyle}>Dificultad</label>
+              <select value={genDificultad} onChange={e=>setGenDificultad(e.target.value)} style={inputStyle} disabled={genCargando}>
+                <option value="mixta">Mixta (fácil + media + difícil)</option>
+                <option value="facil">Solo fáciles</option>
+                <option value="media">Solo medias</option>
+                <option value="dificil">Solo difíciles</option>
+              </select>
+            </div>
+            <div style={{width:110}}>
+              <label style={labelStyle}>Cantidad</label>
+              <select value={genCantidad} onChange={e=>setGenCantidad(Number(e.target.value))} style={inputStyle} disabled={genCargando}>
+                {[5,10,15,20,25,30].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <button onClick={generarPreguntas} disabled={genCargando || !genFuente} style={{...btnPrimary,marginTop:2,opacity:(genCargando||!genFuente)?0.5:1}}>
+            {genCargando ? "Generando…" : "✨ Generar preguntas"}
+          </button>
+          {genMsg && <div style={{marginTop:8,fontSize:"var(--fs-1)",fontWeight:500,lineHeight:1.45,color:genMsg.startsWith("✓")?"var(--exito)":"var(--peligro)"}}>{genMsg}</div>}
+
+          {genPreview.length > 0 && (
+            <div style={{marginTop:10}}>
+              <div style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
+                {genPreview.map((q,i)=>(
+                  <div key={i} style={{fontSize:"var(--fs-0)",padding:"7px 9px",background:"var(--superficie)",borderRadius:6,border:"0.5px solid var(--borde)"}}>
+                    <div style={{fontWeight:600,color:"var(--texto)",marginBottom:3}}>
+                      {i+1}. {q.enunciado}
+                      <span style={{color:"var(--texto-ter)",fontWeight:400}}> · {q.categoria}</span>
+                      {q.dificultad && <span style={{marginLeft:6,fontSize:9,padding:"1px 6px",borderRadius:4,background:q.dificultad==="dificil"?"var(--peligro-bg)":q.dificultad==="media"?"var(--alerta-bg)":"var(--exito-bg)",color:q.dificultad==="dificil"?"var(--peligro)":q.dificultad==="media"?"var(--alerta)":"var(--exito)"}}>{q.dificultad}</span>}
+                    </div>
+                    {q.alternativas.map((a,j)=>(<div key={j} style={{color:j===q.correcta?"var(--exito)":"var(--texto-sec)",fontWeight:j===q.correcta?600:400}}>{j===q.correcta?"✓ ":"· "}{a}</div>))}
+                    {q.feedback && <div style={{color:"var(--texto-ter)",fontStyle:"italic",marginTop:3,lineHeight:1.45}}>{q.feedback}</div>}
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>{setGenPreview([]);setGenMsg("");}} disabled={genCargando} style={{flex:"0 0 auto",padding:"10px 14px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>Descartar</button>
+                <button onClick={confirmarGeneradas} disabled={genCargando} style={{...btnPrimary,marginTop:0,flex:1,opacity:genCargando?0.6:1}}>{genCargando?"Guardando…":`Agregar ${genPreview.length} al pool`}</button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* #13: importar preguntas desde Word / PDF / imagen */}
         <div style={{border:"0.5px dashed var(--borde)",borderRadius:10,padding:12,marginBottom:18,background:"var(--fondo-suave)"}}>
@@ -12391,7 +12618,7 @@ if (!currentUser) {
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:"var(--fs-2)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
-                  <UrosCargando/>
+                  <Uros expresion="pensando" size={26}/> Consultando...
                 </div>
               </div>
             )}

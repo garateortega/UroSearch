@@ -127,6 +127,7 @@ export async function crearPregunta(autorId, datos) {
       correcta: datos.correcta,
       feedback: datos.feedback || '',
       categoria: datos.categoria || 'General',
+      dificultad: datos.dificultad || null,
     })
     .select('*')
     .single();
