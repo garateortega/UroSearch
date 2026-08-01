@@ -13,6 +13,16 @@ import {
 } from "./logbook";
 import { supabase } from "./supabase";
 
+// Token para la Edge Function de IA: usa la sesión del usuario (la función
+// valida que el usuario exista y esté aprobado antes de llamar a Anthropic).
+async function tokenFuncionIA() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) return data.session.access_token;
+  } catch {}
+  return import.meta.env.VITE_SUPABASE_ANON_KEY;
+}
+
 const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Otro"];
 const ROLES = [["cirujano", "Cirujano principal"], ["primer_ayudante", "1er ayudante"], ["segundo_ayudante", "2do ayudante"], ["observador", "Observador"]];
 const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante"]; // cuentan como "ayudante" en las métricas
@@ -204,7 +214,7 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Authorization": `Bearer ${await tokenFuncionIA()}`,
     },
     body: JSON.stringify({
       model: "claude-sonnet-5",
@@ -343,6 +353,18 @@ function Dispersion({ puntos, unidad = "min", color = "var(--primario)", mediana
           <line x1={padL} y1={medY} x2={W - padR} y2={medY} stroke={color} strokeWidth="0.8" strokeDasharray="3 2" opacity="0.6" />
           <text x={W - padR} y={medY - 2} textAnchor="end" fontSize="8" fill={color}>mediana {mediana} {unidad}</text>
         </>
+      )}
+      {/* línea que une los puntos (tendencia / curva de aprendizaje) */}
+      {puntos.length > 1 && (
+        <polyline
+          fill="none"
+          stroke={color}
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          opacity="0.55"
+          points={puntos.map((p, i) => `${x(i)},${y(p.val)}`).join(" ")}
+        />
       )}
       {/* puntos */}
       {puntos.map((p, i) => (
@@ -850,6 +872,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   );
 
   // ─── Resumen escrito por la IA sobre la casuística (bajo demanda, pocos tokens) ───
+  // Se genera solo al entrar a Métricas (una vez por sesión); el botón queda para regenerar.
+  const autoResumenRef = useRef(false);
+  useEffect(() => {
+    if (vista !== "metricas") return;
+    if (autoResumenRef.current) return;
+    if (!met || met.total === 0) return;
+    autoResumenRef.current = true;
+    generarResumenIA();
+  }, [vista, met]);
+
   const generarResumenIA = async () => {
     if (resumenCargando) return;
     setResumenCargando(true); setResumenError(""); setResumenIA("");
@@ -862,11 +894,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       ].join("\n");
       const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
         body: JSON.stringify({
           model: "claude-sonnet-5",
           max_tokens: 500,
-          system: "Eres un urólogo que revisa la casuística quirúrgica de un colega residente. Escribe un resumen breve (4 a 6 frases), en español clínico, con conclusiones útiles: volumen y ritmo, proporción como cirujano vs ayudante, procedimientos donde tiene más experiencia, tiempos operatorios o sangrado destacables, y una o dos sugerencias de qué reforzar. Básate SOLO en los datos entregados, no inventes cifras. No uses markdown ni viñetas.",
+          system: "Eres un urólogo cercano y de buen humor que revisa la casuística de un colega residente. Escribe un resumen MUY breve (2 a 4 frases), cálido y motivador, en español y con un toque simpático pero profesional: cuánto lleva, en qué va más sólido y una sugerencia concreta de qué reforzar. Máximo un emoji. Básate SOLO en los datos entregados, no inventes cifras. Sin markdown ni viñetas.",
           messages: [{ role: "user", content: `Analiza esta casuística de logbook de urología y dame conclusiones:\n\n${lineas}` }],
         }),
       });
@@ -1254,6 +1286,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.comoAyudante}</div>
               <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
+            </div>
+            <div style={kpi}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "var(--alerta)" }}>{registros.filter(r => r.fecha && (Date.now() - new Date(r.fecha).getTime()) < 30 * 864e5).length}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Últimos 30 días</div>
             </div>
             <div style={{ ...kpi, minWidth: 180 }}>
               <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--primario)", lineHeight: 1.25 }}>{met.masFrecuente ? met.masFrecuente.label : "—"}</div>

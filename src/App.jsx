@@ -5,13 +5,14 @@ import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks } from "./biblioteca";
+import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
 import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
 import { guardarSnapshot, leerSnapshot } from "./offlineCache";
+import { Ico } from "./iconos";
 import { encolar, procesarCola, pendientesCount } from "./offlineQueue";
 
 // ============================================================
@@ -535,6 +536,39 @@ function useConfig() {
 }
 const fnOculta = (cfg, id) => Array.isArray(cfg?.ocultas) && cfg.ocultas.includes(id);
 
+// ─── Íconos SVG por id de subpestaña (para el submenú de cada sección) ───
+const ICONO_SUBTAB = {
+  // Hospital
+  pacientes: "pacientes", tabla: "tabla", notas: "notas", prescripciones: "recetas",
+  interconsultas: "interconsultas", seguimiento: "seguimiento", comites: "comites", ingresos: "ingresos",
+  // Biblioteca
+  cirugias: "cirugias", videos: "videos", preguntas: "preguntas", medicamentos: "medicamentos",
+  protocolos: "protocolos", scores: "scores", documentos: "notas",
+  // Logbook
+  lista: "logbook", nueva: "foto", metricas: "metricas",
+};
+// Quita el emoji/símbolo inicial de una etiqueta ("💊 Recetas" → "Recetas").
+const _soloTexto = (s) => (s || "").replace(/^[^A-Za-zÀ-ÿ0-9]+\s*/, "");
+// Íconos para botones sueltos del submenú (extras / contexto), mapeados por su emoji líder.
+const ICONO_POR_EMOJI = {
+  "🌐": "web", "🔗": "compartir", "👥": "equipo", "👤": "pacientes",
+  "📊": "metricas", "📷": "foto", "🔔": "notificacion", "⚙️": "config",
+  "🎬": "videos", "📄": "notas", "➕": "nuevo", "🛠️": "config",
+};
+const _emojiLider = (s) => { const m = (s || "").match(/^(\p{Extended_Pictographic}(?:\uFE0F)?)/u); return m ? m[1] : null; };
+const _icoDeLabel = (s) => { const e = _emojiLider(s); return e ? ICONO_POR_EMOJI[e] || null : null; };
+
+// Sirve para que un panel vuelva a donde estabas si sales y regresas a la app.
+function usePersistedState(clave, inicial) {
+  const [val, setVal] = useState(() => {
+    try { const raw = localStorage.getItem(clave); return raw != null ? JSON.parse(raw) : inicial; } catch { return inicial; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(clave, JSON.stringify(val)); } catch {}
+  }, [clave, val]);
+  return [val, setVal];
+}
+
 // Si se apaga una pestaña principal pero se deja activa alguna de sus secciones,
 // esa sección se muestra como pestaña propia (así no queda inalcanzable).
 const SUBFUNCIONES_PROMOVIBLES = {
@@ -545,6 +579,7 @@ const SUBFUNCIONES_PROMOVIBLES = {
   "biblio:videos":       { padre: "conocimiento", sub: "videos",         label: "📚 Videos" },
   "biblio:preguntas":    { padre: "conocimiento", sub: "preguntas",      label: "❓ Preguntas" },
   "biblio:medicamentos": { padre: "conocimiento", sub: "medicamentos",   label: "💊 Medicamentos" },
+  "biblio:protocolos":   { padre: "conocimiento", sub: "protocolos",     label: "📘 Protocolos" },
   "biblio:scores":       { padre: "conocimiento", sub: "scores",         label: "🧮 Scores" },
 };
 
@@ -608,6 +643,7 @@ const FUNCIONES_CONFIGURABLES = [
     ["biblio:videos", "📚 Videos"],
     ["biblio:preguntas", "❓ Preguntas"],
     ["biblio:medicamentos", "💊 Medicamentos"],
+    ["biblio:protocolos", "📘 Protocolos"],
     ["biblio:scores", "🧮 Scores"],
   ]},
 ];
@@ -749,31 +785,89 @@ function SeguridadLock() {
   );
 }
 
+// ─── Editor de sugerencias personalizables (SOAP y recetas), por usuario ───
+function EditorSugerencias({ currentUser }) {
+  const uid = currentUser?.id;
+  const [abierto, setAbierto] = useState(false);
+  const [soap, setSoap] = useState(() => leerSugSOAP(uid));
+  const [rx, setRx] = useState(() => leerSugRx(uid));
+  const [msg, setMsg] = useState("");
+  const catsSOAP = [["subjetivo", "S — Subjetivo"], ["objetivo", "O — Objetivo"], ["examen", "Examen físico"], ["indicaciones", "Indicaciones"]];
+  const area = { width: "100%", minHeight: 82, padding: "8px 10px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", resize: "vertical", lineHeight: 1.5, fontFamily: "inherit" };
+  const bloque = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", margin: "8px 0 3px" };
+  const guardar = () => {
+    const limpiar = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, (Array.isArray(v) ? v : []).map((x) => x.trim()).filter(Boolean)]));
+    guardarSugSOAP(uid, limpiar(soap));
+    guardarSugRx(uid, limpiar(rx));
+    setMsg("✓ Guardado"); setTimeout(() => setMsg(""), 2500);
+  };
+  const restaurar = async () => {
+    if (!(await uroConfirm("¿Restaurar las sugerencias por defecto? Se perderán tus cambios."))) return;
+    setSoap(SUGERENCIAS_SOAP); setRx(_defRx());
+    guardarSugSOAP(uid, SUGERENCIAS_SOAP); guardarSugRx(uid, _defRx());
+    setMsg("Restauradas por defecto"); setTimeout(() => setMsg(""), 2500);
+  };
+  return (
+    <div style={{ border: "0.5px solid var(--borde)", borderRadius: 10, marginBottom: 16, overflow: "hidden" }}>
+      <button onClick={() => setAbierto((o) => !o)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 12px", background: "var(--superficie)", border: "none", cursor: "pointer" }}>
+        <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>✍️ Mis sugerencias (SOAP y recetas)</span>
+        <span style={{ color: "var(--primario)" }}>{abierto ? "▴" : "▾"}</span>
+      </button>
+      {abierto && (
+        <div style={{ padding: "10px 12px", borderTop: "0.5px solid var(--borde)" }}>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.4 }}>Una sugerencia por línea. Aparecen en tu evolución SOAP y en tus recetas. Son solo tuyas.</div>
+
+          <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginTop: 4 }}>Evolución SOAP</div>
+          {catsSOAP.map(([k, label]) => (
+            <div key={k}>
+              <div style={bloque}>{label}</div>
+              <textarea value={(soap[k] || []).join("\n")} onChange={(e) => setSoap((p) => ({ ...p, [k]: e.target.value.split("\n") }))} style={area} />
+            </div>
+          ))}
+
+          <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", marginTop: 12 }}>Recetas</div>
+          {RX_CATS.map(([k, label]) => (
+            <div key={k}>
+              <div style={bloque}>{label}</div>
+              <textarea value={(rx[k] || []).join("\n")} onChange={(e) => setRx((p) => ({ ...p, [k]: e.target.value.split("\n") }))} style={area} />
+            </div>
+          ))}
+
+          {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--exito)", margin: "8px 0" }}>{msg}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button onClick={guardar} style={{ flex: 1, padding: "10px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar sugerencias</button>
+            <button onClick={restaurar} style={{ padding: "10px 12px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Restaurar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Diálogos y toasts propios (reemplazan alert/confirm nativos) ───
 let _mostrarDialogo = null;   // setter registrado por UroDialogHost
 let _mostrarToast = null;
 
 function uroToast(mensaje, tipo) {
-  // tipo: "ok" | "error" | undefined (neutro). Detecta errores por el texto si no se indica.
   const t = tipo || (/error|no se pudo|falló|fallo|inválid|incorrect/i.test(String(mensaje)) ? "error" : "ok");
   if (_mostrarToast) _mostrarToast({ id: Date.now() + Math.random(), texto: String(mensaje), tipo: t });
-  else { try { window.alert(mensaje); } catch {} }   // fallback si el host aún no montó
+  else { try { window.alert(mensaje); } catch {} }
 }
 
 function uroConfirm(mensaje, opciones = {}) {
   if (!_mostrarDialogo) return Promise.resolve(window.confirm(mensaje)); // fallback
   const m = String(mensaje);
-  // Etiqueta del botón inferida de la acción si no se indica
   const etiqueta = opciones.confirmar
     || (/expulsar/i.test(m) ? "Expulsar"
     : /¿salir/i.test(m) ? "Salir"
     : /importar/i.test(m) ? "Importar"
+    : /restaurar/i.test(m) ? "Restaurar"
     : /borrar/i.test(m) ? "Borrar"
     : /eliminar/i.test(m) ? "Eliminar"
     : "Confirmar");
   const peligro = (opciones.peligro !== undefined)
     ? opciones.peligro
-    : /eliminar|borrar|expulsar|no se puede deshacer/i.test(m);
+    : /eliminar|borrar|expulsar|no se puede deshacer|se perderán/i.test(m);
   return new Promise((resolve) => {
     _mostrarDialogo({ texto: m, confirmar: etiqueta, cancelar: opciones.cancelar || "Cancelar", peligro, resolve });
   });
@@ -873,7 +967,7 @@ async function cambiarCorreoUsuario(nuevoCorreo) {
   } catch (e) { return { ok: false, error: String(e) }; }
 }
 
-// Token para llamar a la Edge Function de IA: usa la sesión del usuario
+// Token para la Edge Function de IA: usa la sesión del usuario
 // (la función valida que el usuario exista y esté aprobado antes de llamar a Anthropic).
 async function tokenFuncionIA() {
   try {
@@ -883,7 +977,7 @@ async function tokenFuncionIA() {
   return import.meta.env.VITE_SUPABASE_ANON_KEY;
 }
 
-// Modal que aparece al entrar desde el link de recuperación de contraseña
+// Modal al entrar desde el link de recuperación de contraseña
 function NuevaPasswordModal({ onClose }) {
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
@@ -951,6 +1045,16 @@ function ConfigModal({ onClose, currentUser }) {
       setPushMsg("⚠️ " + (e.message || String(e)));
     }
     setPushCargando(false);
+  };
+
+  // ─── Vista de pacientes: horizontal (fila deslizable) o vertical (apilada) ───
+  const [orientPac, setOrientPac] = useState(() => {
+    try { return localStorage.getItem("uro_orient_pac") === "horizontal" ? "horizontal" : "vertical"; } catch { return "vertical"; }
+  });
+  const cambiarOrientPac = (v) => {
+    setOrientPac(v);
+    try { localStorage.setItem("uro_orient_pac", v); } catch {}
+    try { window.dispatchEvent(new CustomEvent("uro-orient-pac-change", { detail: v })); } catch {}
   };
 
   const aplicar = (nueva) => { setCfg(nueva); guardarConfig(nueva); };
@@ -1022,6 +1126,23 @@ function ConfigModal({ onClose, currentUser }) {
             );
           })}
         </div>
+
+        {/* Vista de pacientes */}
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>👥 Vista de pacientes</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {[["vertical", "↕️ Vertical", "Servicios apilados"], ["horizontal", "↔️ Horizontal", "Servicios en fila deslizable"]].map(([id, label, desc]) => {
+            const on = orientPac === id;
+            return (
+              <div key={id} onClick={() => cambiarOrientPac(id)} style={{ flex: 1, padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)", textAlign: "center" }}>
+                <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: on ? "var(--primario)" : "var(--texto)" }}>{label}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", lineHeight: 1.3, marginTop: 3 }}>{desc}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Sugerencias personalizables */}
+        <EditorSugerencias currentUser={currentUser} />
 
         {/* Funciones */}
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧩 Funciones activas</div>
@@ -1129,6 +1250,7 @@ const RX_CATS = [["medicamentos", "💊 Medicamentos"], ["laboratorio", "🧪 La
 // ─── Panel de Prescripciones (exclusivo urólogo): checklists → PDF tipo receta ───
 function PrescripcionesPanel({ currentUser }) {
   const [cat, setCat] = useState("medicamentos");
+  const sugRx = useSugRx(currentUser?.id); // sugerencias personalizadas por usuario
   const [seleccionados, setSeleccionados] = useState({});   // { "medicamentos": Set(idx), ... } via objeto
   const [extra, setExtra] = useState("");                    // líneas libres adicionales
   const [sugerenciasOpen, setSugerenciasOpen] = useState(false); // checklist de sugeridos colapsado por defecto
@@ -1157,7 +1279,7 @@ function PrescripcionesPanel({ currentUser }) {
   };
 
   const lineasActuales = () => {
-    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => RX_TEMPLATES[cat].items[i]);
+    const base = (seleccionados[cat] || []).slice().sort((a, b) => a - b).map(i => sugRx[cat][i]);
     const libres = extra.split("\n").map(s => s.trim()).filter(Boolean);
     return [...base, ...libres];
   };
@@ -1311,7 +1433,7 @@ function PrescripcionesPanel({ currentUser }) {
 
       {sugerenciasOpen && (
         <div style={{ display: "flex", flexDirection: "column", gap: 2, marginBottom: 12 }}>
-          {RX_TEMPLATES[cat].items.map((it, idx) => {
+          {sugRx[cat].map((it, idx) => {
             const on = marcados.includes(idx);
             return (
               <div key={idx} onClick={() => toggle(idx)} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: on ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on ? "var(--exito-borde)" : "var(--borde)") }}>
@@ -1341,7 +1463,7 @@ function MedicamentosPanel({ currentUser, isAdmin }) {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
-  const [abiertoId, setAbiertoId] = useState(null); // medicamento expandido (colapsados por defecto)
+  const [abiertoId, setAbiertoId] = usePersistedState("uro_med_abierto", null); // medicamento expandido (recordado)
   const [form, setForm] = useState({ nombre: "", presentacion: "", posologia: "", indicacion: "", categoria: "", notas: "" });
   const [err, setErr] = useState("");
 
@@ -1482,7 +1604,128 @@ const SCORES = [
     id: "briganti", nombre: "Briganti", desc: "Riesgo de invasión ganglionar (cáncer de próstata)",
     tipo: "custom",
   },
+  {
+    id: "ipssqol", nombre: "IPSS-QoL", desc: "Calidad de vida por síntomas urinarios",
+    tipo: "suma",
+    preguntas: ["¿Cómo se sentiría si tuviera que pasar el resto de su vida con sus síntomas urinarios actuales?"],
+    opciones: ["0 · Encantado", "1 · Complacido", "2 · Más bien satisfecho", "3 · Indiferente", "4 · Más bien insatisfecho", "5 · Muy mal", "6 · Fatal"],
+    interpretar: (s) => s <= 1 ? "Buena calidad de vida (0–1)" : s <= 4 ? "Afectación moderada (2–4)" : "Muy afectada (5–6)",
+  },
+  {
+    id: "mskcc", nombre: "MSKCC (Motzer)", desc: "Pronóstico en cáncer renal metastásico",
+    tipo: "checks",
+    factores: [
+      "Karnofsky < 80 %",
+      "LDH > 1,5× el límite superior normal",
+      "Hemoglobina < límite inferior normal",
+      "Calcio corregido > 10 mg/dL",
+      "< 1 año desde el diagnóstico al tratamiento sistémico",
+    ],
+    interpretar: (s) => s === 0 ? "Riesgo favorable (0 factores)" : s <= 2 ? "Riesgo intermedio (1–2 factores)" : "Riesgo pobre (≥ 3 factores)",
+  },
+  {
+    id: "padua", nombre: "PADUA", desc: "Complejidad anatómica de masa renal",
+    tipo: "custom",
+  },
+  {
+    id: "iief5", nombre: "IIEF-5 (SHIM)", desc: "Severidad de la disfunción eréctil",
+    tipo: "custom",
+  },
 ];
+
+// ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
+function ProtocolosPanel({ currentUser, isAdmin }) {
+  const [items, setItems] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [busqueda, setBusqueda] = useState("");
+  const [subiendo, setSubiendo] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [form, setForm] = useState({ titulo: "", categoria: "", archivo: null, archivoNombre: "" });
+  const [abriendo, setAbriendo] = useState(null);
+  const fileRef = useRef(null);
+
+  const cargar = async () => {
+    setCargando(true);
+    const r = await listarProtocolos();
+    if (r.ok) setItems(r.protocolos); else setMsg("⚠️ " + r.error);
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const abrir = async (p) => {
+    setAbriendo(p.id); setMsg("");
+    const r = await urlProtocolo(p.archivo_path);
+    setAbriendo(null);
+    if (r.ok) abrirExterno(r.url); else setMsg("⚠️ No se pudo abrir: " + r.error);
+  };
+
+  const subir = async () => {
+    if (!form.titulo.trim()) { setMsg("⚠️ Ponle un título al protocolo."); return; }
+    if (!form.archivo) { setMsg("⚠️ Selecciona un archivo Word o PDF."); return; }
+    setSubiendo(true); setMsg("");
+    const r = await crearProtocolo(currentUser.id, { titulo: form.titulo.trim(), categoria: form.categoria.trim() || "General", archivo: form.archivo });
+    setSubiendo(false);
+    if (r.ok) { setForm({ titulo: "", categoria: "", archivo: null, archivoNombre: "" }); if (fileRef.current) fileRef.current.value = ""; setMsg("✓ Protocolo subido."); cargar(); }
+    else setMsg("⚠️ " + r.error);
+  };
+
+  const borrar = async (p) => {
+    if (!(await uroConfirm(`¿Eliminar el protocolo "${p.titulo}"? Esto no se puede deshacer.`))) return;
+    const r = await eliminarProtocolo(p.id, p.archivo_path);
+    if (r.ok) cargar(); else setMsg("⚠️ " + r.error);
+  };
+
+  const filtrados = items.filter((p) => !busqueda || (p.titulo + " " + (p.categoria || "")).toLowerCase().includes(busqueda.toLowerCase()));
+  const porCat = {};
+  filtrados.forEach((p) => { const c = p.categoria || "General"; (porCat[c] = porCat[c] || []).push(p); });
+  const cats = Object.keys(porCat).sort((a, b) => a.localeCompare(b, "es"));
+  const iconoArchivo = (p) => /pdf/i.test(p.mime || "") || /\.pdf$/i.test(p.archivo_nombre || "") ? "📕" : "📘";
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
+
+  return (
+    <div style={{ padding: 16 }}>
+      <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Buscar protocolo…" style={{ ...inp, marginBottom: 12 }} />
+
+      {isAdmin && (
+        <div style={{ border: "0.5px solid var(--borde)", borderRadius: 12, padding: 14, background: "var(--superficie)", marginBottom: 16 }}>
+          <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>➕ Subir protocolo (solo admin)</div>
+          <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Título (ej: Prostatectomía radical laparoscópica)" style={{ ...inp, marginBottom: 8 }} />
+          <input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} placeholder="Categoría (ej: Próstata, Litiasis, Riñón…)" style={{ ...inp, marginBottom: 8 }} />
+          <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const f = e.target.files?.[0] || null; setForm({ ...form, archivo: f, archivoNombre: f?.name || "" }); }} style={{ display: "none" }} />
+          <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-2)", background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10, textAlign: "left" }}>📎 {form.archivoNombre || "Seleccionar archivo (PDF o Word)…"}</button>
+          <button onClick={subir} disabled={subiendo} style={{ width: "100%", padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: subiendo ? "default" : "pointer", opacity: subiendo ? 0.6 : 1 }}>{subiendo ? "Subiendo…" : "Subir protocolo"}</button>
+        </div>
+      )}
+
+      {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginBottom: 12 }}>{msg}</div>}
+
+      {cargando ? (
+        <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "20px 0" }}>Cargando…</div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ color: "var(--texto-ter)", fontSize: "var(--fs-2)", textAlign: "center", padding: "24px 0" }}>{items.length === 0 ? "Aún no hay protocolos subidos." : "Sin resultados."}</div>
+      ) : (
+        cats.map((c) => (
+          <div key={c} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto-sec)", marginBottom: 6 }}>{c}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {porCat[c].map((p) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--fondo-suave)", borderRadius: 10, padding: "10px 12px" }}>
+                  <div onClick={() => abrir(p)} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{iconoArchivo(p)} {p.titulo}</div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.archivo_nombre || ""}</div>
+                  </div>
+                  <button onClick={() => abrir(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--primario)", fontWeight: 600, whiteSpace: "nowrap" }}>{abriendo === p.id ? "…" : "Abrir ↗"}</button>
+                  {isAdmin && <button onClick={() => borrar(p)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
 
 function ScoresPanel() {
   const [abierto, setAbierto] = useState(null);
@@ -1499,6 +1742,8 @@ function ScoresPanel() {
         {score.tipo === "checks" && <ScoreChecks score={score} />}
         {score.id === "damico" && <ScoreDAmico />}
         {score.id === "renal" && <ScoreRENAL />}
+        {score.id === "padua" && <ScorePADUA />}
+        {score.id === "iief5" && <ScoreIIEF5 />}
         {score.id === "briganti" && <ScoreBriganti />}
       </div>
     );
@@ -1629,6 +1874,74 @@ function ScoreRENAL() {
 // antes de calcular un % real. Mientras estén en null, la calculadora recoge los
 // datos y muestra el punto de corte validado, pero no inventa una probabilidad.
 const BRIGANTI_COEF = { "2012": null, "2019": null };
+
+function ScorePADUA() {
+  const [loc, setLoc] = useState(1), [exo, setExo] = useState(1), [rim, setRim] = useState(1);
+  const [sen, setSen] = useState(1), [col, setCol] = useState(1), [tam, setTam] = useState(1);
+  const [ap, setAp] = useState("x"); // sufijo anterior/posterior (no suma)
+  const total = loc + exo + rim + sen + col + tam;
+  const grupo = total <= 7 ? "Riesgo bajo (6–7)" : total <= 9 ? "Riesgo intermedio (8–9)" : "Riesgo alto (≥ 10)";
+  const color = total <= 7 ? "var(--exito)" : total <= 9 ? "var(--alerta)" : "var(--peligro)";
+  const sel = (val, setter, opts) => (
+    <select value={val} onChange={ev => setter(parseInt(ev.target.value))} style={selScore}>
+      {opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+    </select>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div><label style={lblScore}>Localización longitudinal (polar)</label>{sel(loc, setLoc, [[1, "Polo superior o inferior (1 pt)"], [2, "Zona media (2 pt)"]])}</div>
+      <div><label style={lblScore}>Tasa exofítica</label>{sel(exo, setExo, [[1, "≥ 50 % exofítico (1 pt)"], [2, "< 50 % exofítico (2 pt)"], [3, "Totalmente endofítico (3 pt)"]])}</div>
+      <div><label style={lblScore}>Borde renal</label>{sel(rim, setRim, [[1, "Lateral (1 pt)"], [2, "Medial (2 pt)"]])}</div>
+      <div><label style={lblScore}>Relación con el seno renal</label>{sel(sen, setSen, [[1, "No contacta (1 pt)"], [2, "Contacta (2 pt)"]])}</div>
+      <div><label style={lblScore}>Relación con el sistema colector</label>{sel(col, setCol, [[1, "No contacta (1 pt)"], [2, "Desplaza o infiltra (2 pt)"]])}</div>
+      <div><label style={lblScore}>Tamaño tumoral</label>{sel(tam, setTam, [[1, "≤ 4 cm (1 pt)"], [2, "> 4 y ≤ 7 cm (2 pt)"], [3, "> 7 cm (3 pt)"]])}</div>
+      <div><label style={lblScore}>Anterior / posterior (sufijo)</label>
+        <select value={ap} onChange={ev => setAp(ev.target.value)} style={selScore}><option value="x">x (indeterminado)</option><option value="a">a (anterior)</option><option value="p">p (posterior)</option></select></div>
+      <div style={scoreBox}>
+        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}{ap === "x" ? "" : ap}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 14</span></div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{grupo}</div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreIIEF5() {
+  // 5 ítems, cada uno 1–5; total 5–25.
+  const preguntas = [
+    "1. Confianza para lograr y mantener una erección",
+    "2. Con estimulación, ¿con qué frecuencia las erecciones fueron suficientes para la penetración?",
+    "3. Durante el coito, ¿con qué frecuencia mantuvo la erección tras la penetración?",
+    "4. Durante el coito, ¿qué tan difícil fue mantener la erección hasta terminar?",
+    "5. ¿Con qué frecuencia el coito fue satisfactorio?",
+  ];
+  const opciones = [
+    ["1 · Muy baja / casi nunca", "2 · Baja", "3 · Regular", "4 · Alta", "5 · Muy alta / casi siempre"],
+    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
+    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
+    ["1 · Extremadamente difícil", "2 · Muy difícil", "3 · Difícil", "4 · Poco difícil", "5 · Sin dificultad"],
+    ["1 · Casi nunca", "2 · Pocas veces", "3 · A veces", "4 · Muchas veces", "5 · Casi siempre"],
+  ];
+  const [vals, setVals] = useState([3, 3, 3, 3, 3]);
+  const total = vals.reduce((s, x) => s + x, 0);
+  const interp = total >= 22 ? "Sin disfunción eréctil (22–25)" : total >= 17 ? "DE leve (17–21)" : total >= 12 ? "DE leve a moderada (12–16)" : total >= 8 ? "DE moderada (8–11)" : "DE severa (5–7)";
+  const color = total >= 22 ? "var(--exito)" : total >= 12 ? "var(--alerta)" : "var(--peligro)";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {preguntas.map((p, i) => (
+        <div key={i}>
+          <label style={lblScore}>{p}</label>
+          <select value={vals[i]} onChange={e => { const v = [...vals]; v[i] = parseInt(e.target.value); setVals(v); }} style={selScore}>
+            {opciones[i].map((o, j) => <option key={j} value={j + 1}>{o}</option>)}
+          </select>
+        </div>
+      ))}
+      <div style={scoreBox}>
+        <div style={{ fontSize: 28, fontWeight: 700, color }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> / 25</span></div>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{interp}</div>
+      </div>
+    </div>
+  );
+}
 
 function ScoreBriganti() {
   const [ver, setVer] = useState("2019");
@@ -1943,6 +2256,21 @@ function Uros({ expresion = "hola", size = 96, alt = "", style = {} }) {
     />
   );
 }
+// Uros "pensando" animado para la espera del chat: rota pose y texto.
+function UrosCargando() {
+  const pasos = [
+    { e: "pensando", t: "Consultando…" },
+    { e: "estudiando", t: "Revisando guías…" },
+    { e: "investigando", t: "Buscando en la biblioteca…" },
+    { e: "explicando", t: "Ordenando la respuesta…" },
+  ];
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI(x => (x + 1) % pasos.length), 1800);
+    return () => clearInterval(t);
+  }, []);
+  return (<><Uros expresion={pasos[i].e} size={26}/> {pasos[i].t}</>);
+}
 // Avatar circular (cabeza) para el chat. Cae al logo SVG si falta el asset.
 function UrosAvatar({ size = 30 }) {
   const [ok, setOk] = useState(true);
@@ -2015,48 +2343,29 @@ const TUTORIAL_VERSION = "1"; // súbelo si quieres re-mostrarlo a todos en una 
 // tab = pestaña que debe estar activa para que el elemento exista.
 function pasosTutorial(rol, movil = false) {
   const base = [
-    { uros: "hero", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
+    { uros: "hola", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
 
     // ─── RECORDATORIO ───
     { uros: "pabellon_serio", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
 
     // ─── CHAT ───
     { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas." },
-    { target: "modo-respuesta", tab: "chat", uros: "pensando", titulo: "Elige el tono", texto: "«Precisa» da respuestas breves y al grano; «Explicativa» las desarrolla con más detalle." },
 
     // ─── HOSPITAL ───
     { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
     { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
-    ...(movil ? [{ tab: "hospital", subtab: "pacientes", uros: "point", titulo: "Gestos: moverte sin tocar los menús", texto: "Desliza el dedo hacia los lados para cambiar de pestaña, y hacia abajo (estando arriba del todo) para abrir el menú de la pestaña en la que estés." }] : []),
-    { tab: "hospital", subtab: "pacientes", uros: "point", titulo: "El menú de servicios", texto: "El botón «Todos los servicios ▾» abre un menú: elige un servicio para ver solo esos pacientes, filtra por estado (activos, operados, sin operar, de alta) y, en equipo, mira cuántos pacientes tiene cada médico." },
-    { tab: "hospital", subtab: "pacientes", uros: "pensativo", titulo: "Ordena los servicios a tu manera", texto: "En «Administrar servicios», deja presionado el ☰ de un servicio y arrástralo a su lugar. En un equipo, el orden y la lista se comparten con todos." },
-    { tab: "hospital", subtab: "interconsultas", uros: "camara", titulo: "📄 Interconsultas", texto: "Fotografía las interconsultas que te llegan: Uros lee el documento y llena los campos. Después, en el menú de Hospital, «Métricas de interconsultas» te muestra de qué servicios vienen, por qué motivos y cuántas resolviste." },
 
     // ─── SEGUIMIENTO ───
-    { tab: "hospital", subtab: "seguimiento", uros: "point", titulo: "🔄 Seguimiento de pacientes", texto: "Aquí creas tus propios criterios de control: «Vigilancia activa cáncer testicular», «Seguimiento post-RTU vesical», o el que necesites. Tú defines cada cuánto se controla." },
-    { tab: "hospital", subtab: "seguimiento", uros: "sorprendido", titulo: "Te avisa antes de que se pase", texto: "Cada paciente se pinta según su próximo control: 🟢 al día, 🟡 por vencer, 🔴 atrasado. Puedes ordenarlos por urgencia o por los más antiguos, para que nadie se te quede atrás." },
     { tab: "hospital", subtab: "seguimiento", uros: "camara", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
-    { tab: "hospital", subtab: "seguimiento", uros: "explicando", titulo: "Y puedes preguntarme", texto: "En el chat puedes pedirme «¿qué pacientes tengo con el control atrasado?» y te respondo con tus pacientes reales en seguimiento." },
-    { tab: "hospital", subtab: "pacientes", demo: "pac-tools", uros: "pensando", titulo: "Herramientas de Pacientes", texto: "En el menú de Hospital, la opción 🛠️ Herramientas muestra esta barra:" },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
-    { tab: "hospital", subtab: "pacientes", demo: "colores", uros: "guinando", titulo: "Los colores", texto: "En la lista y en la ficha, un ícono resume de un vistazo el estado clínico:" },
     { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "pensando", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
-    { tab: "hospital", subtab: "notas", demo: "notas", uros: "explicando", titulo: "Notas", texto: "Notas rápidas del contexto actual. Ejemplo:" },
     { target: "selector-contexto", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Personal ↔ Equipo", texto: "Este botón cambia entre 👤 «Mis Pacientes» y 👥 un equipo. Pacientes, tabla y notas se muestran según el contexto elegido aquí." },
 
     // ─── BIBLIOTECA ───
     { target: "tab-conocimiento", tab: "conocimiento", uros: "investigando", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
-    { target: "tab-conocimiento", tab: "conocimiento", subtab: "cirugias", uros: "hola", titulo: "Secciones de Biblioteca", texto: "Toca de nuevo la pestaña Biblioteca y se despliega: 🔪 Cirugías · 📚 Videos · ❓ Preguntas · 💊 Medicamentos · 🧮 Scores." },
-    { tab: "conocimiento", subtab: "cirugias", demo: "protocolo", uros: "pizarra", titulo: "Protocolos quirúrgicos", texto: "Al abrir un protocolo (ej. Prostatectomía Radical) encuentras, ordenado por secciones:" },
-    { tab: "conocimiento", subtab: "videos", demo: "videos", uros: "hola", titulo: "Videos", texto: "Videos quirúrgicos y de guías por categoría. Toca uno para reproducirlo dentro de la app." },
-    { tab: "conocimiento", subtab: "preguntas", demo: "pregunta", uros: "guinando", titulo: "Preguntas", texto: "Autoevaluación tipo test. Al elegir una alternativa ves el feedback al instante:" },
-    { tab: "conocimiento", subtab: "preguntas", uros: "point", titulo: "📊 Mi progreso", texto: "En «Mi progreso» (dentro de Preguntas) se va acumulando tu rendimiento y te muestro en qué temas estás más débil, para que sepas qué reforzar." },
 
     // ─── LOGBOOK ───
     { target: "tab-logbook", tab: "logbook", uros: "pabellon", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
-    { target: "tab-logbook", tab: "logbook", uros: "point", titulo: "Secciones del Logbook", texto: "Toca de nuevo la pestaña Logbook y se despliega: 📋 Registros · 📷 Nueva · 📊 Métricas, más 🔗 Compartir con tu equipo." },
-    { tab: "logbook", uros: "camara", titulo: "Registra con una foto", texto: "En «Nueva» fotografías el protocolo operatorio y Uros extrae los datos: procedimiento, rol, diagnóstico, hallazgos. Solo revisas y guardas." },
-    { tab: "logbook", uros: "escribiendo", titulo: "Complementa después", texto: "Puedes volver a un registro para agregar la biopsia (con ISUP) o el control con imagen (si quedó stone free). Así tu casuística queda completa." },
     { tab: "logbook", uros: "pulgar", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
 
     { uros: "pulgar", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
@@ -2784,21 +3093,24 @@ function detectarPlataforma() {
   if (/Windows|Macintosh|Linux/.test(ua)) return "windows";
   return "android";
 }
-// ── Visor web dentro de UroSearch (iframe) ──
+// ── Apertura externa (CORE u otros sitios) ──
 // URL del sistema CORE. ⚠️ CÁMBIALA por la dirección real de tu CORE.
 const CORE_URL = "https://www.hbvaldivia.cl/core/";
-function VistaWebModal({ url, titulo = "Sitio", onClose }) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "0.5px solid var(--borde)", background: "var(--superficie)" }}>
-        <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: "var(--fs-2)", color: "var(--primario)", cursor: "pointer", fontWeight: 600 }}>← Volver</button>
-        <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
-        <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "var(--fs-1)", color: "var(--primario)", textDecoration: "none", fontWeight: 600 }}>Abrir afuera ↗</a>
-      </div>
-      <iframe src={url} title={titulo} style={{ flex: 1, width: "100%", border: "none" }} sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-downloads" />
-      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", textAlign: "center", padding: "6px 10px", borderTop: "0.5px solid var(--borde)" }}>Si la página aparece en blanco, ese sitio no permite abrirse dentro de otra app. Usa “Abrir afuera”.</div>
-    </div>
-  );
+// Abre una URL SIEMPRE en el navegador externo, sin visor in-app.
+// Usa un <a target="_blank"> real (más confiable que window.open en PWA/iOS);
+// si por alguna razón fuera bloqueado, cae a location.href como último recurso.
+function abrirExterno(url) {
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch {
+    try { window.location.href = url; } catch {}
+  }
 }
 
 // ── Términos y Condiciones / Política de Privacidad ──
@@ -3003,14 +3315,14 @@ function AuthScreen({ onLogin }) {
         </div>
         <div style={{fontSize:"var(--fs-1)", color:"var(--texto-ter)", marginTop:36, padding:"0 20px", lineHeight:1.5}}>Acceso restringido a equipo clínico<br/>urológico autorizado</div>
         <button onClick={()=>setTutorialOpen(true)} style={{marginTop:20,background:"transparent",border:"0.5px solid var(--borde)",borderRadius:9,padding:"10px 16px",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--primario)",cursor:"pointer"}}>📲 Cómo instalar la app</button>
-        <div style={{marginTop:16,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
-          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
-          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
-        </div>
         {tutorialOpen && <TutorialInstalacion onClose={()=>setTutorialOpen(false)}/>}
         {terminosOpen && <TerminosModal onClose={()=>setTerminosOpen(false)}/>}
         {privacidadOpen && <PrivacidadModal onClose={()=>setPrivacidadOpen(false)}/>}
         <div style={{fontSize:"var(--fs-1)", fontStyle:"italic", color:"var(--texto-sec)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--borde)"}}>Creado por Dr. Sebastián Gárate Ortega - Residente de Urología UACh</div>
+        <div style={{marginTop:10,display:"flex",gap:16,justifyContent:"center",fontSize:"var(--fs-1)"}}>
+          <span onClick={()=>setTerminosOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Términos y Condiciones</span>
+          <span onClick={()=>setPrivacidadOpen(true)} style={{color:"var(--primario)",cursor:"pointer",textDecoration:"underline"}}>Política de Privacidad</span>
+        </div>
         <div style={{fontSize:9, fontFamily:"monospace", color:"var(--texto-ter)", marginTop:4, letterSpacing:"0.3px"}}>{VERSION}</div>
       </div>
     );
@@ -3046,7 +3358,6 @@ function AuthScreen({ onLogin }) {
       setLoading(true);
       await enviarRecuperacionPassword(correo);
       setLoading(false);
-      // Mensaje neutro siempre: no revelamos si el correo existe o no en el sistema.
       setInfo("Si el correo está registrado en UroSearch, recibirás un link para restablecer tu contraseña en unos minutos. Revisa también el spam.");
     };
     return (
@@ -3263,11 +3574,11 @@ function borrarHistorialQuiz(userId) {
 function PreguntasPanel({ currentUser, isAdmin }) {
   const [preguntas, setPreguntas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [vista, setVista] = useState("quiz"); // "quiz" | "nueva" | "lista"
+  const [vista, setVista] = usePersistedState("uro_preg_vista", "quiz"); // "quiz" | "nueva" | "lista" (recordada)
   const [idx, setIdx] = useState(0);          // índice de la pregunta actual en quiz
   const [seleccion, setSeleccion] = useState(null); // alternativa elegida
   const [mostrarResp, setMostrarResp] = useState(false);
-  const [filtroCat, setFiltroCat] = useState("Todas");
+  const [filtroCat, setFiltroCat] = usePersistedState("uro_preg_cat", "Todas");
   const [form, setForm] = useState({ enunciado: "", alternativas: ["","","",""], correcta: 0, feedback: "", categoria: "General" });
   const [errorForm, setErrorForm] = useState("");
   // #13: importar preguntas desde Word / PDF / imagen / texto (solo admin)
@@ -3989,16 +4300,181 @@ const PROTOCOLOS_CIRUGIAS = [
     postoperatorio: ["Foley con irrigación continua 24h", "Retiro Foley 24-48h", "ATB profilaxis 3 días", "Estudio anatomopatológico"],
     complicaciones: ["Perforación vesical (intraperitoneal o extraperitoneal)", "Sangrado postoperatorio", "ITU", "Estenosis uretral", "Síndrome de RTU (raro con bipolar)"],
     duracion: "30-90 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc9", titulo: "RTU-Próstata (RTU-P)", categoria: "HBP / Obstructivo",
+    descripcion: "Resección transuretral del adenoma prostático para desobstrucción en hiperplasia benigna sintomática.",
+    indicaciones: ["HBP con síntomas moderados-severos refractarios a fármacos", "Retención urinaria recurrente", "ITU a repetición por obstrucción", "Hematuria de origen prostático", "Litiasis vesical secundaria", "Próstata 30–80 cc"],
+    contraindicaciones: ["Próstata muy grande (>80–100 cc, preferir alternativas)", "ITU activa no tratada", "Coagulopatía no corregida"],
+    preparacion: ["Urocultivo negativo o tratado", "Suspender antiagregantes/anticoagulantes según riesgo", "Profilaxis ATB monodosis", "Consentimiento (riesgo de eyaculación retrógrada)"],
+    tecnica: ["Posición litotomía", "Cistoscopia y evaluación de lóbulos", "Resección por lóbulos con asa (monopolar con glicina o bipolar con suero fisiológico)", "Referencia distal en veru montanum para proteger esfínter", "Hemostasia cuidadosa", "Evacuación de fragmentos (Ellik)", "Instalación de sonda de 3 vías con irrigación"],
+    postoperatorio: ["Irrigación vesical continua 12–24 h", "Retiro de sonda 24–72 h según claridad de orina", "Hidratación", "Control de micción espontánea"],
+    complicaciones: ["Eyaculación retrógrada (frecuente)", "Sangrado / retención por coágulos", "Síndrome post-RTU (hiponatremia, con monopolar)", "Estenosis uretral o de cuello vesical", "Incontinencia (raro)", "Disfunción eréctil"],
+    duracion: "45-90 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc10", titulo: "Adenomectomía Prostática Abierta / Simple", categoria: "HBP / Obstructivo",
+    descripcion: "Enucleación del adenoma prostático para HBP de gran volumen; por vía abierta (Millin/transvesical) o laparoscópica/robótica.",
+    indicaciones: ["Próstata >80–100 cc", "Divertículo vesical o litiasis vesical concomitante que requiera abordaje", "Contraindicación de posición de litotomía prolongada"],
+    contraindicaciones: ["Sospecha de cáncer de próstata no estudiado", "Coagulopatía no corregida"],
+    preparacion: ["Estudio de próstata (PSA, tacto, imágenes)", "Urocultivo tratado", "Reserva de hemoderivados", "Profilaxis ATB y TVP"],
+    tecnica: ["Abordaje transvesical (Freyer) o retropúbico (Millin)", "Enucleación digital/con instrumento del adenoma", "Hemostasia del lecho y cuello", "Sonda Foley con tracción suave inicial", "Cistostomía según técnica"],
+    postoperatorio: ["Irrigación vesical", "Retiro de sonda 5–7 días", "Deambulación precoz", "Control de sangrado"],
+    complicaciones: ["Sangrado con requerimiento transfusional", "ITU", "Incontinencia transitoria", "Estenosis de cuello", "Eyaculación retrógrada"],
+    duracion: "1.5-3 horas", anestesia: "General o Espinal"
+  },
+  {
+    id: "pc11", titulo: "Nefrectomía Radical", categoria: "Oncología",
+    descripcion: "Extirpación completa del riñón con la grasa perirrenal (± adrenalectomía / linfadenectomía) por cáncer renal.",
+    indicaciones: ["Masa renal T2 o mayor", "Tumores centrales no aptos para preservación", "Trombo tumoral venoso (con manejo específico)"],
+    contraindicaciones: ["Enfermedad metastásica sin rol de citorreducción", "Comorbilidad prohibitiva"],
+    preparacion: ["UroTAC/RM de estadificación", "Función renal contralateral", "Profilaxis ATB y TVP", "Reserva de sangre"],
+    tecnica: ["Abordaje laparoscópico/robótico o abierto", "Control precoz del pedículo (arteria y vena renal)", "Disección extrafascial (fascia de Gerota)", "Adrenalectomía solo si compromiso o tumor polar superior", "Linfadenectomía en casos seleccionados", "Extracción de la pieza en bolsa"],
+    postoperatorio: ["Deambulación precoz", "Control de función renal", "Retiro de drenaje según débito", "Seguimiento oncológico por estadio"],
+    complicaciones: ["Sangrado / lesión vascular", "Lesión de órganos vecinos (bazo, colon, páncreas)", "Insuficiencia renal", "Hernia incisional", "TVP/TEP"],
+    duracion: "2-4 horas", anestesia: "General"
+  },
+  {
+    id: "pc12", titulo: "Nefroureterectomía Radical", categoria: "Oncología",
+    descripcion: "Resección del riñón, uréter y rodete vesical por carcinoma urotelial de vía urinaria superior.",
+    indicaciones: ["Tumor urotelial de pelvis renal o uréter de alto riesgo", "Tumores voluminosos, multifocales o de alto grado"],
+    contraindicaciones: ["Metástasis sin control local requerido", "Comorbilidad severa"],
+    preparacion: ["UroTAC con fase excretora", "Citología / ureteroscopia diagnóstica", "Profilaxis ATB y TVP"],
+    tecnica: ["Nefrectomía (laparoscópica/robótica/abierta)", "Disección ureteral completa hasta la vejiga", "Resección del rodete vesical periureteral", "Cierre vesical y drenaje", "Instilación intravesical postoperatoria de quimioterapia (dosis única)"],
+    postoperatorio: ["Sonda vesical según cierre", "Cistografía si dudas antes de retiro", "Seguimiento cistoscópico (riesgo de recidiva vesical)"],
+    complicaciones: ["Recidiva vesical", "Fuga urinaria", "Sangrado", "Lesión de órganos vecinos"],
+    duracion: "2.5-4 horas", anestesia: "General"
+  },
+  {
+    id: "pc13", titulo: "Ureterolitotomía / URS Semirrígida con Láser", categoria: "Litiasis",
+    descripcion: "Tratamiento endoscópico de litiasis ureteral con fragmentación láser y/o extracción con canastillo.",
+    indicaciones: ["Litiasis ureteral que no expulsa o sintomática", "Cálculos ureterales medios/distales", "Fracaso de LEOC"],
+    contraindicaciones: ["ITU activa no tratada", "Estenosis ureteral infranqueable", "Coagulopatía no corregida"],
+    preparacion: ["Urocultivo tratado", "Imagen actualizada (UroTAC)", "Profilaxis ATB"],
+    tecnica: ["Posición litotomía", "Cistoscopia y cateterización ureteral", "Ascenso de ureteroscopio semirrígido con guía de seguridad", "Fragmentación con láser Holmium", "Extracción de fragmentos con canastillo", "Instalación de catéter doble J"],
+    postoperatorio: ["Retiro de sonda vesical precoz", "Retiro de doble J 1–4 semanas", "Analgesia", "Control imagenológico de fragmentos residuales"],
+    complicaciones: ["Lesión / perforación ureteral", "Avulsión ureteral (rara, grave)", "ITU / urosepsis", "Estenosis ureteral", "Migración de fragmentos"],
+    duracion: "30-75 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc14", titulo: "Instalación / Retiro de Catéter Doble J (JJ)", categoria: "Derivaciones",
+    descripcion: "Colocación endoscópica de catéter ureteral interno para asegurar drenaje del tracto urinario superior.",
+    indicaciones: ["Obstrucción ureteral (litiasis, tumor, estenosis)", "Protección de anastomosis", "Post-cirugía endourológica", "Hidronefrosis sintomática"],
+    contraindicaciones: ["ITU activa no controlada (preferir nefrostomía)", "Uretra/uréter infranqueable"],
+    preparacion: ["Urocultivo tratado", "Profilaxis ATB", "Imagen para tallar longitud del catéter"],
+    tecnica: ["Cistoscopia", "Cateterización del meato ureteral con guía", "Ascenso de guía bajo fluoroscopia", "Colocación del doble J sobre la guía", "Verificación de rizos (renal y vesical)"],
+    postoperatorio: ["Registro de fecha de instalación y retiro", "Educar síntomas del catéter (disuria, dolor lumbar miccional, hematuria leve)", "Programar retiro (evitar 'JJ olvidado')"],
+    complicaciones: ["Síntomas irritativos", "Migración / incrustación", "ITU", "Reflujo con dolor lumbar", "Olvido del catéter con incrustación grave"],
+    duracion: "15-30 min", anestesia: "Sedación / Espinal"
+  },
+  {
+    id: "pc15", titulo: "Cistostomía Suprapúbica (Talla Vesical)", categoria: "Derivaciones",
+    descripcion: "Drenaje vesical percutáneo por vía suprapúbica cuando el acceso uretral no es posible.",
+    indicaciones: ["Retención urinaria con imposibilidad de sondaje uretral", "Traumatismo uretral", "Necesidad de derivación vesical prolongada"],
+    contraindicaciones: ["Vejiga no distendida / no palpable (relativa; usar guía ecográfica)", "Cirugía abdominal baja previa (precaución)", "Coagulopatía"],
+    preparacion: ["Vejiga llena / guía ecográfica", "Asepsia", "Anestesia local"],
+    tecnica: ["Punción suprapúbica en línea media 2 cm sobre pubis", "Verificación de salida de orina", "Colocación de catéter suprapúbico", "Fijación a piel"],
+    postoperatorio: ["Cuidado del sitio de inserción", "Recambio programado del catéter", "Vigilar obstrucción"],
+    complicaciones: ["Lesión intestinal (raro)", "Sangrado", "Infección del trayecto", "Salida accidental del catéter"],
+    duracion: "10-20 min", anestesia: "Local ± Sedación"
+  },
+  {
+    id: "pc16", titulo: "Pieloplastia Desmembrada (Anderson-Hynes)", categoria: "Reconstructiva",
+    descripcion: "Reparación de la estenosis de la unión pieloureteral con resección del segmento estenótico y anastomosis.",
+    indicaciones: ["Estenosis pieloureteral sintomática", "Deterioro de función renal o dolor / ITU asociados", "Litiasis secundaria a la obstrucción"],
+    contraindicaciones: ["Riñón sin función recuperable (considerar nefrectomía)", "Comorbilidad prohibitiva"],
+    preparacion: ["Cintigrama renal (DTPA/MAG3) para función y drenaje", "UroTAC", "Profilaxis ATB"],
+    tecnica: ["Abordaje laparoscópico/robótico o abierto", "Identificación de la unión pieloureteral y vasos polares", "Resección del segmento estenótico", "Espatulación del uréter", "Anastomosis pielo-ureteral sobre catéter doble J", "Drenaje"],
+    postoperatorio: ["Doble J 4–6 semanas", "Retiro de sonda vesical precoz", "Cintigrama de control diferido"],
+    complicaciones: ["Fuga urinaria", "Reestenosis", "ITU", "Sangrado"],
+    duracion: "2-3 horas", anestesia: "General"
+  },
+  {
+    id: "pc17", titulo: "Orquiectomía (Radical Inguinal / Simple)", categoria: "Oncología",
+    descripcion: "Extirpación testicular: radical por vía inguinal ante sospecha de tumor, o simple/subalbugínea (paliativa/hormonal).",
+    indicaciones: ["Masa testicular sospechosa de tumor (radical inguinal)", "Bloqueo androgénico en cáncer de próstata avanzado (simple bilateral)", "Testículo no viable (torsión tardía, absceso)"],
+    contraindicaciones: ["Coagulopatía no corregida"],
+    preparacion: ["Marcadores tumorales (AFP, β-hCG, LDH) si sospecha tumoral", "Ecografía testicular", "Discutir prótesis y banco de semen si aplica"],
+    tecnica: ["Radical: incisión inguinal, control precoz del cordón en anillo inguinal interno, extracción sin violar la bolsa escrotal", "Simple/subalbugínea: vía escrotal (indicaciones no oncológicas)"],
+    postoperatorio: ["Analgesia", "Soporte escrotal", "Seguimiento oncológico y estadificación si tumor"],
+    complicaciones: ["Hematoma escrotal", "Infección", "Dolor crónico", "Impacto en fertilidad/hormonal"],
+    duracion: "30-60 min", anestesia: "General o Espinal"
+  },
+  {
+    id: "pc18", titulo: "Hidrocelectomía", categoria: "Genital / Escrotal",
+    descripcion: "Corrección quirúrgica del hidrocele mediante técnica de Jaboulay (eversión) o Lord (plicatura).",
+    indicaciones: ["Hidrocele sintomático o voluminoso", "Molestias, impacto estético o funcional"],
+    contraindicaciones: ["Sospecha de tumor subyacente (estudiar antes)", "Infección activa"],
+    preparacion: ["Ecografía escrotal", "Descartar causa secundaria", "Profilaxis ATB según caso"],
+    tecnica: ["Incisión escrotal", "Apertura de la vaginal y evacuación del líquido", "Eversión (Jaboulay) o plicatura (Lord) del saco", "Hemostasia prolija", "Cierre por planos ± drenaje"],
+    postoperatorio: ["Soporte escrotal", "Hielo local y analgesia", "Vigilar hematoma"],
+    complicaciones: ["Hematoma escrotal", "Infección", "Recidiva", "Edema prolongado"],
+    duracion: "30-60 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc19", titulo: "Varicocelectomía (Subinguinal Microquirúrgica)", categoria: "Genital / Escrotal",
+    descripcion: "Ligadura de las venas espermáticas dilatadas, preferentemente con técnica microquirúrgica subinguinal.",
+    indicaciones: ["Varicocele con dolor", "Infertilidad con alteración seminal y varicocele palpable", "Hipotrofia testicular en adolescentes"],
+    contraindicaciones: ["Varicocele asintomático sin repercusión (relativa)"],
+    preparacion: ["Espermiograma", "Examen físico de pie y Valsalva", "Ecografía doppler si dudas"],
+    tecnica: ["Incisión subinguinal", "Disección del cordón bajo microscopio", "Ligadura de venas preservando arteria testicular y linfáticos", "Preservación de conductos deferentes"],
+    postoperatorio: ["Soporte escrotal", "Analgesia", "Control seminal diferido (3 meses)"],
+    complicaciones: ["Hidrocele reactivo", "Recidiva/persistencia", "Lesión arterial (atrofia, raro)", "Hematoma"],
+    duracion: "45-90 min", anestesia: "General o Espinal"
+  },
+  {
+    id: "pc20", titulo: "Circuncisión", categoria: "Genital / Escrotal",
+    descripcion: "Resección del prepucio por indicaciones médicas (fimosis, parafimosis recurrente, balanopostitis).",
+    indicaciones: ["Fimosis sintomática o cicatricial", "Parafimosis recurrente", "Balanopostitis a repetición", "Motivos médicos o culturales"],
+    contraindicaciones: ["Hipospadias no corregido (prepucio necesario para reconstrucción)", "Infección local activa"],
+    preparacion: ["Aseo local", "Anestesia (bloqueo peneano ± general en niños)"],
+    tecnica: ["Marcación del surco balanoprepucial", "Resección del prepucio", "Hemostasia meticulosa", "Afrontamiento mucocutáneo con sutura reabsorbible"],
+    postoperatorio: ["Analgesia", "Aseo local", "Evitar erecciones/actividad según edad"],
+    complicaciones: ["Sangrado", "Infección", "Edema", "Resección excesiva/insuficiente", "Estenosis del meato (tardía)"],
+    duracion: "20-45 min", anestesia: "Local/Bloqueo o General"
+  },
+  {
+    id: "pc21", titulo: "Biopsia Prostática (Transrectal / Transperineal)", categoria: "Diagnóstica",
+    descripcion: "Toma de muestras prostáticas guiada por ecografía (± fusión con RM) para diagnóstico de cáncer.",
+    indicaciones: ["PSA elevado o en ascenso", "Tacto rectal sospechoso", "Lesión PI-RADS 3–5 en RM multiparamétrica", "Seguimiento en vigilancia activa"],
+    contraindicaciones: ["ITU/prostatitis activa", "Coagulopatía no corregida", "Patología anorrectal que impida acceso transrectal"],
+    preparacion: ["Profilaxis ATB (transrectal) / preparación según vía", "Suspender antiagregantes según riesgo", "Consentimiento", "Enema si transrectal"],
+    tecnica: ["Ecografía transrectal", "Anestesia local (bloqueo periprostático)", "Toma sistemática de cilindros ± dirigida por fusión RM/eco", "Vía transperineal reduce riesgo de sepsis"],
+    postoperatorio: ["Vigilar hematuria, hematospermia y rectorragia autolimitadas", "Consultar si fiebre o retención", "Resultado histopatológico (ISUP/Gleason)"],
+    complicaciones: ["Sepsis urinaria (mayor en transrectal)", "Sangrado (hematuria, rectorragia, hematospermia)", "Retención urinaria", "Dolor"],
+    duracion: "15-30 min", anestesia: "Local ± Sedación"
+  },
+  {
+    id: "pc22", titulo: "Cistolitotomía / Litotricia Vesical Endoscópica", categoria: "Litiasis",
+    descripcion: "Tratamiento de litiasis vesical por vía endoscópica (litotricia) o cirugía abierta según tamaño.",
+    indicaciones: ["Litiasis vesical sintomática", "Cálculos secundarios a obstrucción (tratar la causa)", "Cálculos grandes no fragmentables endoscópicamente (abierta)"],
+    contraindicaciones: ["ITU activa no tratada", "Coagulopatía"],
+    preparacion: ["Urocultivo tratado", "Evaluar obstrucción de salida vesical", "Profilaxis ATB"],
+    tecnica: ["Endoscópica: cistolitotripsia (neumática/láser) y evacuación", "Abierta: cistotomía, extracción del cálculo y cierre vesical", "Corregir la causa obstructiva en el mismo acto si procede"],
+    postoperatorio: ["Sonda vesical según técnica", "Irrigación si sangrado", "Tratar la obstrucción de base"],
+    complicaciones: ["Sangrado", "Perforación vesical", "ITU", "Recidiva si no se corrige la causa"],
+    duracion: "30-90 min", anestesia: "Espinal o General"
+  },
+  {
+    id: "pc23", titulo: "Adrenalectomía (Laparoscópica)", categoria: "Oncología",
+    descripcion: "Extirpación de la glándula suprarrenal por masa funcionante o sospechosa, habitualmente laparoscópica.",
+    indicaciones: ["Adenoma funcionante (feocromocitoma, aldosteronoma, Cushing)", "Masa suprarrenal >4 cm o sospechosa", "Metástasis única resecable seleccionada"],
+    contraindicaciones: ["Carcinoma suprarrenal voluminoso con invasión (valorar abierta)", "Comorbilidad prohibitiva"],
+    preparacion: ["Estudio hormonal completo", "Bloqueo alfa preoperatorio en feocromocitoma", "Manejo anestésico de crisis hipertensivas", "Reserva de sangre"],
+    tecnica: ["Abordaje transperitoneal o retroperitoneal", "Control precoz de la vena suprarrenal (clave en feocromocitoma)", "Disección de la glándula con su grasa", "Extracción en bolsa"],
+    postoperatorio: ["Monitorización hemodinámica y glicemia", "Suplencia esteroidal si corresponde", "Control de presión arterial"],
+    complicaciones: ["Crisis hipertensiva intraoperatoria (feocromocitoma)", "Sangrado", "Lesión de órganos vecinos", "Insuficiencia suprarrenal (bilateral)"],
+    duracion: "2-3 horas", anestesia: "General"
   }
 ];
 
 const CATEGORIAS_CIRUGIAS = ["Todas", "Oncología", "Litiasis", "Derivaciones", "Trasplante", "Funcional", "Otras"];
 
 function CirugiasBiblioteca() {
-  const [seleccionado, setSeleccionado] = useState(null);
+  const [seleccionado, setSeleccionado] = usePersistedState("uro_cir_sel", null);
   useBackClose(!!seleccionado, () => setSeleccionado(null));
   const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = useState("Todas");
+  const [filtro, setFiltro] = usePersistedState("uro_cir_filtro", "Todas");
 
   const filtrados = PROTOCOLOS_CIRUGIAS.filter(p => {
     const matchCat = filtro === "Todas" || p.categoria === filtro;
@@ -4203,6 +4679,7 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
       {subTab === "cirugias" && <CirugiasBiblioteca/>}
       {subTab === "preguntas" && <PreguntasPanel currentUser={currentUser} isAdmin={isAdmin}/>}
       {subTab === "medicamentos" && <MedicamentosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
+      {subTab === "protocolos" && <ProtocolosPanel currentUser={currentUser} isAdmin={isAdmin}/>}
       {subTab === "scores" && <ScoresPanel/>}
 
       {subTab === "documentos" && isAdmin && <ConocimientoPanel conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin}/>}
@@ -4376,7 +4853,7 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
         </div>
 
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:10}}>👥 Miembros</div>
+          <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",marginBottom:10}}><Ico name="equipo" size={16} style={{verticalAlign:"-3px",marginRight:6}}/>Miembros</div>
           {miembros.map(m => {
             const perfil = m.perfiles;
             return (
@@ -4441,7 +4918,7 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
 
       {invitacionesPendientes.length > 0 && (
         <div style={{marginBottom:16}}>
-          <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--alerta)",marginBottom:6}}>📨 Invitaciones pendientes ({invitacionesPendientes.length})</div>
+          <div style={{fontSize:"var(--fs-1)",fontWeight:500,color:"var(--alerta)",marginBottom:6}}><Ico name="notificacion" size={16} style={{verticalAlign:"-3px",marginRight:6}}/>Invitaciones pendientes ({invitacionesPendientes.length})</div>
           {invitacionesPendientes.map(inv => (
             <div key={inv.id} style={{background:"var(--alerta-bg)",border:"0.5px solid var(--alerta-borde)",borderRadius:8,padding:"10px 12px",marginBottom:6}}>
               <div style={{fontSize:"var(--fs-2)",fontWeight:500,color:"var(--alerta)",marginBottom:2}}>{inv.equipos?.nombre}</div>
@@ -4524,7 +5001,6 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
 function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto }) {
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false); // herramientas de la sección (desde el submenú)
-  const [coreOpen, setCoreOpen] = useState(false);   // visor web CORE dentro de la app
   const config = useConfig();
 
   // Acciones enviadas desde el submenú de la pestaña Hospital
@@ -4533,7 +5009,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       if (e.detail?.tab !== "hospital") return;
       if (e.detail.accion === "equipos") setMostrarEquipos(true);
       if (e.detail.accion === "tools") setToolsOpen(o => !o);
-      if (e.detail.accion === "abrir-core") { const w = window.open(CORE_URL, "_blank", "noopener,noreferrer"); if (!w) setCoreOpen(true); }
+      if (e.detail.accion === "abrir-core") { abrirExterno(CORE_URL); }
     };
     window.addEventListener("uro-submenu-accion", h);
     return () => window.removeEventListener("uro-submenu-accion", h);
@@ -4570,7 +5046,6 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
       {subTab === "ingresos" && <IngresosPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "comites" && <ComitesPanel currentUser={currentUser} contexto={contexto}/>}
       {subTab === "seguimiento" && <SeguimientoPanel currentUser={currentUser} contexto={contexto}/>}
-      {coreOpen && <VistaWebModal url={CORE_URL} titulo="CORE" onClose={()=>setCoreOpen(false)}/>}
     </div>
   );
 }
@@ -5014,6 +5489,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const [vistaMenuOpen, setVistaMenuOpen] = useState(false); // submenú del botón "Vista ▾"
   const [mesActual, setMesActual] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; }); // primer día del mes (vista mensual)
   const inputFotoTablaRef = useRef(null);
+  const inputExcelTablaRef = useRef(null);
+  const [accionesTablaOpen, setAccionesTablaOpen] = useState(false); // menú "+" (Nueva/Importar/Foto/Vista)
   const [extrayendoTabla, setExtrayendoTabla] = useState(false);
   const [lunesSemana, setLunesSemana] = useState(() => {
     const d = new Date();
@@ -5160,6 +5637,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     };
   };
   const navBtn = { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--fs-3)", background:"var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer", fontWeight: 600 };
+  const menuAccTabla = { padding: "8px 11px", fontSize: "var(--fs-1)", textAlign: "left", background: "none", border: "none", color: "var(--texto)", borderRadius: 6, cursor: "pointer", fontWeight: 500, width: "100%" };
 
   // ============================================================
   // CRUD
@@ -5811,28 +6289,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
-      {/* Submenú de herramientas (aparece al tocar de nuevo la pestaña "Tabla") */}
-      {toolsOpen && !soloLectura && (
-        <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-          <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>+ Nueva</button>
-          <label style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>
-            📊 Importar Excel
-            <input type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
-          </label>
-          <button onClick={()=>inputFotoTablaRef.current?.click()} disabled={extrayendoTabla} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:extrayendoTabla?"default":"pointer",fontWeight:500,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
-          <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
-          <div style={{position:"relative",marginLeft:"auto"}}>
-            <button onClick={()=>setVistaMenuOpen(v=>!v)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",background:vistaMenuOpen?"var(--primario)":"var(--superficie)",color:vistaMenuOpen?"var(--texto-inv)":"var(--primario)",border:vistaMenuOpen?"none":"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{modoVista==="mensual"?"🗓️":modoVista==="planner"?"📅":"☰"} Vista {vistaMenuOpen?"▴":"▾"}</button>
-            {vistaMenuOpen && (
-              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:8,padding:4,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:2,minWidth:130}}>
-                <button onClick={()=>{setModoVista("mensual");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="mensual"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="mensual"?600:400}}>🗓️ Mensual</button>
-                <button onClick={()=>{setModoVista("planner");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="planner"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="planner"?600:400}}>📅 Semanal</button>
-                <button onClick={()=>{setModoVista("lista");setVistaMenuOpen(false);}} style={{padding:"7px 10px",fontSize:"var(--fs-1)",textAlign:"left",background:modoVista==="lista"?"var(--fondo-suave)":"none",border:"none",color:"var(--texto)",borderRadius:6,cursor:"pointer",fontWeight:modoVista==="lista"?600:400}}>☰ Lista</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Inputs ocultos usados por el menú "+" (importar Excel / foto de tabla) */}
+      <input ref={inputExcelTablaRef} type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
+      <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
 
       {/* Navegación de semana o mes + filtro de estado (siempre visible) */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
@@ -5863,6 +6322,26 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           <option value="suspendida">Suspendidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
+        {!soloLectura && (
+          <div style={{position:"relative"}}>
+            <button onClick={()=>setAccionesTablaOpen(v=>!v)} aria-label="Acciones" style={{width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,background:accionesTablaOpen?"var(--primario)":"var(--superficie)",color:accionesTablaOpen?"var(--texto-inv)":"var(--primario)",border:accionesTablaOpen?"none":"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",lineHeight:1,padding:0}}>+</button>
+            {accionesTablaOpen && (
+              <>
+                <div onClick={()=>setAccionesTablaOpen(false)} style={{position:"fixed",inset:0,zIndex:19}}/>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:9,padding:5,zIndex:20,boxShadow:"0 8px 22px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",gap:2,minWidth:180}}>
+                  <button onClick={()=>{setAccionesTablaOpen(false);setVista("nuevo");}} style={menuAccTabla}>➕ Nueva cirugía</button>
+                  <button onClick={()=>{setAccionesTablaOpen(false);inputExcelTablaRef.current?.click();}} style={menuAccTabla}>📊 Importar Excel</button>
+                  <button onClick={()=>{setAccionesTablaOpen(false);inputFotoTablaRef.current?.click();}} disabled={extrayendoTabla} style={{...menuAccTabla,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
+                  <div style={{height:"0.5px",background:"var(--borde)",margin:"3px 6px"}}/>
+                  <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",padding:"3px 10px 1px",letterSpacing:0.4}}>VISTA</div>
+                  <button onClick={()=>{setModoVista("mensual");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="mensual"?"var(--fondo-suave)":"none",fontWeight:modoVista==="mensual"?700:500}}>🗓️ Mensual</button>
+                  <button onClick={()=>{setModoVista("planner");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="planner"?"var(--fondo-suave)":"none",fontWeight:modoVista==="planner"?700:500}}>📅 Semanal</button>
+                  <button onClick={()=>{setModoVista("lista");setAccionesTablaOpen(false);}} style={{...menuAccTabla,background:modoVista==="lista"?"var(--fondo-suave)":"none",fontWeight:modoVista==="lista"?700:500}}>☰ Lista</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:"auto"}}>{modoVista==="mensual" ? cirugiasMes.length : cirugiasSemana.length} cx</span>
       </div>
 
@@ -6283,6 +6762,44 @@ function ingresoMatcheaCirugia(ing, cir) {
   return false;
 }
 
+// ─── Selector de carpeta en cascada: Año → Mes → Semana ───
+// Muestra 3 campos claros con sugerencias derivadas de las carpetas ya existentes.
+// El valor final es la ruta "Año/Mes/Semana" (los niveles vacíos se omiten).
+function SelectorCarpetaCascada({ value, onChange, carpetas = [] }) {
+  const segs = (value || "").split("/").map(s => s.trim());
+  const s0 = segs[0] || "", s1 = segs[1] || "", s2 = segs[2] || "";
+  const paths = (carpetas || []).map(c => String(c).split("/").map(x => x.trim()).filter(Boolean));
+  const opts = (idx, prefijo) => {
+    const set = new Set();
+    paths.forEach(parts => { if (prefijo.every((v, i) => parts[i] === v) && parts[idx]) set.add(parts[idx]); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
+  };
+  const setNivel = (idx, val) => {
+    const arr = [s0, s1, s2]; arr[idx] = val;
+    for (let i = idx + 1; i < 3; i++) { if (!arr[i - 1]) arr[i] = ""; }
+    onChange(arr.map(x => x.trim()).filter(Boolean).join("/"));
+  };
+  const inpMini = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box" };
+  const lblMini = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
+  const nivel = (idx, label, ph, prefijo, val, dis) => (
+    <div style={{ flex: 1, minWidth: 96, opacity: dis ? 0.5 : 1 }}>
+      <label style={lblMini}>{label}</label>
+      <input list={`carp-l${idx}`} value={val} disabled={dis} onChange={e => setNivel(idx, e.target.value)} placeholder={ph} style={inpMini} />
+      <datalist id={`carp-l${idx}`}>{opts(idx, prefijo).map(o => <option key={o} value={o} />)}</datalist>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {nivel(0, "Año", "2026", [], s0, false)}
+        {nivel(1, "Mes", "Agosto", [s0], s1, !s0)}
+        {nivel(2, "Semana", "primera semana", [s0, s1], s2, !s1)}
+      </div>
+      <div style={{ fontSize: "var(--fs-0)", color: value ? "var(--primario)" : "var(--texto-ter)", marginTop: 5, fontWeight: value ? 600 : 400 }}>{value ? `📁 ${value}` : "Sin carpeta"}</div>
+    </div>
+  );
+}
+
 function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const DEFAULTS = {
@@ -6416,7 +6933,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     let y = 12; const hT = 17; const c1 = M + 22, c2 = R - 42;
     doc.rect(M, y, R - M, hT);
     doc.line(c1, y, c1, y + hT); doc.line(c2, y, c2, y + hT);
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 3, y + 3, 15, 11); } catch {}
+    // Celda del logo: se deja vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
     doc.text("DIRECCION HOSPITAL BASE VALDIVIA", (c1 + c2) / 2, y + 4, { align: "center" });
     doc.setFont("helvetica", "italic"); doc.setFontSize(7);
@@ -6493,7 +7010,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const chk = (x, yy) => doc.rect(x, yy - 2.6, 3, 3);
     // Encabezado
     let y = 8; doc.rect(M, y, R - M, 15); doc.line(R - 70, y, R - 70, y + 15);
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M + 2, y + 2.5, 11, 9); } catch {}
+    // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     T("MINISTERIO DE SALUD", M + 16, y + 3.5, true, 7); T("REGION DE LOS RIOS", M + 16, y + 6.5, true, 7);
     T("SERVICIO SALUD VALDIVIA", M + 16, y + 9.5, true, 7); T("HOSPITAL BASE VALDIVIA", M + 16, y + 12.5, true, 7);
     doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("EVALUACION PREANESTESIA ANEXO II", R - 35, y + 8.5, { align: "center", maxWidth: 66 });
@@ -6557,7 +7074,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const T = (t, x, yy, b = false, s = 8.5) => { doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s); doc.text(t, x, yy); };
     const chk = (x, yy) => { doc.setDrawColor(0, 0, 0); doc.rect(x, yy - 2.8, 3.2, 3.2); };
     let y = 12;
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", M, y, 13, 10); } catch {}
+    // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     T("HOSPITAL BASE VALDIVIA", M + 16, y + 6, true, 9); y += 14;
     T("ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)", W / 2, y, true, 9.5); doc.setFontSize(9.5); 
     { const t = "ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)"; doc.text(t, W / 2, y, { align: "center", maxWidth: R - M }); } y += 8;
@@ -6598,6 +7115,73 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     T("Justificar excepciones:", M, y, false); line(M + 38, y + 0.5, R - M - 38); y += 9;
     T("NOMBRE MEDICO:", M, y, true); line(M + 32, y + 0.5, 55); if (currentUser?.nombre) T(currentUser.nombre, M + 34, y - 0.5); T("FIRMA:", R - 55, y, true); line(R - 42, y + 0.5, 40); y += 6;
     T("Fecha:", M, y, true); line(M + 13, y + 0.5, 40); if (f.fingreso) T(f.fingreso, M + 15, y - 0.5);
+
+    // ───────────── PÁGINA 2: INDICACIONES POR TIPO DE INTERVENCIÓN Y RIESGO ─────────────
+    doc.addPage();
+    let y2 = 14;
+    const wrapT = (t, x, yy, w, s = 6.6, b = false, lh = 3.3) => {
+      doc.setFont("helvetica", b ? "bold" : "normal"); doc.setFontSize(s);
+      const ls = doc.splitTextToSize(t, w); ls.forEach((l) => { doc.text(l, x, yy); yy += lh; }); return yy;
+    };
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    doc.text("INDICACIONES RECOMENDADAS SEGÚN TIPO DE INTERVENCIÓN QUIRÚRGICA Y RIESGO ETE:", M, y2, { maxWidth: R - M }); y2 += 4;
+    doc.setFont("helvetica", "italic"); doc.setFontSize(7);
+    doc.text("(Marque con una x las indicaciones correspondientes)", M, y2); y2 += 4;
+
+    // Tabla: columna izquierda (tipo de intervención) · derecha (indicaciones por riesgo)
+    const colX = M, colW1 = 46, colX2 = M + colW1, colW2 = R - colX2;
+    const filas = [
+      ["TODA INTERVENCIÓN", [
+        ["RIESGO ETE MUY BAJO", "Deambulación precoz."],
+        ["RIESGO ETE BAJO", "Métodos mecánicos: medias elásticas de compresión gradual antes de la intervención."],
+      ]],
+      ["Cirugía General, Ginecológica, Urológica, de tórax, Cabeza y cuello, Mama, plástica y reconstructiva, vascular (NO ONCOLÓGICO, NO BARIÁTRICO)", [
+        ["RIESGO ETE MODERADO", "Métodos farmacológicos a bajas dosis + métodos mecánicos: HNF 5000 UI c/12 h SC (última dosis 12 h pre y reiniciar 12 h post) ó HNF 5000 UI c/8 h; ó Dalteparina 2500 UI/día (última 24 h pre); ó Enoxaparina 20 mg (2000 UI)/día (última 24 h pre, reiniciar ≥12 h post)."],
+        ["RIESGO ETE ALTO", "Métodos farmacológicos a alta dosis + mecánicos: HNF 5000 UI c/8 h; ó Dalteparina 2500 UI/día aumentando a 5000 UI desde la 2ª dosis post-op; ó Enoxaparina 40 mg (4000 UI)/día (última 24 h pre, reiniciar ≥12 h post)."],
+      ]],
+      ["Cirugía Oncológica o con neoplasia no resuelta", [
+        ["RIESGO ETE ALTO", "Farmacológico a altas dosis + métodos físicos si están disponibles: HNF 5000 UI c/8 h SC; ó Enoxaparina 40 mg SC/día; ó Dalteparina 5000 UI SC/día (última dosis 12 h pre, reiniciar 12 h post)."],
+      ]],
+      ["Cirugía Bariátrica", [
+        ["RIESGO ETE ALTO", "HNF 5000 UI (IMC 40–50) ó 7500 UI (IMC > 50) c/8 h SC, inicio 6 h post; ó Enoxaparina 40 mg c/12 h (< 150 kg) ó 60 mg c/12 h (> 150 kg), inicio 6 h post."],
+      ]],
+      ["Cirugía Ortopédica (fractura de pelvis, fémur o pierna; artroplastia de rodilla o cadera)", [
+        ["RIESGO ETE ALTO", "HNF 5000 UI c/8 h (última 24 h pre, reiniciar ≥8 h post); ó Enoxaparina 40 mg/día; ó Dalteparina 5000 UI/día (reiniciar ≥8 h post). Ajustar dosis en obesos."],
+      ]],
+      ["Politraumatizados (HDN estables, sin sangrado activo ni requerimiento transfusional)", [
+        ["RIESGO ETE ALTO", "Inicio de medidas farmacológicas a criterio del médico tratante (evaluar riesgo hemorrágico); ideal antes de 48 h: Enoxaparina 40 mg c/12 h SC; ó Dalteparina 5000 UI/día SC (2ª opción)."],
+      ]],
+    ];
+
+    // Encabezado de la tabla
+    doc.setLineWidth(0.2);
+    filas.forEach(([tipo, indic]) => {
+      // altura de la fila = alto del bloque de indicaciones
+      const yIni = y2;
+      let yInd = y2 + 3.5;
+      indic.forEach(([riesgo, texto]) => {
+        chk(colX2 + 1.5, yInd);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(6.4); doc.text(riesgo, colX2 + 6, yInd);
+        yInd = wrapT(texto, colX2 + 6, yInd + 3, colW2 - 8, 6.2, false, 3);
+        yInd += 1.5;
+      });
+      const yTipoFin = wrapT(tipo, colX + 1.5, y2 + 3.5, colW1 - 3, 6.2, true, 3);
+      const yFin = Math.max(yInd, yTipoFin) + 1.5;
+      // bordes de la fila
+      doc.rect(colX, yIni, colW1, yFin - yIni);
+      doc.rect(colX2, yIni, colW2, yFin - yIni);
+      y2 = yFin;
+    });
+
+    // Notas al pie
+    y2 += 3;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(6);
+    y2 = wrapT("LA ADMINISTRACIÓN PREOPERATORIA PARA PACIENTES CON ANESTESIA REGIONAL (RAQUÍDEA/PERIDURAL) DEBE REALIZARSE AL MENOS 12 HORAS PRE-INTERVENCIÓN.", M, y2, R - M, 6, true, 3) + 2;
+    doc.setFont("helvetica", "normal");
+    y2 = wrapT("(*) Si no están disponibles los métodos mecánicos, evaluar el riesgo hemorrágico e iniciar profilaxis farmacológica como si fuera de riesgo moderado.", M, y2, R - M, 5.8) + 1;
+    y2 = wrapT("(**) En alto riesgo hemorrágico, iniciar métodos mecánicos y agregar medidas farmacológicas una vez disminuido el riesgo de hemorragia.", M, y2, R - M, 5.8) + 1;
+    y2 = wrapT("(***) En pacientes con clearance de creatinina < 30 ml/min está contraindicada la Enoxaparina; privilegiar HNF.", M, y2, R - M, 5.8);
+
     doc.save(`ete_caprini_${(f.nombre || "paciente").replace(/\s+/g, "_")}.pdf`);
   };
 
@@ -6607,7 +7191,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = doc.internal.pageSize.getWidth(), M = 16;
     const box = (x, yy) => { doc.setDrawColor(90, 90, 90); doc.rect(x, yy - 3, 3.5, 3.5); };
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, 12, 16, 16); } catch {}
+    // Sin logo UroSearch: estos anexos son formularios oficiales del HBV.
     let y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
     doc.text("HOSPITAL BASE VALDIVIA", M, y); y += 5;
     doc.text("ANEXO N°1: RIESGO DE ENFERMEDAD TROMBOEMBÓLICA (ETE)", M, y, { maxWidth: W - 2 * M }); y += 8;
@@ -6657,11 +7241,11 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 12 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 18, width: "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--fondo)", zIndex: 70, display: "flex", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 860, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
           <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
           <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre completo", "nombre")}</div>
@@ -6689,13 +7273,10 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
         {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
         {onGuardarIngreso && (
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>Carpeta</label>
-              <input list="carpetas-list" value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="(sin carpeta)" style={inp} />
-              <datalist id="carpetas-list">{carpetas.map(c => <option key={c} value={c} />)}</datalist>
-            </div>
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ padding: "11px 16px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginBottom: 8, whiteSpace: "nowrap" }}>💾 Guardar</button>
+          <div style={{ marginBottom: 8 }}>
+            <label style={lbl}>Carpeta</label>
+            <SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} />
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -6725,7 +7306,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
 // ─── Comités oncológicos: mismo formato que Ingresos (carpetas/subcarpetas) ───
-function ComiteModal({ comiteExistente, onGuardar, onClose }) {
+function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
   const HOY = new Date().toISOString().slice(0, 10);
   const D = { fecha: HOY, nombre: "", ficha: "", rut: "", diagnostico: "", presentacion: "", acuerdos: "" };
   const [f, setF] = useState(() => (comiteExistente?.datos ? { ...D, ...comiteExistente.datos } : D));
@@ -6736,9 +7317,9 @@ function ComiteModal({ comiteExistente, onGuardar, onClose }) {
   const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "var(--fondo)", display: "flex", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 760, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
           <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)" }}>{comiteExistente?.id ? "Editar comité" : "Nuevo comité oncológico"}</div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)" }}>✕</button>
         </div>
@@ -6756,8 +7337,8 @@ function ComiteModal({ comiteExistente, onGuardar, onClose }) {
         <textarea rows={4} value={f.presentacion} onChange={e => set("presentacion", e.target.value)} style={{ ...inp, resize: "vertical" }} />
         <label style={lbl}>Acuerdos del comité / plan</label>
         <textarea rows={4} value={f.acuerdos} onChange={e => set("acuerdos", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-        <label style={lbl}>Carpeta (usa / para subcarpeta; vacío = sin carpeta)</label>
-        <input value={carpeta} onChange={e => setCarpeta(e.target.value)} placeholder="Ej: 2026/Próstata" style={inp} />
+        <label style={lbl}>Carpeta</label>
+        <div style={{ marginBottom: 8 }}><SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} /></div>
         {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{msg}</div>}
         <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
       </div>
@@ -6863,7 +7444,7 @@ function ComitesPanel({ currentUser, contexto }) {
 
   return (
     <div style={{ padding: 16 }}>
-      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} carpetas={todasRutas} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo comité</button>
         <button onClick={() => crearCarpeta("")} style={{ padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
@@ -6993,7 +7574,7 @@ function IngresosPanel({ currentUser, contexto }) {
       return (
         <div key={h.path} style={{ marginLeft: depth ? 12 : 0, marginBottom: 3, borderLeft: depth ? "1px solid var(--borde)" : "none", paddingLeft: depth ? 6 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 2px" }}>
-            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name} <span style={{ color: "var(--texto-ter)", fontWeight: 500 }}>({contar(h)})</span></span>
+            <span onClick={() => setColapsadas(p => ({ ...p, [h.path]: !p[h.path] }))} style={{ cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-1)", color: "var(--texto-sec)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{col ? "▸" : "▾"} 📁 {h.name}</span>
             <button onClick={() => crearCarpeta(h.path)} title="Nueva subcarpeta" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 5, color: "var(--primario)", cursor: "pointer", fontSize: "var(--fs-2)", width: 22, height: 20, lineHeight: 1, padding: 0 }}>＋</button>
             <button onClick={() => eliminarCarpeta(h.path)} title="Eliminar carpeta" style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)" }}>🗑</button>
           </div>
@@ -7288,8 +7869,7 @@ function compararCama(a, b) {
   return ca.localeCompare(cb, "es", { numeric: true, sensitivity: "base" });
 }
 
-function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
-  // Plantillas SOAP completas
+// Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
 function normalizarExamen(ex) {
   if (!ex) return ex;
@@ -7426,6 +8006,50 @@ const SUGERENCIAS_SOAP = {
     "Solicitar exámenes de control",
   ]
 };
+
+// ─── Sugerencias personalizables por usuario (SOAP y recetas) ───
+// Se guardan por usuario en localStorage. Si no hay nada guardado, se usan
+// las listas por defecto. Al cambiarlas en Configuración se emite un evento
+// para que los paneles abiertos se actualicen al instante.
+function _leerSugJSON(clave, def) { try { const r = localStorage.getItem(clave); const v = r ? JSON.parse(r) : null; return v && typeof v === "object" ? v : def; } catch { return def; } }
+const _claveSOAP = (uid) => `uro_sug_soap_${uid || "anon"}`;
+const _claveRx = (uid) => `uro_sug_rx_${uid || "anon"}`;
+const _defRx = () => Object.fromEntries(Object.entries(RX_TEMPLATES).map(([k, v]) => [k, v.items]));
+function leerSugSOAP(uid) { const d = _leerSugJSON(_claveSOAP(uid), null); return d ? { ...SUGERENCIAS_SOAP, ...d } : SUGERENCIAS_SOAP; }
+function leerSugRx(uid) { const def = _defRx(); const d = _leerSugJSON(_claveRx(uid), null); return d ? { ...def, ...d } : def; }
+// Guarda en localStorage (inmediato) y sincroniza a Supabase (entre dispositivos).
+function guardarSugSOAP(uid, obj) {
+  try { localStorage.setItem(_claveSOAP(uid), JSON.stringify(obj)); window.dispatchEvent(new CustomEvent("uro-sug-cambio")); } catch {}
+  if (uid) { try { supabase.from("preferencias_sugerencias").upsert({ user_id: uid, soap: obj, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).then(() => {}); } catch {} }
+}
+function guardarSugRx(uid, obj) {
+  try { localStorage.setItem(_claveRx(uid), JSON.stringify(obj)); window.dispatchEvent(new CustomEvent("uro-sug-cambio")); } catch {}
+  if (uid) { try { supabase.from("preferencias_sugerencias").upsert({ user_id: uid, rx: obj, updated_at: new Date().toISOString() }, { onConflict: "user_id" }).then(() => {}); } catch {} }
+}
+// Trae las sugerencias guardadas en Supabase y actualiza la caché local (sincroniza).
+async function sincronizarSugerencias(uid) {
+  if (!uid) return;
+  try {
+    const { data } = await supabase.from("preferencias_sugerencias").select("soap, rx").eq("user_id", uid).maybeSingle();
+    if (!data) return;
+    let cambio = false;
+    if (data.soap && typeof data.soap === "object") { localStorage.setItem(_claveSOAP(uid), JSON.stringify(data.soap)); cambio = true; }
+    if (data.rx && typeof data.rx === "object") { localStorage.setItem(_claveRx(uid), JSON.stringify(data.rx)); cambio = true; }
+    if (cambio) window.dispatchEvent(new CustomEvent("uro-sug-cambio"));
+  } catch {}
+}
+function useSugSOAP(uid) {
+  const [v, setV] = useState(() => leerSugSOAP(uid));
+  useEffect(() => { const h = () => setV(leerSugSOAP(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
+  return v;
+}
+function useSugRx(uid) {
+  const [v, setV] = useState(() => leerSugRx(uid));
+  useEffect(() => { const h = () => setV(leerSugRx(uid)); window.addEventListener("uro-sug-cambio", h); sincronizarSugerencias(uid); return () => window.removeEventListener("uro-sug-cambio", h); }, [uid]);
+  return v;
+}
+
+function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
@@ -7470,6 +8094,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     try { setEvoLibre(localStorage.getItem("uro_evo_draft_" + seleccionado.id) || ""); } catch { setEvoLibre(""); }
   }, [seleccionado?.id]);
   const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
+  const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
   const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
   const [seccionAbierta, setSeccionAbierta] = useState(null); // qué bloque de sugerencias está desplegado
@@ -7667,8 +8292,8 @@ const cargarMiembrosEquipo = async () => {
       case "todos":     break;
       case "activo":    if (p.estado !== "activo") return false; break;
       case "alta":      if (p.estado !== "alta") return false; break;
-      case "operado":   if (!p.operado) return false; break;
-      case "sin_operar":if (p.operado || p.estado === "alta") return false; break;
+      case "operado":   if (p.estado !== "activo" || !p.operado) return false; break;
+      case "sin_operar":if (p.estado !== "activo" || p.operado) return false; break;
       default: break;
     }
     return true;
@@ -7733,8 +8358,15 @@ const cargarMiembrosEquipo = async () => {
   const toggleOrientacionPac = () => setOrientacionPac(o => {
     const nv = o === "horizontal" ? "vertical" : "horizontal";
     try { localStorage.setItem("uro_orient_pac", nv); } catch {}
+    try { window.dispatchEvent(new CustomEvent("uro-orient-pac-change", { detail: nv })); } catch {}
     return nv;
   });
+  // Si la orientación se cambia desde Configuración, reflejarlo aquí.
+  useEffect(() => {
+    const h = (e) => { const v = e.detail === "horizontal" ? "horizontal" : "vertical"; setOrientacionPac(v); };
+    window.addEventListener("uro-orient-pac-change", h);
+    return () => window.removeEventListener("uro-orient-pac-change", h);
+  }, []);
   const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
   useEffect(() => {
@@ -9394,7 +10026,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="subjetivo"?null:"subjetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="subjetivo"?"▴":"▾"}</button>
     {seccionAbierta==="subjetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.subjetivo.map(s => (
+        {sugSOAP.subjetivo.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,subjetivo: evoEstructurada.subjetivo ? evoEstructurada.subjetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9407,7 +10039,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="objetivo"?null:"objetivo")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="objetivo"?"▴":"▾"}</button>
     {seccionAbierta==="objetivo" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.objetivo.map(s => (
+        {sugSOAP.objetivo.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,objetivo: evoEstructurada.objetivo ? evoEstructurada.objetivo + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9496,7 +10128,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="examen"?null:"examen")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="examen"?"▴":"▾"}</button>
     {seccionAbierta==="examen" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.examen.map(s => (
+        {sugSOAP.examen.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,examen: evoEstructurada.examen ? evoEstructurada.examen + " " + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9509,7 +10141,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
     {seccionAbierta==="indicaciones" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
-        {SUGERENCIAS_SOAP.indicaciones.map(s => (
+        {sugSOAP.indicaciones.map(s => (
           <button key={s} onClick={()=>setEvoEstructurada({...evoEstructurada,indicaciones: evoEstructurada.indicaciones ? evoEstructurada.indicaciones + "\n" + s : s})} style={{padding:"3px 8px",fontSize:"var(--fs-0)",background:"var(--superficie)",border:"0.5px solid var(--borde)",color:"var(--texto-sec)",borderRadius:8,cursor:"pointer"}}>{s}</button>
         ))}
       </div>
@@ -9774,7 +10406,6 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             </button>
             <button onClick={()=>setVista("nuevo")} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nuevo</button>
             <button onClick={()=>setShowDistribucion(true)} style={{padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"}}>Distribución</button>
-            <button onClick={toggleOrientacionPac} title={orientacionPac==="horizontal"?"Vista horizontal (tocar para vertical)":"Vista vertical (tocar para horizontal)"} aria-label="Cambiar orientación" style={{padding:"6px 11px",fontSize:"var(--fs-3)",lineHeight:1,fontWeight:700,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:7,cursor:"pointer"}}>{orientacionPac==="horizontal"?"↔":"↕"}</button>
 
             {/* Menú desplegable de servicios + estado (estilo Hospital) */}
             {serviciosMenuOpen && (
@@ -9791,7 +10422,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                   <button onClick={()=>{ setFiltroServicio("todos"); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio==="todos")}>
                     Todos los servicios {filtroServicio==="todos" ? "✓" : ""}
                   </button>
-                  {serviciosDisponibles.map(s => (
+                  {aplicarOrdenNombres(serviciosDisponibles, ordenServiciosKanban).map(s => (
                     <button key={s} onClick={()=>{ setFiltroServicio(s); setServiciosMenuOpen(false); }} style={itemMenu(filtroServicio===s)}>
                       {s} {filtroServicio===s ? "✓" : ""}
                     </button>
@@ -9825,11 +10456,17 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       {/* MODAL: distribución de pacientes por encargado */}
       {/* HOJA: mover paciente de servicio (mantén presionado una tarjeta) */}
       {moverPaciente && (() => {
-        const destinos = Array.from(new Set([
-          ...misServiciosLista.map(s => s.nombre),
-          ...serviciosEquipo.map(s => s.nombre),
-          ...Object.keys(porServicio),
-        ])).filter(Boolean).sort((a, b) => a.localeCompare(b, "es", { numeric: true, sensitivity: "base" }));
+        // TODOS los servicios del contexto (incluidos los que no tienen pacientes),
+        // en el mismo orden que se definió al administrar servicios.
+        const destinos = aplicarOrdenNombres(
+          Array.from(new Set([
+            ...serviciosDisponibles,
+            ...misServiciosLista.map(s => s.nombre),
+            ...serviciosEquipo.map(s => s.nombre),
+            moverPaciente.servicio,
+          ].filter(Boolean))),
+          ordenServiciosKanban
+        );
         return (
           <div onClick={()=>setMoverPaciente(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:65}}>
             <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"70vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -10134,7 +10771,7 @@ function VideoPlayer({ video, onClose }) {
 }
 
 function VideoLibrary({ videos, setVideos, isAdmin, setPlayingVideo }) {
-  const [filtro, setFiltro] = useState("Todas");
+  const [filtro, setFiltro] = usePersistedState("uro_vid_filtro", "Todas");
   const [busqueda, setBusqueda] = useState("");
   const [agregando, setAgregando] = useState(false);
   const [nuevo, setNuevo] = useState({ titulo:"", categoria:"Oncología", url:"", autor:"", descripcion:"", keywords:"" });
@@ -10349,7 +10986,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [mostrarOnboardingPush, setMostrarOnboardingPush] = useState(false);
   const [bloqueado, setBloqueado] = useState(() => leerLock().enabled);
   const [recuperandoPassword, setRecuperandoPassword] = useState(false);
-  // Bloqueo por inactividad: si el bloqueo está activo y no hay interacción
+  // Bloqueo por inactividad: con el bloqueo activo, si no hay interacción
   // durante N minutos (configurable en Seguridad), la app se bloquea sola.
   useEffect(() => {
     let ultimaActividad = Date.now();
@@ -10462,6 +11099,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     if ((subTabBiblio === "videos" && fnOculta(config, "biblio:videos")) ||
         (subTabBiblio === "preguntas" && fnOculta(config, "biblio:preguntas")) ||
         (subTabBiblio === "medicamentos" && fnOculta(config, "biblio:medicamentos")) ||
+        (subTabBiblio === "protocolos" && fnOculta(config, "biblio:protocolos")) ||
         (subTabBiblio === "scores" && fnOculta(config, "biblio:scores"))) setSubTabBiblio("cirugias");
   }, [config, subTabHospital, subTabBiblio]);
 
@@ -10635,13 +11273,11 @@ useEffect(() => {
   const unsubscribe = onAuthChange((event, newSession) => {
     // Usuario llegó desde el link de "recuperar contraseña": abrir modal para definir la nueva.
     if (event === "PASSWORD_RECOVERY") setRecuperandoPassword(true);
-    // Cambio de correo confirmado: mantener perfiles.correo sincronizado
-    // (necesario para que el login por RUT siga resolviendo al correo correcto).
+    // Cambio de correo confirmado: sincronizar perfiles.correo solo si seguía siendo
+    // el correo de login antiguo (si era un correo de contacto personalizado, se respeta).
     if (event === "USER_UPDATED" && newSession?.user?.id && newSession?.user?.email) {
       setCurrentUser(prev => {
         if (prev && prev.id === newSession.user.id && prev.correo && prev.correo !== newSession.user.email) {
-          // Sincroniza perfiles.correo solo si seguía siendo el correo de login antiguo
-          // (si el usuario lo personalizó como correo de contacto distinto, se respeta).
           supabase.from("perfiles").update({ correo: newSession.user.email })
             .eq("id", newSession.user.id).eq("correo", prev.correo).then(() => {});
           return { ...prev, correo: newSession.user.email };
@@ -11489,7 +12125,6 @@ if (!currentUser) {
       elegir: setSubTabHospital,
       extras: [
         ["🌐 Abrir CORE", () => accion("abrir-core")],
-        ...(subTabHospital === "tabla" ? [["🛠️ Herramientas de la sección", () => accion("tools")]] : []),
         ...(subTabHospital === "interconsultas" ? [["📊 Métricas de interconsultas", () => accion("ic-metricas")], ["📷 Archivar interconsulta", () => accion("ic-nueva")]] : []),
         ...(subTabHospital === "seguimiento" ? [["➕ Nuevo criterio de seguimiento", () => accion("seg-protocolo")]] : []),
       ],
@@ -11511,6 +12146,7 @@ if (!currentUser) {
         ...(!fnOculta(config, "biblio:videos") ? [["videos", "📚 Videos"]] : []),
         ...(!fnOculta(config, "biblio:preguntas") ? [["preguntas", "❓ Preguntas"]] : []),
         ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
+        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📘 Protocolos"]] : []),
         ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
         ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
       ],
@@ -11596,7 +12232,7 @@ if (!currentUser) {
               👤 Mi perfil
             </button>
             <button onClick={()=>{ setMenuOpen(false); setEquiposOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
-              🤝 Equipos{invitacionesPendientes.length > 0 ? ` (${invitacionesPendientes.length})` : ""}
+              🤝 Equipos{invitacionesPendientes.length > 0 ? <span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:"var(--peligro)",marginLeft:6,verticalAlign:"middle"}}/> : null}
             </button>
             <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🧭 Ver tutorial
@@ -11634,27 +12270,37 @@ if (!currentUser) {
             <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>{submenu.titulo}</div>
             {submenu.secciones.map(([id,label]) => {
               const activo = submenu.activo === id;
+              const ico = ICONO_SUBTAB[id];
               return (
-                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
-                  {label}{activo ? "  ✓" : ""}
+                <button key={id} onClick={()=>{ submenu.elegir(id); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500,display:"flex",alignItems:"center",gap:10}}>
+                  {ico ? <Ico name={ico} size={18}/> : null}
+                  <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
+                  {activo ? <span style={{color:"var(--primario)"}}>✓</span> : null}
                 </button>
               );
             })}
             {submenu.extras.length > 0 && <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>}
-            {submenu.extras.map(([label,fn]) => (
-              <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500}}>
-                {label}
-              </button>
-            ))}
+            {submenu.extras.map(([label,fn]) => {
+              const ico = _icoDeLabel(label);
+              return (
+                <button key={label} onClick={()=>{ fn(); setSubmenuOpen(false); }} style={{padding:"11px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",borderRadius:8,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:10}}>
+                  {ico ? <Ico name={ico} size={18}/> : null}
+                  <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
+                </button>
+              );
+            })}
             {submenu.contexto && (
               <>
                 <div style={{height:1,background:"var(--borde)",margin:"4px 6px"}}/>
                 <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.4,padding:"6px 10px 4px"}}>Viendo: {equipoActualNombre}</div>
                 {submenu.contexto.opciones.map(([id,label]) => {
                   const activo = submenu.contexto.actual === id;
+                  const ico = _icoDeLabel(label);
                   return (
-                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500}}>
-                      {label}{activo ? "  ✓" : ""}
+                    <button key={id} onClick={()=>{ submenu.contexto.elegir(id); setSubmenuOpen(false); }} style={{padding:"10px 12px",fontSize:"var(--fs-2)",textAlign:"left",background:activo?"var(--fondo-suave)":"none",border:"none",color:activo?"var(--primario)":"var(--texto-sec)",borderRadius:8,cursor:"pointer",fontWeight:activo?700:500,display:"flex",alignItems:"center",gap:10}}>
+                      {ico ? <Ico name={ico} size={17}/> : null}
+                      <span style={{flex:1}}>{ico ? _soloTexto(label) : label}</span>
+                      {activo ? <span style={{color:"var(--primario)"}}>✓</span> : null}
                     </button>
                   );
                 })}
@@ -11745,7 +12391,7 @@ if (!currentUser) {
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:"var(--fs-2)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
-                  <Uros expresion="pensando" size={26}/> Consultando...
+                  <UrosCargando/>
                 </div>
               </div>
             )}
