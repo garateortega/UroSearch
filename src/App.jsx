@@ -2288,12 +2288,25 @@ function LogoUroSearch({ size = 40 }) {
 
 // ============================================================
 // MASCOTA "Uros" — poses en /public/uros/{expresion}.webp
-// Expresiones: hola · pensando · guinando · estudiando · bienhecho
-//              explicando · hero · frente · lateral · tres-cuartos · espalda
+// Base: hola · pensando · guinando · estudiando · bienhecho · explicando
+//       hero · frente · sorprendido · pensativo · investigando · pizarra
+//       pulgar · camara · point · pabellon_serio · cabeza
+// Vida diaria: cafe · cafe_rinon · manzana · manzana_sentado · corriendo
+//       hidratacion · laptop · uroflujo · lectura · libro · escritorio
+//       checklist · checklist_sentado · ok · sutura
+// Laboratorio/estudio: laboratorio · laboratorio_b · microscopio
+//       urianalisis · eco · ecografo · biopsia
+// Quirúrgicas: davinci · trocar · laparoscopia · nefrectomia · nefroscopio
+//       resectoscopio · resectoscopio_b · cistoscopio · cistoscopio_rigido
+//       cistoscopio_flex · ureteroscopio · lente · ligasure · ligasure_b
+//       laser · fibra_laser · guia · dormia · dormia_b · sonda · sonda_foley
+// Anatomía: prostata · prostata_mano · prostatas · vejiga · sistema_urinario
+//       rinon_corte · rinon_tumor · rinon_transparente · litiasis
+//       litiasis_sentado · calculo
 // Solo decorativa: se usa en momentos "blandos" (bienvenida, saludo,
 // carga, estados vacíos), nunca sobre datos clínicos.
 // ============================================================
-const UROS_VERSION = "8"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
+const UROS_VERSION = "9"; // súbelo cada vez que reemplaces imágenes, para forzar recarga
 const UROS_BASE = `${import.meta.env.BASE_URL || "/"}uros/`;
 const urosSrc = (name) => `${UROS_BASE}${name}.webp?v=${UROS_VERSION}`;
 // Detecta pantallas angostas (celular) para adaptar layouts inline.
@@ -2338,7 +2351,26 @@ function PortadaChat({ nombre }) {
   const saludo = useMemo(() => saludoAleatorio(nombre), [nombre]);
   // Y una pose de Uros al azar, para que cada entrada al chat se sienta distinta
   const pose = useMemo(() => {
-    const poses = ["hola", "hero", "frente", "guinando", "explicando", "bienhecho", "tres-cuartos"];
+    const poses = [
+      // base
+      "hola", "hero", "explicando", "bienhecho", "pulgar", "pensativo",
+      "investigando", "sorprendido", "camara", "point", "pizarra", "pabellon_serio", "pensando",
+      // vida diaria y estudio
+      "cafe", "cafe_rinon", "manzana", "manzana_sentado", "corriendo", "hidratacion",
+      "laptop", "uroflujo", "lectura", "libro", "escritorio",
+      "checklist", "checklist_sentado", "ok", "sutura",
+      // laboratorio e imágenes
+      "laboratorio", "laboratorio_b", "microscopio", "urianalisis", "eco", "ecografo", "biopsia",
+      // quirúrgicas
+      "davinci", "trocar", "laparoscopia", "nefrectomia", "nefroscopio",
+      "resectoscopio", "resectoscopio_b", "cistoscopio", "cistoscopio_rigido",
+      "cistoscopio_flex", "ureteroscopio", "lente", "ligasure", "ligasure_b",
+      "laser", "fibra_laser", "guia", "dormia", "dormia_b", "sonda", "sonda_foley",
+      // anatomía
+      "prostata", "prostata_mano", "prostatas", "vejiga", "sistema_urinario",
+      "rinon_corte", "rinon_tumor", "rinon_transparente",
+      "litiasis", "litiasis_sentado", "calculo",
+    ];
     return poses[Math.floor(Math.random() * poses.length)];
   }, [nombre]);
 
@@ -2406,21 +2438,21 @@ function pasosTutorial(rol, movil = false) {
     { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas." },
 
     // ─── HOSPITAL ───
-    { target: "tab-hospital", tab: "hospital", uros: "hola", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
+    { target: "tab-hospital", tab: "hospital", uros: "checklist", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
     { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
 
     // ─── SEGUIMIENTO ───
     { tab: "hospital", subtab: "seguimiento", uros: "camara", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
-    { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "pensando", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
+    { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "trocar", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
     { target: "selector-contexto", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Personal ↔ Equipo", texto: "Este botón cambia entre 👤 «Mis Pacientes» y 👥 un equipo. Pacientes, tabla y notas se muestran según el contexto elegido aquí." },
 
     // ─── BIBLIOTECA ───
-    { target: "tab-conocimiento", tab: "conocimiento", uros: "investigando", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
+    { target: "tab-conocimiento", tab: "conocimiento", uros: "lectura", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
 
     // ─── LOGBOOK ───
-    { target: "tab-logbook", tab: "logbook", uros: "pabellon", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
-    { tab: "logbook", uros: "pulgar", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
+    { target: "tab-logbook", tab: "logbook", uros: "pabellon_serio", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
+    { tab: "logbook", uros: "ok", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
 
     { uros: "pulgar", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
 
