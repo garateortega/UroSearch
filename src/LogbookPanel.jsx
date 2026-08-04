@@ -134,6 +134,8 @@ const REGISTRO_VACIO = {
   complicacion: false, clavien: "", detalles_complicacion: "", observaciones: "",
   // Complementos posteriores (biopsia / control imagenológico)
   biopsia_resultado: "", biopsia_isup: "", control_stone_free: "", control_imagen_detalle: "",
+  // Control post-operatorio: cómo llegó el paciente al control (comentario + Clavien-Dindo)
+  control_fecha: "", control_evolucion: "", control_resultado: "",
 };
 
 // ─── Comprime la foto en el navegador antes de enviarla (máx 1568 px, JPEG) ───
@@ -158,6 +160,22 @@ async function comprimirImagen(file, maxDim = 1568, calidad = 0.85) {
   const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", calidad));
   return { base64: dataUrl.split(",")[1], dataUrl, blob, mime: "image/jpeg" };
 }
+
+// ─── Control post-operatorio: escala Clavien-Dindo ───
+// "favorable" = sin complicaciones al control; el resto sigue la clasificación
+// estándar de complicaciones post-operatorias (Clavien-Dindo).
+const OPCIONES_CONTROL_POSTOP = [
+  ["favorable", "✓ Favorable, sin complicaciones"],
+  ["clavien_1", "Clavien I — desviación menor, sin tratamiento"],
+  ["clavien_2", "Clavien II — tratamiento farmacológico"],
+  ["clavien_3a", "Clavien IIIa — intervención sin anestesia general"],
+  ["clavien_3b", "Clavien IIIb — intervención con anestesia general"],
+  ["clavien_4a", "Clavien IVa — disfunción de un órgano (UCI)"],
+  ["clavien_4b", "Clavien IVb — disfunción multiorgánica"],
+  ["clavien_5", "Clavien V — fallecimiento"],
+];
+const LABEL_CONTROL_POSTOP = Object.fromEntries(OPCIONES_CONTROL_POSTOP);
+const esClavienMayor = (v) => ["clavien_3a", "clavien_3b", "clavien_4a", "clavien_4b", "clavien_5"].includes(v);
 
 // ─── Detecta el rol del usuario según su nombre en el protocolo ───
 function detectarRol(nombreUsuario, cirujano, ayudantes) {
@@ -623,6 +641,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       biopsia_isup: reg.biopsia_isup || null,
       control_stone_free: reg.control_stone_free || null,
       control_imagen_detalle: reg.control_imagen_detalle.trim() || null,
+      control_fecha: reg.control_fecha || null,
+      control_evolucion: reg.control_evolucion.trim() || null,
+      control_resultado: reg.control_resultado || null,
       hallazgos: reg.hallazgos.trim() || null,
       tecnica: reg.tecnica.trim() || null,
       complicacion: !!reg.complicacion,
@@ -723,6 +744,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       tamano_litiasis_mm: r.tamano_litiasis_mm != null ? String(r.tamano_litiasis_mm) : "", tamano_prostata_cc: r.tamano_prostata_cc != null ? String(r.tamano_prostata_cc) : "",
       biopsia_resultado: r.biopsia_resultado || "", biopsia_isup: r.biopsia_isup || "",
       control_stone_free: r.control_stone_free || "", control_imagen_detalle: r.control_imagen_detalle || "",
+      control_fecha: r.control_fecha || "", control_evolucion: r.control_evolucion || "", control_resultado: r.control_resultado || "",
       hallazgos: r.hallazgos || "", tecnica: r.tecnica || "",
       complicacion: !!r.complicacion, clavien: r.clavien || "", detalles_complicacion: r.detalles_complicacion || "",
       observaciones: r.observaciones || "",
@@ -747,9 +769,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   // ─── Exportar CSV (incluye complicaciones y complementos) ───
   const exportarCSV = () => {
-    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
+    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : r[c])).join(";"))];
+    const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : c === "control_resultado" ? (LABEL_CONTROL_POSTOP[r[c]] || r[c]) : r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -802,7 +824,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     base.forEach((r) => {
       porCat[r.categoria || "Otro"] = (porCat[r.categoria || "Otro"] || 0) + 1;
       const p = familiaProc(r.procedimiento);
-      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0, durCasos: [], sangradoCasos: [] };
+      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0, durCasos: [], sangradoCasos: [], ctrlTotal: 0, ctrlFav: 0, ctrlMayor: 0 };
       const v = porProc[p];
       v.n++;
       if (r.rol === "cirujano") v.cx++;
@@ -817,6 +839,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (r.tamano_prostata_cc > 0) v.prostata.push(r.tamano_prostata_cc);
       if (r.complicacion) v.compl++;
       if (r.control_stone_free) { v.stoneTotal++; if (r.control_stone_free === "stone_free") v.stoneFree++; }
+      if (r.control_resultado) { v.ctrlTotal++; if (r.control_resultado === "favorable") v.ctrlFav++; if (esClavienMayor(r.control_resultado)) v.ctrlMayor++; }
     });
 
     const meses = ultimosMeses(12).map((mes) => ({
@@ -836,6 +859,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         durProm: prom(v.dur),   // se mantiene para el orden y el KPI
         compl: v.compl,
         stoneFree: v.stoneTotal > 0 ? { free: v.stoneFree, total: v.stoneTotal } : null,
+        controlPostop: v.ctrlTotal > 0 ? { fav: v.ctrlFav, mayor: v.ctrlMayor, total: v.ctrlTotal } : null,
         durCasos: ordenarPorFecha(v.durCasos),      // puntos para el gráfico de tiempos
         sangradoCasos: ordenarPorFecha(v.sangradoCasos),
       }));
@@ -896,7 +920,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const lineas = [
         `Casuística (${criterioTxt}). Total: ${met.total}. Como cirujano principal: ${met.comoCirujano}. Como ayudante: ${met.comoAyudante}.`,
         "Por procedimiento (valores = medianas):",
-        ...met.detalleProc.map((d) => `- ${d.label}: ${d.n} cx (cirujano ${d.cx}, ayudante ${d.ayud})${d.dur ? `, duración ${d.dur.med} min (n=${d.dur.n})` : ""}${d.sangrado ? `, sangrado ${d.sangrado.med} ml` : ""}${d.litiasis ? `, litiasis ${d.litiasis.med} mm` : ""}${d.prostata ? `, próstata ${d.prostata.med} cc` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}`),
+        ...met.detalleProc.map((d) => `- ${d.label}: ${d.n} cx (cirujano ${d.cx}, ayudante ${d.ayud})${d.dur ? `, duración ${d.dur.med} min (n=${d.dur.n})` : ""}${d.sangrado ? `, sangrado ${d.sangrado.med} ml` : ""}${d.litiasis ? `, litiasis ${d.litiasis.med} mm` : ""}${d.prostata ? `, próstata ${d.prostata.med} cc` : ""}${d.stoneFree ? `, stone free ${d.stoneFree.free}/${d.stoneFree.total}` : ""}${d.controlPostop ? `, control post-op favorable ${d.controlPostop.fav}/${d.controlPostop.total}` : ""}`),
       ].join("\n");
       const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
         method: "POST",
@@ -1122,6 +1146,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     </select>
                   ))}
                   <div style={{ gridColumn: "1 / -1" }}>{campo("Detalle del control imagenológico", <input style={inp} value={reg.control_imagen_detalle} onChange={(e) => set("control_imagen_detalle", e.target.value)} placeholder="Ej: UroTAC a las 6 semanas, sin litiasis residual" />)}</div>
+
+                  {/* Control post-operatorio: cómo llegó el paciente + Clavien-Dindo */}
+                  <div style={{ gridColumn: "1 / -1", fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginTop: 4, paddingTop: 8, borderTop: "0.5px solid var(--borde)" }}>🩺 Control post-operatorio</div>
+                  {campo("Fecha del control", <input type="date" style={inp} value={reg.control_fecha} onChange={(e) => set("control_fecha", e.target.value)} />)}
+                  {campo("Resultado del control (Clavien-Dindo)", (
+                    <select style={inp} value={reg.control_resultado} onChange={(e) => set("control_resultado", e.target.value)}>
+                      <option value="">—</option>
+                      {OPCIONES_CONTROL_POSTOP.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  ))}
+                  <div style={{ gridColumn: "1 / -1" }}>{campo("¿Cómo anduvo el paciente en el control?", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.control_evolucion} onChange={(e) => set("control_evolucion", e.target.value)} placeholder="Ej: asintomático, herida sana, buen chorro miccional, sin fiebre; retiro de sonda sin incidentes" />)}</div>
                 </div>
               )}
             </div>
@@ -1250,6 +1285,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {(r.tamano_litiasis_mm != null || r.tamano_prostata_cc != null) && <div>{r.tamano_litiasis_mm != null && <><b>Litiasis:</b> {r.tamano_litiasis_mm} mm  </>}{r.tamano_prostata_cc != null && <><b>Próstata:</b> {r.tamano_prostata_cc} cc</>}</div>}
                   {(r.biopsia_resultado || r.biopsia_isup) && <div><b>Biopsia:</b> {r.biopsia_resultado}{r.biopsia_isup ? ` (ISUP ${r.biopsia_isup})` : ""}</div>}
                   {r.control_stone_free && <div><b>Control:</b> {r.control_stone_free === "stone_free" ? "✓ Stone free" : r.control_stone_free === "fragmento_residual" ? "Fragmento residual" : "Pendiente"}{r.control_imagen_detalle ? ` — ${r.control_imagen_detalle}` : ""}</div>}
+                  {(r.control_resultado || r.control_evolucion) && <div><b>Control post-op{r.control_fecha ? ` (${r.control_fecha})` : ""}:</b> {LABEL_CONTROL_POSTOP[r.control_resultado] || ""}{r.control_evolucion ? `${r.control_resultado ? " — " : ""}${r.control_evolucion}` : ""}</div>}
                   {r.hallazgos && <div><b>Hallazgos:</b> {r.hallazgos}</div>}
                   {r.tecnica && <div><b>Técnica:</b> {r.tecnica}</div>}
                   {r.detalles_complicacion && <div style={{ color: "var(--peligro)" }}><b>Complicación:</b> {r.detalles_complicacion}</div>}
@@ -1356,6 +1392,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                               {d.prostata && <Chip label="Próstata" val={`${d.prostata.med} cc`} sub={`n=${d.prostata.n}`} />}
                               {d.compl > 0 && <Chip label="Complic." val={d.compl} />}
                               {d.stoneFree && <Chip label="Stone free" val={`${d.stoneFree.free}/${d.stoneFree.total}`} ok />}
+                              {d.controlPostop && <Chip label="Control favorable" val={`${d.controlPostop.fav}/${d.controlPostop.total}`} ok />}
+                              {d.controlPostop && d.controlPostop.mayor > 0 && <Chip label="Clavien ≥ III" val={`${d.controlPostop.mayor}/${d.controlPostop.total}`} />}
                             </div>
                             {d.durCasos.length > 0 ? (
                               <div>

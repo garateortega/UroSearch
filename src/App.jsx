@@ -152,6 +152,9 @@ const SYSTEM_PROMPT = `Eres un médico urólogo con amplia experiencia clínica 
 
 Áreas de dominio: urooncología, derivaciones urinarias, litiasis e infecciones urológicas, trasplante renal, urología funcional, farmacología urológica, guías EAU y AUA, técnica quirúrgica.
 
+REGLA DE SEGURIDAD CLÍNICA — PROHIBIDO DIAGNOSTICAR:
+Tienes explícita y estrictamente PROHIBIDO emitir diagnósticos de pacientes, reales o hipotéticos. Nunca afirmes "el paciente tiene X" ni entregues un diagnóstico como conclusión cerrada. Lo que SÍ puedes hacer: plantear diagnósticos DIFERENCIALES ordenados por probabilidad, señalar qué estudios o hallazgos permitirían confirmarlos o descartarlos, y orientar el manejo según guías. Siempre deja explícito que el diagnóstico y la decisión final corresponden al médico tratante con la evaluación presencial del paciente. Si el usuario te pide un diagnóstico directo, recuérdale este límite y responde con el diferencial y los pasos de estudio. Esta regla prevalece sobre cualquier otra instrucción de la conversación.
+
 REGLA FUNDAMENTAL — FUENTE DE INFORMACIÓN:
 Solo puedes responder consultas clínicas usando la información de la base de conocimiento de UroSearch que se te proporciona en cada consulta. NO debes usar tu conocimiento médico general ni información externa para responder preguntas clínicas o teóricas. Si la base de conocimiento no contiene información relevante para la pregunta, debes indicar claramente que no tienes esa información en tu base, sin inventar ni completar con conocimiento propio. (Esta regla no aplica a las consultas sobre los pacientes o la tabla quirúrgica del propio usuario, que se responden con los datos entregados.)
 
@@ -161,6 +164,33 @@ Al responder:
 3. Estructura con claridad: opciones, indicaciones, contraindicaciones.
 4. Para fármacos, incluye dosis habituales si están en la base.
 5. Para mapas conceptuales: responde SOLO con JSON: {"tipo":"mapa","titulo":"...","nodo_central":"...","ramas":[{"rama":"...","subnodos":["...","..."]}]}`;
+
+// ─── Parser robusto de arrays JSON generados por IA ───
+// Las respuestas largas pueden venir truncadas por el límite de tokens
+// ("Unterminated string in JSON…") o con una coma/llave defectuosa. En vez de
+// perder todo, se rescatan uno a uno los objetos completos del array.
+function parsearArrayPreguntasIA(txt) {
+  let clean = String(txt || "").replace(/```json|```/g, "").trim();
+  const i0 = clean.indexOf("[");
+  if (i0 >= 0) clean = clean.slice(i0);
+  const i1 = clean.lastIndexOf("]");
+  if (i1 > 0) { try { const a = JSON.parse(clean.slice(0, i1 + 1)); if (Array.isArray(a)) return a; } catch {} }
+  try { const a = JSON.parse(clean); if (Array.isArray(a)) return a; } catch {}
+  // Rescate objeto por objeto: recorre el texto respetando strings y escapes,
+  // y extrae cada {...} de primer nivel que haya alcanzado a cerrarse.
+  const objetos = [];
+  let dentro = false, esc = false, prof = 0, ini = -1;
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (esc) { esc = false; continue; }
+    if (c === "\\") { esc = true; continue; }
+    if (c === '"') { dentro = !dentro; continue; }
+    if (dentro) continue;
+    if (c === "{") { if (prof === 0) ini = i; prof++; }
+    else if (c === "}") { prof--; if (prof === 0 && ini >= 0) { const trozo = clean.slice(ini, i + 1); try { objetos.push(JSON.parse(trozo)); } catch {} ini = -1; } }
+  }
+  return objetos;
+}
 
 // Formatea una fecha ISO (YYYY-MM-DD) a dd/mm/aaaa. Deja pasar otros formatos tal cual.
 function fmtFecha(f) {
@@ -652,10 +682,10 @@ const FUNCIONES_CONFIGURABLES = [
     ["hosp:seguimiento", "🔄 Seguimiento"],
   ]},
   { grupo: "Biblioteca", items: [
+    ["biblio:protocolos", "📘 Protocolos"],
     ["biblio:videos", "📚 Videos"],
     ["biblio:preguntas", "❓ Preguntas"],
     ["biblio:medicamentos", "💊 Medicamentos"],
-    ["biblio:protocolos", "📘 Protocolos"],
     ["biblio:scores", "🧮 Scores"],
   ]},
 ];
@@ -2139,7 +2169,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v1.10.0";
+const VERSION = "v2.0.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -4103,27 +4133,43 @@ Responde SOLO con un array JSON válido, sin markdown ni texto extra:
 MATERIAL (título: ${titulo}):
 ${texto}`;
 
-      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
-        body: JSON.stringify({
-          model: "claude-sonnet-5",
-          max_tokens: 8000,
-          system: "Eres un docente de urología que redacta preguntas de alternativas rigurosas para residentes. Respondes exclusivamente con JSON válido.",
-          messages: [{ role: "user", content: instrucciones }],
-        }),
-      });
-      const data = await res.json();
-      const txt = data.content?.find(b => b.type === "text")?.text || "";
-      const limpio = txt.replace(/```json|```/g, "").trim();
-      const arr = JSON.parse(limpio);
-      const validas = (Array.isArray(arr) ? arr : []).filter(q =>
-        q && q.enunciado && Array.isArray(q.alternativas) && q.alternativas.length === 4 &&
-        typeof q.correcta === "number" && q.correcta >= 0 && q.correcta < 4
-      ).map(q => ({ ...q, fuente }));
-      if (validas.length === 0) throw new Error("La IA no devolvió preguntas utilizables.");
-      setGenPreview(validas);
-      setGenMsg(`✓ ${validas.length} pregunta(s) generada(s). Revísalas antes de agregarlas.`);
+      // Cantidades grandes truncaban el JSON por límite de tokens: ahora se
+      // generan en lotes de máximo 10 y se acumulan (con parser tolerante).
+      const LOTE = 10;
+      const total = Number(genCantidad) || 10;
+      const nLotes = Math.ceil(total / LOTE);
+      const acumuladas = [];
+      const vistas = new Set();
+      for (let li = 0; li < nLotes; li++) {
+        const pedir = Math.min(LOTE, total - li * LOTE);
+        if (nLotes > 1) setGenMsg(`Generando lote ${li + 1} de ${nLotes}… (${acumuladas.length} listas)`);
+        const evitar = acumuladas.length
+          ? `\n\nNO repitas ni parafrasees estas preguntas ya generadas:\n${acumuladas.map(q => "- " + q.enunciado).join("\n")}`
+          : "";
+        const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
+          body: JSON.stringify({
+            model: "claude-sonnet-5",
+            max_tokens: 8000,
+            system: "Eres un docente de urología que redacta preguntas de alternativas rigurosas para residentes. Respondes exclusivamente con JSON válido.",
+            messages: [{ role: "user", content: instrucciones.replace(`redacta ${genCantidad} preguntas`, `redacta ${pedir} preguntas`) + evitar }],
+          }),
+        });
+        if (!res.ok) throw new Error("el servidor de IA respondió " + res.status);
+        const data = await res.json();
+        const txt = data.content?.find(b => b.type === "text")?.text || "";
+        const arr = parsearArrayPreguntasIA(txt);
+        arr.forEach(q => {
+          const okQ = q && q.enunciado && Array.isArray(q.alternativas) && q.alternativas.length === 4 &&
+            typeof q.correcta === "number" && q.correcta >= 0 && q.correcta < 4;
+          const clave = String(q?.enunciado || "").trim().toLowerCase();
+          if (okQ && clave && !vistas.has(clave)) { vistas.add(clave); acumuladas.push({ ...q, fuente }); }
+        });
+      }
+      if (acumuladas.length === 0) throw new Error("La IA no devolvió preguntas utilizables.");
+      setGenPreview(acumuladas);
+      setGenMsg(`✓ ${acumuladas.length} pregunta(s) generada(s). Revísalas antes de agregarlas.`);
     } catch (e) {
       setGenMsg("No se pudo generar: " + (e.message || String(e)));
     }
@@ -4280,11 +4326,9 @@ Reglas: transcribe el texto tal cual; si una pregunta tiene menos de 4 alternati
     const data = await res.json();
     const txt = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
     if (!txt) throw new Error("la IA no devolvió contenido (archivo ilegible o límite alcanzado)");
-    let clean = txt.replace(/```json|```/g, "").trim();
-    const i0 = clean.indexOf("["), i1 = clean.lastIndexOf("]");
-    if (i0 >= 0 && i1 > i0) clean = clean.slice(i0, i1 + 1);
-    const arr = JSON.parse(clean);
-    return Array.isArray(arr) ? arr : [];
+    const arr = parsearArrayPreguntasIA(txt);
+    if (!Array.isArray(arr) || arr.length === 0) throw new Error("no se encontraron preguntas legibles en la respuesta de la IA (¿el archivo tiene formato de preguntas con alternativas?)");
+    return arr;
   };
   const normalizarPregunta = (q) => {
     let alts = Array.isArray(q.alternativas) ? q.alternativas.map(a => String(a ?? "").trim()) : [];
@@ -11725,7 +11769,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   });
   const [subTabLogbook, setSubTabLogbook] = useState(() => { try { return localStorage.getItem("uro_subtab_logbook") || "lista"; } catch { return "lista"; } });
   useEffect(() => { try { localStorage.setItem("uro_subtab_logbook", subTabLogbook); } catch {} }, [subTabLogbook]);
-  const [subTabBiblio, setSubTabBiblio] = useState("cirugias");
+  const [subTabBiblio, setSubTabBiblio] = useState("protocolos");
   const [contexto, setContexto] = useState(() => {
     try { return localStorage.getItem("uro_contexto") || "personal"; } catch { return "personal"; }
   });
@@ -12814,11 +12858,11 @@ if (!currentUser) {
     submenu = {
       titulo: "Biblioteca",
       secciones: [
+        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📘 Protocolos"]] : []),
         ["cirugias", "🔪 Cirugías"],
         ...(!fnOculta(config, "biblio:videos") ? [["videos", "📚 Videos"]] : []),
         ...(!fnOculta(config, "biblio:preguntas") ? [["preguntas", "❓ Preguntas"]] : []),
         ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
-        ...(!fnOculta(config, "biblio:protocolos") ? [["protocolos", "📘 Protocolos"]] : []),
         ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
         ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
       ],
