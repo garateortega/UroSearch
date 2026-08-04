@@ -4,6 +4,7 @@ import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
+import { listarLogbook } from "./logbook";
 
 
 // ─── Fecha y hora LOCALES del dispositivo (nunca UTC) ───
@@ -2387,6 +2388,28 @@ function UrosAvatar({ size = 30 }) {
   );
 }
 // Portada del chat: figura hero + saludo. Se muestra al entrar a la pestaña Chat.
+// ─── Preguntas sugeridas del chat ───
+// Atajos de un toque en la portada; cada una dispara los contextos reales
+// del chat (pacientes, tabla quirúrgica, seguimiento, logbook).
+const PREGUNTAS_SUGERIDAS = [
+  "¿Cómo van mis pacientes?",
+  "¿Qué se opera mañana?",
+  "Quiero un resumen de la visita médica",
+  "¿Cómo va mi logbook?",
+];
+function ChipsSugeridas({ onPick, disabled }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", padding: "2px 14px 18px" }}>
+      {PREGUNTAS_SUGERIDAS.map(q => (
+        <button key={q} onClick={() => onPick(q)} disabled={disabled}
+          style={{ padding: "8px 13px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "1px solid var(--primario)", borderRadius: 20, cursor: "pointer", opacity: disabled ? 0.5 : 1 }}>
+          {q}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function PortadaChat({ nombre }) {
   const movil = useIsMobile();
   // Un saludo al azar, fijo mientras la portada esté montada
@@ -3707,6 +3730,21 @@ function BotonFeedback({ currentUser, tabActual }) {
 
 function FeedbackModal({ currentUser, tabActual, onClose }) {
   const [tipo, setTipo] = useState("sugerencia");
+  const [misMensajes, setMisMensajes] = useState(null); // null = cargando
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const { data } = await supabase.from("feedback")
+          .select("id, tipo, mensaje, estado, respuesta, respondido_at, fecha_creacion")
+          .eq("user_id", currentUser?.id)
+          .order("fecha_creacion", { ascending: false })
+          .limit(10);
+        if (vivo) setMisMensajes(data || []);
+      } catch { if (vivo) setMisMensajes([]); }
+    })();
+    return () => { vivo = false; };
+  }, [currentUser?.id]);
   const [mensaje, setMensaje] = useState("");
   const [archivo, setArchivo] = useState(null);
   const [archivoNombre, setArchivoNombre] = useState("");
@@ -3789,6 +3827,31 @@ function FeedbackModal({ currentUser, tabActual, onClose }) {
 
         <button onClick={enviar} disabled={enviando || !mensaje.trim()} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer", opacity: (enviando || !mensaje.trim()) ? 0.5 : 1 }}>{enviando ? "Enviando…" : "Enviar"}</button>
         <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: 8, textAlign: "center", lineHeight: 1.4 }}>Se envía tu nombre y la sección desde la que escribes. No incluyas datos de pacientes.</div>
+
+        {/* Historial del usuario con las respuestas del equipo */}
+        {Array.isArray(misMensajes) && misMensajes.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "0.5px solid var(--borde)" }}>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>Tus mensajes anteriores</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {misMensajes.map(m => (
+                <div key={m.id} style={{ background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)" }}>{m.tipo}</span>
+                    <span style={{ fontSize: "var(--fs-xs)", padding: "0px 6px", borderRadius: 20, background: m.respuesta ? "var(--exito-bg)" : "var(--superficie)", color: m.respuesta ? "var(--exito)" : "var(--texto-ter)", border: "0.5px solid var(--borde)" }}>{m.respuesta ? "respondido" : m.estado}</span>
+                    <span style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginLeft: "auto" }}>{new Date(m.fecha_creacion).toLocaleDateString("es-CL")}</span>
+                  </div>
+                  <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{m.mensaje}</div>
+                  {m.respuesta && (
+                    <div style={{ marginTop: 6, padding: "7px 9px", background: "var(--superficie)", borderLeft: "3px solid var(--primario)", borderRadius: 6 }}>
+                      <div style={{ fontSize: "var(--fs-xs)", fontWeight: 700, color: "var(--primario)", marginBottom: 2 }}>Respuesta del equipo{m.respondido_at ? ` · ${new Date(m.respondido_at).toLocaleDateString("es-CL")}` : ""}</div>
+                      <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{m.respuesta}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3801,6 +3864,48 @@ function FeedbackAdmin() {
   const [filtro, setFiltro] = useState("nuevo");
   const [urls, setUrls] = useState({});
   const [errorCarga, setErrorCarga] = useState("");
+  const [respAbierta, setRespAbierta] = useState({});   // id → bool (caja de respuesta abierta)
+  const [borradores, setBorradores] = useState({});     // id → texto del borrador
+  const [genIA, setGenIA] = useState({});               // id → generando sugerencia
+  const [enviandoResp, setEnviandoResp] = useState({}); // id → enviando
+
+  // La IA propone una respuesta cordial que el admin puede editar antes de enviar.
+  const sugerirRespuestaIA = async (f) => {
+    setGenIA(prev => ({ ...prev, [f.id]: true }));
+    try {
+      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
+        body: JSON.stringify({
+          model: "claude-sonnet-5",
+          max_tokens: 500,
+          system: "Eres el desarrollador de UroSearch (app clínica de urología) respondiendo el buzón de sugerencias. Redacta una respuesta breve (3 a 6 frases), cordial y concreta en español, en primera persona. Agradece el mensaje, responde al punto y, si es un problema, indica que se revisará. No inventes plazos, versiones ni funciones que no se mencionen. Responde SOLO con el texto de la respuesta, sin saludos de correo ni firmas.",
+          messages: [{ role: "user", content: `Tipo: ${f.tipo}\nSección desde la que escribió: ${f.contexto || "no indicada"}\nMensaje del usuario:\n${f.mensaje}` }],
+        }),
+      });
+      const data = await res.json();
+      const texto = data.content?.find(b => b.type === "text")?.text?.trim();
+      if (texto) setBorradores(prev => ({ ...prev, [f.id]: texto }));
+      else uroToast("La IA no devolvió una sugerencia.");
+    } catch (e) { uroToast("No se pudo generar la sugerencia: " + (e.message || e)); }
+    setGenIA(prev => ({ ...prev, [f.id]: false }));
+  };
+
+  const enviarRespuesta = async (f) => {
+    const texto = (borradores[f.id] || "").trim();
+    if (!texto) return;
+    setEnviandoResp(prev => ({ ...prev, [f.id]: true }));
+    const { error } = await supabase.from("feedback")
+      .update({ respuesta: texto, respondido_at: new Date().toISOString() })
+      .eq("id", f.id);
+    if (error) uroToast("Error al enviar la respuesta: " + error.message);
+    else {
+      setItems(prev => prev.map(x => x.id === f.id ? { ...x, respuesta: texto, respondido_at: new Date().toISOString() } : x));
+      setRespAbierta(prev => ({ ...prev, [f.id]: false }));
+      uroToast("✓ Respuesta enviada: el usuario la verá en su buzón.");
+    }
+    setEnviandoResp(prev => ({ ...prev, [f.id]: false }));
+  };
 
   const cargar = async () => {
     setCargando(true); setErrorCarga("");
@@ -3895,8 +4000,28 @@ function FeedbackAdmin() {
                 {f.imagen_path && <button onClick={() => verImagen(f)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer" }}>🖼️ Ver captura</button>}
                 {f.estado !== "visto" && <button onClick={() => cambiarEstado(f, "visto")} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer" }}>Marcar visto</button>}
                 {f.estado !== "resuelto" && <button onClick={() => cambiarEstado(f, "resuelto")} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--exito)", color: "var(--texto-inv)", border: "none", borderRadius: 6, cursor: "pointer" }}>✓ Resuelto</button>}
+                {!f.respuesta && <button onClick={() => setRespAbierta(prev => ({ ...prev, [f.id]: !prev[f.id] }))} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 6, cursor: "pointer" }}>💬 Responder</button>}
                 <button onClick={() => eliminar(f)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--superficie)", color: "var(--peligro)", border: "0.5px solid var(--peligro)", borderRadius: 6, cursor: "pointer", marginLeft: "auto" }}>Eliminar</button>
               </div>
+
+              {/* Respuesta ya enviada */}
+              {f.respuesta && (
+                <div style={{ marginTop: 8, padding: "8px 10px", background: "var(--exito-bg)", borderLeft: "3px solid var(--exito)", borderRadius: 6 }}>
+                  <div style={{ fontSize: "var(--fs-xs)", fontWeight: 700, color: "var(--exito)", marginBottom: 2 }}>✓ Respondido{f.respondido_at ? ` · ${new Date(f.respondido_at).toLocaleString("es-CL")}` : ""}</div>
+                  <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{f.respuesta}</div>
+                </div>
+              )}
+
+              {/* Caja de respuesta con sugerencia de la IA */}
+              {!f.respuesta && respAbierta[f.id] && (
+                <div style={{ marginTop: 8, padding: "10px", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
+                  <textarea value={borradores[f.id] || ""} onChange={e => setBorradores(prev => ({ ...prev, [f.id]: e.target.value }))} rows={4} placeholder="Escribe tu respuesta o pídele una sugerencia a la IA…" style={{ width: "100%", padding: "9px 11px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", resize: "vertical", marginBottom: 8 }} disabled={genIA[f.id] || enviandoResp[f.id]} />
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button onClick={() => sugerirRespuestaIA(f)} disabled={genIA[f.id] || enviandoResp[f.id]} style={{ padding: "7px 12px", fontSize: "var(--fs-0)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "1px solid var(--primario)", borderRadius: 7, cursor: "pointer", opacity: genIA[f.id] ? 0.6 : 1 }}>{genIA[f.id] ? "Generando…" : "✨ Sugerir respuesta con IA"}</button>
+                    <button onClick={() => enviarRespuesta(f)} disabled={enviandoResp[f.id] || !(borradores[f.id] || "").trim()} style={{ padding: "7px 12px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 7, cursor: "pointer", marginLeft: "auto", opacity: (enviandoResp[f.id] || !(borradores[f.id] || "").trim()) ? 0.5 : 1 }}>{enviandoResp[f.id] ? "Enviando…" : "Enviar respuesta"}</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -12398,7 +12523,7 @@ if (videosResult.ok) {
   // Detecta si la consulta es sobre los pacientes del médico
   const buscarPacientesRelevantes = (consulta) => {
     const q = consulta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    const palabrasPacientes = ["paciente","pacientes","hospitalizad","hospitalizado","cama","camas","servicio","ingres","alta","altas","mis","tengo","cuanto","cuanta","quien","resumen","ficha","evolucion","examen","diagnostic","operad","post op","postop"];
+    const palabrasPacientes = ["paciente","pacientes","hospitalizad","hospitalizado","cama","camas","servicio","ingres","alta","altas","mis","tengo","cuanto","cuanta","quien","resumen","ficha","evolucion","examen","diagnostic","operad","post op","postop","visita"];
     const esConsulta = palabrasPacientes.some(p => q.includes(p));
     if (!esConsulta) return null;
     // Los pacientes ya vienen filtrados por contexto (personales o del equipo activo)
@@ -12423,8 +12548,9 @@ if (videosResult.ok) {
     return { pacientes: filtrados, totalMisPacientes: misPacientes.length, ningun: false };
   };
 
- const sendMsg = async () => {
-  const txt = input.trim();
+ // Acepta un texto directo (preguntas sugeridas); si llega un evento de click, se ignora.
+ const sendMsg = async (textoDirecto) => {
+  const txt = (typeof textoDirecto === "string" ? textoDirecto : input).trim();
   if (!txt || loading) return;
   
   const newMsgs = [...messages, {role:"user", content:txt}];
@@ -12478,6 +12604,37 @@ if (videosResult.ok) {
   const tieneFuentes = docsRelevantes.length > 0;
   const consultaCirugias = buscarCirugiasRelevantes(txt);
   const consultaPacientes = buscarPacientesRelevantes(txt);
+  // Contexto del logbook quirúrgico si la pregunta lo amerita
+  let ctxLogbook = "";
+  {
+    const qLog = txt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const pideLogbook = ["logbook", "casuistica", "bitacora", "mis cirugias", "he operado", "he ayudado", "registro quirurgico", "protocolos operatorios"].some(k => qLog.includes(k));
+    if (pideLogbook) {
+      try {
+        const rl = await listarLogbook(sesionActiva?.user?.id || currentUser?.id);
+        if (rl.ok) {
+          const regs = rl.registros || [];
+          if (regs.length === 0) {
+            ctxLogbook = "\n\n=== LOGBOOK QUIRÚRGICO DEL USUARIO ===\nEl usuario aún no tiene cirugías registradas en su logbook.";
+          } else {
+            const cx = regs.filter(r => (r.rol || "").toLowerCase().includes("ciruj")).length;
+            const ayud = regs.length - cx;
+            const porProc = {};
+            regs.forEach(r => { const k = r.procedimiento || "Sin procedimiento"; porProc[k] = (porProc[k] || 0) + 1; });
+            const top = Object.entries(porProc).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}: ${v}`).join(" · ");
+            const compl = regs.filter(r => r.complicacion).length;
+            const conCtrl = regs.filter(r => r.control_resultado);
+            const ctrlFav = conCtrl.filter(r => r.control_resultado === "favorable").length;
+            const ctrlMayor = conCtrl.filter(r => ["clavien_3a", "clavien_3b", "clavien_4a", "clavien_4b", "clavien_5"].includes(r.control_resultado)).length;
+            const stone = regs.filter(r => r.control_stone_free);
+            const stoneFree = stone.filter(r => r.control_stone_free === "stone_free").length;
+            const ultimas = regs.slice(0, 5).map(r => `- ${r.fecha || "s/f"} | ${r.procedimiento || "?"} | rol: ${r.rol || "?"}${r.complicacion ? " | con complicación" : ""}`).join("\n");
+            ctxLogbook = `\n\n=== LOGBOOK QUIRÚRGICO DEL USUARIO ===\nTotal de registros: ${regs.length} (como cirujano: ${cx}, como ayudante: ${ayud}).\nPor procedimiento: ${top}.\nComplicaciones intraoperatorias registradas: ${compl}.${conCtrl.length ? `\nControles post-operatorios registrados: ${conCtrl.length} (favorables: ${ctrlFav}, Clavien ≥ III: ${ctrlMayor}).` : ""}${stone.length ? `\nControles imagenológicos de litiasis: ${stone.length} (stone free: ${stoneFree}).` : ""}\nÚltimos 5 registros:\n${ultimas}\nResponde con un resumen motivador y concreto del progreso de su casuística.`;
+          }
+        }
+      } catch {}
+    }
+  }
   // Si la pregunta va sobre pacientes en seguimiento, se le entrega ese contexto real
   let ctxSeguimiento = "";
   if (/seguimiento|vigilancia|control(es)?\b|atrasad|pendiente.*control|proximo.*control|pr[oó]ximos?\s*control/i.test(txt)) {
@@ -12572,6 +12729,7 @@ if (videosResult.ok) {
     }
     // Contexto de pacientes en seguimiento (si la pregunta lo amerita)
     if (ctxSeguimiento) ctx += `\n\n${ctxSeguimiento}`;
+    if (ctxLogbook) ctx += ctxLogbook;
     // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
     const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
     const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon;
@@ -13093,10 +13251,13 @@ if (!currentUser) {
       Cargando conversación...
     </div>
   )}
-{!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.</div>}
+{!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.<ChipsSugeridas onPick={(q) => sendMsg(q)} disabled={loading} /></div>}
 
 {!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
-  <PortadaChat nombre={currentUser?.nombre} />
+  <>
+    <PortadaChat nombre={currentUser?.nombre} />
+    <ChipsSugeridas onPick={(q) => sendMsg(q)} disabled={loading} />
+  </>
 )}
 
 {!loadingConversaciones && messages.map((m,i) => {
