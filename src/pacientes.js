@@ -1,5 +1,18 @@
 import { supabase } from './supabase';
 
+// ─── Fecha y hora LOCALES del dispositivo ───
+// La tabla "evoluciones" tiene defaults en UTC (el servidor de Supabase):
+// si el insert no manda fecha/hora, queda la hora UTC (+4 respecto de Chile).
+// Por eso el cliente siempre envía su fecha y hora locales.
+function hoyLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function horaLocalHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+}
+
 // ============================================================
 // PACIENTES
 // ============================================================
@@ -77,6 +90,8 @@ export async function crearEvolucion(pacienteId, autorId, texto, tipo = 'libre')
       autor_id: autorId,
       texto: texto,
       tipo: tipo,
+      fecha_evolucion: hoyLocalISO(),   // fecha local del dispositivo (no UTC)
+      hora_evolucion: horaLocalHM(),    // hora local del dispositivo (no UTC)
     })
     .select('*, autor:perfiles!autor_id(nombre, rol)')
     .single();

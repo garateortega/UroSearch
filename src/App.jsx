@@ -4,7 +4,19 @@ import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
-import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
+
+
+// ─── Fecha y hora LOCALES del dispositivo (nunca UTC) ───
+// toISOString() entrega UTC: en Chile (UTC-4/-3) desplaza la hora +4 y, de noche,
+// corre la fecha al día siguiente. Estas funciones usan siempre la hora local.
+function hoyLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function horaLocalHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import LogbookPanel from "./LogbookPanel";
@@ -236,7 +248,7 @@ function componerHistoriaIngreso(x) {
 
 // ─── Extracción de una TABLA quirúrgica desde foto(s): devuelve arreglo ───
 async function extraerTablaCirugias(imagenesBase64) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyLocalISO();
   const instrucciones = `Analiza la(s) foto(s) de esta tabla/programación quirúrgica de urología y extrae TODAS las cirugías en JSON.
 Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
 Si un dato no aparece, usa null. NO inventes datos. La fecha de referencia de hoy es ${hoy}.
@@ -285,7 +297,7 @@ Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre complet
 // ─── Extracción de EXÁMENES desde foto(s): devuelve arreglo de exámenes ───
 // Mapea los valores de laboratorio a las MISMAS keys que usa PARAMETROS_LAB.
 async function extraerExamenes(imagenesBase64) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyLocalISO();
   const instrucciones = `Analiza la(s) foto(s) de resultados de exámenes (laboratorio, urocultivo/antibiograma, imágenes) y extrae TODOS los exámenes en JSON.
 Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
 Si un dato no aparece, usa null. NO inventes datos. La fecha de hoy es ${hoy}.
@@ -1362,7 +1374,7 @@ function PrescripcionesPanel({ currentUser }) {
       doc.setFont("times", "bold"); doc.setFontSize(10.5); doc.setTextColor(6, 90, 130);
       doc.text(t.titulo, 12, y);
       doc.setFont("times", "normal"); doc.setFontSize(9); doc.setTextColor(40, 40, 40);
-      doc.text("Fecha: " + fmtFecha(new Date().toISOString().slice(0, 10)), W - 12, y, { align: "right" }); y += 7;
+      doc.text("Fecha: " + fmtFecha(hoyLocalISO()), W - 12, y, { align: "right" }); y += 7;
 
       // Datos del paciente
       doc.setFontSize(9.5); doc.setTextColor(20, 20, 20);
@@ -3508,6 +3520,135 @@ function AuthScreen({ onLogin }) {
   );
 }
 
+// ─── Boletines de actualización ───
+// El admin publica novedades de la app; cada usuario ve el último boletín
+// una sola vez al iniciar sesión (se marca como visto por dispositivo).
+function BoletinModal({ currentUser }) {
+  const [boletin, setBoletin] = useState(null);
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.from("boletines")
+          .select("id, titulo, contenido, fecha_creacion")
+          .eq("publicado", true)
+          .order("fecha_creacion", { ascending: false })
+          .limit(1);
+        if (error || !data || data.length === 0) return;
+        const ultimo = data[0];
+        let visto = null;
+        try { visto = localStorage.getItem("uro_boletin_visto"); } catch {}
+        if (vivo && String(ultimo.id) !== visto) setBoletin(ultimo);
+      } catch {}
+    })();
+    return () => { vivo = false; };
+  }, [currentUser?.id]);
+  if (!boletin) return null;
+  const cerrar = () => {
+    try { localStorage.setItem("uro_boletin_visto", String(boletin.id)); } catch {}
+    setBoletin(null);
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 2300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 16, padding: 22, width: "100%", maxWidth: 460, maxHeight: "82vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <Uros expresion="sorprendido" size={54} alt="" />
+          <div>
+            <div style={{ fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--primario)", textTransform: "uppercase", letterSpacing: 0.5 }}>Novedades de UroSearch</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)", lineHeight: 1.3 }}>{boletin.titulo}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 10 }}>{new Date(boletin.fecha_creacion).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}</div>
+        <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.6, whiteSpace: "pre-wrap", marginBottom: 16 }}>{boletin.contenido}</div>
+        <button onClick={cerrar} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>¡Entendido!</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Boletines (solo admin): crear, publicar/ocultar y eliminar ───
+function BoletinesAdmin() {
+  const [items, setItems] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [titulo, setTitulo] = useState("");
+  const [contenido, setContenido] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const cargar = async () => {
+    setCargando(true); setMsg("");
+    const { data, error } = await supabase.from("boletines").select("*").order("fecha_creacion", { ascending: false });
+    if (error) setMsg("⚠️ " + error.message + " — ejecuta la migración boletines.sql");
+    setItems(data || []);
+    setCargando(false);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const publicar = async () => {
+    if (!titulo.trim() || !contenido.trim()) { setMsg("⚠️ Completa título y contenido."); return; }
+    setGuardando(true); setMsg("");
+    let autorId = null;
+    try { const { data: au } = await supabase.auth.getUser(); autorId = au?.user?.id || null; } catch {}
+    const { error } = await supabase.from("boletines").insert({ titulo: titulo.trim(), contenido: contenido.trim(), publicado: true, autor_id: autorId });
+    if (error) { setMsg("⚠️ " + error.message); setGuardando(false); return; }
+    setTitulo(""); setContenido("");
+    uroToast("✓ Boletín publicado: todos lo verán al iniciar sesión.");
+    await cargar();
+    setGuardando(false);
+  };
+
+  const togglePublicado = async (b) => {
+    const { error } = await supabase.from("boletines").update({ publicado: !b.publicado }).eq("id", b.id);
+    if (error) { uroToast("Error: " + error.message); return; }
+    setItems(prev => prev.map(x => x.id === b.id ? { ...x, publicado: !b.publicado } : x));
+  };
+
+  const eliminar = async (b) => {
+    if (!(await uroConfirm(`¿Eliminar el boletín «${b.titulo}»?`))) return;
+    const { error } = await supabase.from("boletines").delete().eq("id", b.id);
+    if (error) { uroToast("Error: " + error.message); return; }
+    setItems(prev => prev.filter(x => x.id !== b.id));
+  };
+
+  const inp = { width: "100%", padding: "10px 12px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--fondo-suave)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
+
+  return (
+    <div style={{ marginTop: 22, paddingTop: 18, borderTop: "0.5px solid var(--borde)" }}>
+      <div style={{ fontSize: "var(--fs-3)", fontWeight: 600, color: "var(--texto)", marginBottom: 4 }}>📣 Boletines de actualización</div>
+      <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginBottom: 12, lineHeight: 1.5 }}>Publica las novedades de cada versión. El boletín más reciente se muestra una vez a cada usuario al iniciar sesión.</div>
+
+      <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título (ej: Novedades v1.4 — Boletines y mejoras)" style={inp} disabled={guardando} />
+      <textarea value={contenido} onChange={e => setContenido(e.target.value)} rows={5} placeholder={"Escribe las novedades, una por línea…\n• Nueva sección de boletines\n• Corrección de hora en evoluciones"} style={{ ...inp, resize: "vertical" }} disabled={guardando} />
+      {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", background: "var(--peligro-bg)", padding: "8px 10px", borderRadius: 6, marginBottom: 8, lineHeight: 1.45 }}>{msg}</div>}
+      <button onClick={publicar} disabled={guardando || !titulo.trim() || !contenido.trim()} style={{ width: "100%", padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer", opacity: (guardando || !titulo.trim() || !contenido.trim()) ? 0.5 : 1, marginBottom: 14 }}>{guardando ? "Publicando…" : "Publicar boletín"}</button>
+
+      {cargando ? (
+        <div style={{ textAlign: "center", padding: 16, color: "var(--texto-ter)", fontSize: "var(--fs-1)" }}>Cargando…</div>
+      ) : items.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 16, color: "var(--texto-ter)", fontSize: "var(--fs-1)" }}>Aún no hay boletines publicados.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map(b => (
+            <div key={b.id} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>{b.titulo}</span>
+                <span style={{ fontSize: "var(--fs-xs)", padding: "1px 7px", borderRadius: 20, background: b.publicado ? "var(--exito-bg)" : "var(--fondo-suave)", color: b.publicado ? "var(--exito)" : "var(--texto-sec)" }}>{b.publicado ? "publicado" : "oculto"}</span>
+                <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginLeft: "auto" }}>{new Date(b.fecha_creacion).toLocaleDateString("es-CL")}</span>
+              </div>
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 8 }}>{b.contenido}</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => togglePublicado(b)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 6, cursor: "pointer" }}>{b.publicado ? "Ocultar" : "Publicar"}</button>
+                <button onClick={() => eliminar(b)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", background: "none", color: "var(--peligro)", border: "0.5px solid var(--peligro)", borderRadius: 6, cursor: "pointer" }}>Eliminar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Buzón de feedback: botón flotante siempre accesible ───
 // Cualquier usuario puede enviar comentarios, sugerencias o reportar problemas,
 // con una foto opcional. El admin los revisa en su panel de Cuentas.
@@ -3629,13 +3770,31 @@ function FeedbackAdmin() {
   const [cargando, setCargando] = useState(true);
   const [filtro, setFiltro] = useState("nuevo");
   const [urls, setUrls] = useState({});
+  const [errorCarga, setErrorCarga] = useState("");
 
   const cargar = async () => {
-    setCargando(true);
+    setCargando(true); setErrorCarga("");
     try {
-      const { data } = await supabase.from("feedback").select("*, perfiles:user_id(nombre, correo)").order("fecha_creacion", { ascending: false });
-      setItems(data || []);
-    } catch {}
+      // Intento 1: con join a perfiles (requiere la FK feedback.user_id → perfiles.id)
+      let { data, error } = await supabase.from("feedback").select("*, perfiles:user_id(nombre, correo)").order("fecha_creacion", { ascending: false });
+      if (error) {
+        // Intento 2: sin join (por si falta la FK) y los nombres se buscan aparte
+        const r2 = await supabase.from("feedback").select("*").order("fecha_creacion", { ascending: false });
+        if (r2.error) throw new Error(r2.error.message);
+        data = r2.data || [];
+        const ids = [...new Set(data.map(x => x.user_id).filter(Boolean))];
+        if (ids.length) {
+          const { data: perfs } = await supabase.from("perfiles").select("id, nombre, correo").in("id", ids);
+          const m = new Map((perfs || []).map(pf => [pf.id, pf]));
+          data = data.map(x => ({ ...x, perfiles: m.get(x.user_id) || null }));
+        }
+      }
+      // Mensajes antiguos sin estado (NULL) cuentan como "nuevo" para que no queden invisibles
+      setItems((data || []).map(x => ({ ...x, estado: x.estado || "nuevo" })));
+    } catch (e) {
+      setErrorCarga(e.message || String(e));
+      setItems([]);
+    }
     setCargando(false);
   };
   useEffect(() => { cargar(); }, []);
@@ -3679,6 +3838,12 @@ function FeedbackAdmin() {
         ))}
       </div>
 
+      {errorCarga && (
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", background: "var(--peligro-bg)", padding: "10px 12px", borderRadius: 8, marginBottom: 10, lineHeight: 1.45 }}>
+          ⚠️ No se pudo leer el buzón: {errorCarga}
+          <div style={{ color: "var(--texto-sec)", marginTop: 4 }}>Probable causa: falta la tabla «feedback», sus políticas RLS de admin, o la FK a «perfiles». Ejecuta la migración feedback_fix.sql.</div>
+        </div>
+      )}
       {cargando ? (
         <div style={{ textAlign: "center", padding: 24, color: "var(--texto-ter)", fontSize: "var(--fs-2)" }}>Cargando…</div>
       ) : filtrados.length === 0 ? (
@@ -3841,6 +4006,7 @@ function AdminPanel() {
         </div>
       )}
 
+      <BoletinesAdmin />
       <FeedbackAdmin />
     </div>
   );
@@ -5964,7 +6130,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   });
 
   const [nuevo, setNuevo] = useState({
-    fecha: new Date().toISOString().slice(0,10), hora: "08:00",
+    fecha: hoyLocalISO(), hora: "08:00",
     iniciales: "", ficha_clinica: "", rut: "", edad: "", procedimiento: "", lateralidad: "",
     cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: ""
   });
@@ -6030,7 +6196,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     d.setHours(0, 0, 0, 0);
     return d;
   };
-  const hoyISO = new Date().toISOString().slice(0, 10);
+  const hoyISO = hoyLocalISO();
 
   const finSemana = new Date(lunesSemana);
   finSemana.setDate(finSemana.getDate() + 6);
@@ -6139,14 +6305,14 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
 
   const resetForm = () => {
     setEditId(null);
-    setNuevo({ fecha: new Date().toISOString().slice(0,10), hora: "08:00", iniciales: "", ficha_clinica: "", rut: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: "" });
+    setNuevo({ fecha: hoyLocalISO(), hora: "08:00", iniciales: "", ficha_clinica: "", rut: "", edad: "", procedimiento: "", lateralidad: "", cirujano: currentUser.nombre, primer_ayudante: "", pabellon: "5", estado: "programada", observaciones: "" });
   };
 
   // Cargar una cirugía existente en el formulario para editarla
   const empezarEdicion = (c) => {
     setEditId(c.id);
     setNuevo({
-      fecha: c.fecha || new Date().toISOString().slice(0,10),
+      fecha: c.fecha || hoyLocalISO(),
       hora: (c.hora || "08:00").slice(0,5),
       iniciales: c.iniciales || "",
       ficha_clinica: c.ficha_clinica || "",
@@ -6234,10 +6400,10 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         diagnostico: `Post-operado: ${cirugia.procedimiento}${cirugia.lateralidad ? ` (${cirugia.lateralidad})` : ""}`,
         historia: ingresoLink?.datos?.historia_compuesta || null,
         plan_manejo: null,
-        fecha_ingreso: cirugia.fecha || new Date().toISOString().slice(0, 10),
+        fecha_ingreso: cirugia.fecha || hoyLocalISO(),
         estado: "activo",
         operado: true,
-        cirugias_realizadas: [{ fecha: cirugia.fecha || new Date().toISOString().slice(0, 10), nombre: cirugia.procedimiento }],
+        cirugias_realizadas: [{ fecha: cirugia.fecha || hoyLocalISO(), nombre: cirugia.procedimiento }],
       };
       const rp = await crearPaciente(datosPaciente);
       if (!rp.ok) return uroToast("Cirugía completada, pero no se pudo crear el paciente: " + rp.error);
@@ -6291,7 +6457,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         .map(c => ({
           cirujano_id: currentUser.id,
           equipo_id: esEquipoCtx ? contexto : null,
-          fecha: (c.fecha && /^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) ? c.fecha : new Date().toISOString().slice(0, 10),
+          fecha: (c.fecha && /^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) ? c.fecha : hoyLocalISO(),
           hora: (c.hora && /^\d{1,2}:\d{2}/.test(c.hora)) ? c.hora.slice(0, 5) : "08:00",
           iniciales: (c.nombre || "").slice(0, 100),
           ficha_clinica: c.ficha_clinica ? String(c.ficha_clinica).slice(0, 30) : null,
@@ -6963,7 +7129,7 @@ function PlantillasExamenesModal({ paciente, currentUser, onGuardado, onClose })
   const [modo, setModo] = useState("aplicar"); // aplicar | crear
   const [sel, setSel] = useState([]);          // items marcados al crear
   const [nombre, setNombre] = useState("");
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(hoyLocalISO());
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -7082,7 +7248,7 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
       const b64s = fotos.map(d => d.split(",")[1]);
       const arr = await extraerExamenes(b64s);
       if (!arr.length) { setError("No se detectaron exámenes. Prueba con una foto más nítida."); setFase("capturar"); return; }
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = hoyLocalISO();
       setExtraidos(arr.map(ex => ({ ...ex, fecha_examen: ex.fecha_examen || hoy, incluir: true })));
       setFase("revisar");
     } catch (e) {
@@ -7264,7 +7430,7 @@ function SelectorCarpetaCascada({ value, onChange, carpetas = [] }) {
 }
 
 function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
-  const HOY = new Date().toISOString().slice(0, 10);
+  const HOY = hoyLocalISO();
   const DEFAULTS = {
     nombre: "", ficha: "", rut: "", fnac: "", edad: "", sexo: "", domicilio: "", telefono: "", fingreso: HOY,
     anamnesis: "", plan: "", morbidos: "", farmacos: "", quirurgicos: "", alergias: "NO", tabaco: "", oh: "", familiares: "",
@@ -7770,7 +7936,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
 // ─── Comités oncológicos: mismo formato que Ingresos (carpetas/subcarpetas) ───
 function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
-  const HOY = new Date().toISOString().slice(0, 10);
+  const HOY = hoyLocalISO();
   const D = { fecha: HOY, nombre: "", ficha: "", rut: "", diagnostico: "", presentacion: "", acuerdos: "" };
   const [f, setF] = useState(() => (comiteExistente?.datos ? { ...D, ...comiteExistente.datos } : D));
   const [carpeta, setCarpeta] = useState(comiteExistente?.carpeta || "");
@@ -8545,7 +8711,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   // Form de nuevo paciente
   const [nuevo, setNuevo] = useState({
     iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "M", cama: "", servicio: "",
-    diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10)
+    diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: hoyLocalISO()
   });
 
   // Form de evoluciones
@@ -8564,7 +8730,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [tipoEvo, setTipoEvo] = useState("estructurada");
 
   // Form de exámenes
-  const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
+  const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
   const [paramsLab, setParamsLab] = useState({}); // valores de los parámetros numéricos del lab seleccionado
   const [litiasis, setLitiasis] = useState([]); // lista de litiasis agregadas
   const [formLitiasis, setFormLitiasis] = useState({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
@@ -8829,6 +8995,49 @@ const cargarMiembrosEquipo = async () => {
     const h = (e) => { const v = e.detail === "horizontal" ? "horizontal" : "vertical"; setOrientacionPac(v); };
     window.addEventListener("uro-orient-pac-change", h);
     return () => window.removeEventListener("uro-orient-pac-change", h);
+  }, []);
+
+  // ─── Posición exacta del kanban persistida entre sesiones ───
+  // Al cerrar y reabrir la app, Pacientes vuelve al mismo punto: el scroll
+  // vertical de la página y, en vista horizontal, también el desplazamiento
+  // lateral de la fila de servicios. Se guarda con debounce en localStorage.
+  const posKanbanRestauradaRef = useRef(false);
+  useEffect(() => {
+    if (posKanbanRestauradaRef.current) return;
+    if (!kanbanRef.current || pacientes.length === 0) return; // espera a que el kanban exista con datos
+    posKanbanRestauradaRef.current = true;
+    try {
+      const sv = parseInt(localStorage.getItem("uro_pac_scroll_v") || "0", 10);
+      const sh = parseInt(localStorage.getItem("uro_pac_scroll_h") || "0", 10);
+      requestAnimationFrame(() => {
+        try {
+          const scEl = scrollParent(kanbanRef.current || document.body);
+          if (sv > 0) {
+            if (scEl === document.body || scEl === document.documentElement) window.scrollTo(0, sv);
+            else scEl.scrollTop = sv;
+          }
+          if (sh > 0 && orientacionPac === "horizontal" && kanbanRef.current) kanbanRef.current.scrollLeft = sh;
+        } catch {}
+      });
+    } catch {}
+  }, [pacientes, orientacionPac]);
+  useEffect(() => {
+    let t = null;
+    const guardarPos = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        try {
+          if (!kanbanRef.current) return; // solo en la vista kanban (no con una ficha abierta)
+          const scEl = scrollParent(kanbanRef.current || document.body);
+          const top = (scEl === document.body || scEl === document.documentElement) ? (window.scrollY || 0) : (scEl.scrollTop || 0);
+          localStorage.setItem("uro_pac_scroll_v", String(Math.round(top)));
+          localStorage.setItem("uro_pac_scroll_h", String(Math.round(kanbanRef.current.scrollLeft || 0)));
+        } catch {}
+      }, 250);
+    };
+    // capture:true también captura el scroll de contenedores internos (la fila horizontal)
+    window.addEventListener("scroll", guardarPos, { passive: true, capture: true });
+    return () => { clearTimeout(t); window.removeEventListener("scroll", guardarPos, { capture: true }); };
   }, []);
   const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
@@ -9192,7 +9401,7 @@ const cargarMiembrosEquipo = async () => {
     if (!result.ok) return setError(result.error);
 
     setPacientes(prev => [result.paciente, ...prev]);
-    setNuevo({ iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: new Date().toISOString().slice(0, 10) });
+    setNuevo({ iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: hoyLocalISO() });
     setExtraccionMsg("");
     setVista("lista");
   };
@@ -9271,7 +9480,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     setSeleccionado(result.paciente);
   };
   const abrirFormCirugia = () => {
-    setFormCirugia({ fecha: new Date().toISOString().slice(0,10), nombre: "" });
+    setFormCirugia({ fecha: hoyLocalISO(), nombre: "" });
   };
   const guardarCirugia = async () => {
     if (!formCirugia || !formCirugia.nombre.trim() || !formCirugia.fecha) return;
@@ -9377,7 +9586,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   };
   // Imprime SOLO las evoluciones de hoy, ordenadas cronológicamente, con el logo de UroSearch en la esquina.
   const imprimirEvolucionesDelDiaPDF = async () => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyLocalISO();
     const delDia = (evoluciones || [])
       .filter(e => (e.fecha_evolucion || "") === hoy)
       .sort((a, b) => (a.hora_evolucion || "").localeCompare(b.hora_evolucion || ""));
@@ -9528,7 +9737,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (!result.ok) {
       // Sin conexión: guarda localmente y encola para sincronizar al reconectar.
       encolar("crearEvolucion", { pacienteId: seleccionado.id, autorId: currentUser.id, texto, tipo: tipoEvo });
-      const temp = { id: `tmp_${Date.now()}`, paciente_id: seleccionado.id, autor_id: currentUser.id, texto, tipo: tipoEvo, fecha_evolucion: new Date().toISOString().slice(0,10), hora_evolucion: new Date().toTimeString().slice(0,5), autor: { nombre: currentUser.nombre }, _pendiente: true };
+      const temp = { id: `tmp_${Date.now()}`, paciente_id: seleccionado.id, autor_id: currentUser.id, texto, tipo: tipoEvo, fecha_evolucion: hoyLocalISO(), hora_evolucion: horaLocalHM(), autor: { nombre: currentUser.nombre }, _pendiente: true };
       setEvoluciones(prev => [temp, ...prev]);
     } else {
       setEvoluciones(prev => [result.evolucion, ...prev]);
@@ -9652,7 +9861,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     if (evoResult.ok) setEvoluciones(prev => [evoResult.evolucion, ...prev]);
     else encolar("crearEvolucion", { pacienteId: seleccionado.id, autorId: currentUser.id, texto: textoEvo, tipo: "examen" });
 
-    setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: new Date().toISOString().slice(0, 10), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
+    setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
     setParamsLab({});
     setLitiasis([]);
     setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
@@ -12623,6 +12832,7 @@ if (!currentUser) {
     <div style={{fontFamily:"var(--font-sans)",height:"100dvh",minHeight:"100dvh",display:"flex",flexDirection:"column",overflow:"hidden",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",paddingBottom:"env(safe-area-inset-bottom)",boxSizing:"border-box",overscrollBehavior:"none"}}>
       <OfflineBanner/>
       {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
+      {!bloqueado && <BoletinModal currentUser={currentUser} />}
       {!bloqueado && <BotonFeedback currentUser={currentUser} tabActual={tab}/>}
       <UroDialogHost/>
       {recuperandoPassword && <NuevaPasswordModal onClose={()=>setRecuperandoPassword(false)}/>}
