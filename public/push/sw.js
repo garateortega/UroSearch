@@ -3,15 +3,49 @@
 // Ubicación: public/push/sw.js  (se sirve como /push/sw.js, scope /push/)
 //
 // Este archivo decide CÓMO se ve la notificación en el celular. El ícono
-// grande siempre es la cara de Uros y el badge (ícono chico monocromo del
-// status bar) su silueta — sin importar qué mande el servidor.
+// grande siempre es la CARA REDONDA de Uros y el badge (ícono chico
+// monocromo del status bar) su silueta — sin importar qué mande el
+// servidor: si el payload trae icon/badge propios, se ignoran.
 // ============================================================
 
-// Íconos fijos: la cara de Uros. Si el payload trae otro icon/badge, se ignora.
-const ICONO = "/uros/cabeza-192.png";        // imagen grande de la notificación
-const BADGE = "/uros/cabeza-badge-72.png";   // ícono chico (se tiñe monocromo)
+// Candidatos de ícono, en orden de preferencia. Se usa el primero que
+// exista realmente en el sitio; así el ícono no desaparece si el archivo
+// se llama distinto de lo esperado (esa era la causa de que saliera la
+// campana genérica de Android en vez de la cara de Uros).
+const CANDIDATOS_ICONO = [
+  "/uros/cabeza-192.png",
+  "/uros/cabeza.png",
+  "/uros/cabeza-192.webp",
+  "/uros/cabeza.webp",
+  "/icons/icon-192.png",
+];
+const CANDIDATOS_BADGE = [
+  "/uros/cabeza-badge-72.png",
+  "/icons/badge-72.png",
+  "/uros/cabeza-72.png",
+  "/uros/cabeza.png",
+];
 
-self.addEventListener("install", (event) => {
+// Se resuelve una sola vez por ciclo de vida del SW y se recuerda.
+let iconoResuelto = null;
+let badgeResuelto = null;
+
+async function existe(url) {
+  try {
+    const r = await fetch(url, { method: "GET", cache: "force-cache" });
+    return r && r.ok;
+  } catch { return false; }
+}
+
+async function primeroQueExista(lista, cacheado) {
+  if (cacheado) return cacheado;
+  for (const url of lista) {
+    if (await existe(url)) return url;
+  }
+  return lista[0]; // si ninguno responde, se intenta igual con el preferido
+}
+
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -26,17 +60,22 @@ self.addEventListener("push", (event) => {
   catch { data = { title: "UroSearch", body: event.data ? event.data.text() : "" }; }
 
   const titulo = data.title || "UroSearch";
-  const opciones = {
-    body: data.body || "",
-    icon: ICONO,           // ← siempre la cara de Uros
-    badge: BADGE,          // ← siempre la silueta de Uros
-    vibrate: data.vibrate || [60, 40, 60],
-    tag: data.tag || undefined,          // agrupa/reemplaza notificaciones del mismo tipo
-    renotify: !!data.tag,
-    data: { url: data.url || "/", ...(data.data || {}) },
-  };
 
-  event.waitUntil(self.registration.showNotification(titulo, opciones));
+  event.waitUntil((async () => {
+    iconoResuelto = await primeroQueExista(CANDIDATOS_ICONO, iconoResuelto);
+    badgeResuelto = await primeroQueExista(CANDIDATOS_BADGE, badgeResuelto);
+
+    const opciones = {
+      body: data.body || "",
+      icon: iconoResuelto,   // ← siempre la cara de Uros
+      badge: badgeResuelto,  // ← siempre la silueta de Uros
+      vibrate: data.vibrate || [60, 40, 60],
+      tag: data.tag || undefined,          // agrupa/reemplaza notificaciones del mismo tipo
+      renotify: !!data.tag,
+      data: { url: data.url || "/", ...(data.data || {}) },
+    };
+    await self.registration.showNotification(titulo, opciones);
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {

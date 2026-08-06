@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
-import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion } from "./equipos";
+import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion, cancelarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarLogbook } from "./logbook";
 
@@ -159,6 +159,9 @@ Tienes explícita y estrictamente PROHIBIDO emitir diagnósticos de pacientes, r
 REGLA FUNDAMENTAL — FUENTE DE INFORMACIÓN:
 Solo puedes responder consultas clínicas usando la información de la base de conocimiento de UroSearch que se te proporciona en cada consulta. NO debes usar tu conocimiento médico general ni información externa para responder preguntas clínicas o teóricas. Si la base de conocimiento no contiene información relevante para la pregunta, debes indicar claramente que no tienes esa información en tu base, sin inventar ni completar con conocimiento propio. (Esta regla no aplica a las consultas sobre los pacientes o la tabla quirúrgica del propio usuario, que se responden con los datos entregados.)
 
+CONVERSACIÓN:
+Los saludos, agradecimientos y comentarios sociales NO son consultas clínicas: respóndelos de forma natural, breve y cercana, sin exigir documentos de la base y sin agregar información clínica. Cuando aporte, puedes cerrar tu respuesta con UNA pregunta corta de seguimiento (ej: "¿quieres que revisemos el manejo de tu paciente?") o sugerir qué más puedes hacer. Nunca hagas más de una pregunta por respuesta.
+
 Al responder:
 1. Razona como urólogo: directo, clínico, con criterio de especialista.
 2. Cuando la base lo respalde, menciona guías EAU/AUA o evidencia.
@@ -191,6 +194,50 @@ function parsearArrayPreguntasIA(txt) {
     else if (c === "}") { prof--; if (prof === 0 && ini >= 0) { const trozo = clean.slice(ini, i + 1); try { objetos.push(JSON.parse(trozo)); } catch {} ini = -1; } }
   }
   return objetos;
+}
+
+// ─── Detección de charla básica (saludos, gracias, small talk) ───
+// Evita buscar en la base de conocimiento y citar fuentes para un "hola".
+function esCharlaBasica(txt) {
+  const q = (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (!q) return false;
+  if (q.length > 80) return false; // mensajes largos casi siempre son consultas reales
+  const patrones = /^(hola+|holi+|buenas|buenos dias|buenas tardes|buenas noches|hey|hi|hello|que tal|como estas|como andas|como va|q tal|gracias|muchas gracias|mil gracias|te pasaste|genial|perfecto|excelente|buenisimo|ok|okey|ya|dale|listo|bien|muy bien|todo bien|adios|chao+|nos vemos|hasta luego|hasta manana|buen dia|quien eres|que eres|que puedes hacer|que sabes hacer|en que me puedes ayudar|como funciona[s]?|ayuda|help|test|prueba|probando|jaja+|jeje+|uros)([\s!¡?¿.,;:)]+.*)?$/;
+  return patrones.test(q);
+}
+
+// ─── Filtro de relevancia de los fragmentos de la base ───
+// La RPC devuelve hasta 8 chunks aunque el calce sea pobre; aquí se exige que
+// los términos sustantivos de la consulta aparezcan de verdad en el fragmento,
+// para no citar capítulos que solo comparten una palabra suelta.
+const STOP_CHAT = new Set(["para","como","cual","cuales","donde","cuando","sobre","entre","desde","hasta","este","esta","estos","estas","tiene","tienen","hacer","puede","pueden","puedo","segun","cada","tras","pero","porque","tambien","cuanto","cuanta","cuantos","cuantas","dime","dame","quiero","necesito","favor","podrias","puedes","explica","explicame","resume","resumen","informacion","sirve","sirven","tipo","tipos","cosa","cosas","tema","acerca","respecto","manejo","cuadro","caso","casos","mejor","peor","debe","deben","deberia","seria","estan","esta","hay","que","con","por","los","las","del","una","uno","unos","unas"]);
+function terminosConsulta(txt) {
+  const norm = (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return Array.from(new Set(norm.split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !STOP_CHAT.has(w))));
+}
+function filtrarChunksRelevantes(consulta, chunks) {
+  const terms = terminosConsulta(consulta);
+  if (!terms.length) return [];
+  const puntuados = (chunks || []).map(c => {
+    const cont = (((c.titulo || "") + " " + (c.contenido || ""))).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    let hits = 0, score = 0;
+    terms.forEach(t => { if (cont.includes(t)) { hits++; score += t.length; } });
+    return { c, hits, score };
+  });
+  // Con 3+ términos sustantivos se exige que calcen al menos 2; con menos, basta 1.
+  const minHits = terms.length >= 3 ? 2 : 1;
+  return puntuados.filter(s => s.hits >= minHits).sort((a, b) => b.score - a.score).slice(0, 6).map(s => s.c);
+}
+
+// Estilo de ALTO CONTRASTE para los mensajes de confirmación/error de formularios.
+// (Antes salían solo con texto delgado en color claro y costaba verlos.)
+function estiloMsg(ok) {
+  return {
+    fontSize: "var(--fs-1)", fontWeight: 700, padding: "9px 12px", borderRadius: 8, lineHeight: 1.4,
+    background: ok ? "var(--exito-bg)" : "var(--peligro-bg)",
+    color: ok ? "var(--exito)" : "var(--peligro)",
+    border: "1px solid " + (ok ? "var(--exito)" : "var(--peligro)"),
+  };
 }
 
 // Formatea una fecha ISO (YYYY-MM-DD) a dd/mm/aaaa. Deja pasar otros formatos tal cual.
@@ -529,7 +576,7 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
             {campo("Ciudad", "ciudad", "Valdivia")}
             {campo("Región", "region", "Los Ríos")}
           </div>
-          {msg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
+          {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), marginBottom: 10 }}>{msg}</div>}
           <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 4 }}>{guardando ? "Guardando…" : "Guardar perfil"}</button>
 
           {/* ── Seguridad de la cuenta ── */}
@@ -537,9 +584,9 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
             <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 10 }}>🔐 Seguridad de la cuenta</div>
 
             <label style={lbl}>Cambiar contraseña</label>
-            <input type="password" value={segPw1} onChange={e => setSegPw1(e.target.value)} placeholder="Nueva contraseña" style={inp} disabled={segLoading} />
+            <InputPassword estilo={inp} value={segPw1} onChange={e => setSegPw1(e.target.value)} placeholder="Nueva contraseña" disabled={segLoading} />
             <MedidorPassword password={segPw1} />
-            <input type="password" value={segPw2} onChange={e => setSegPw2(e.target.value)} placeholder="Confirmar nueva contraseña" style={inp} disabled={segLoading} />
+            <InputPassword estilo={inp} value={segPw2} onChange={e => setSegPw2(e.target.value)} placeholder="Confirmar nueva contraseña" disabled={segLoading} />
             <button onClick={cambiarPw} disabled={segLoading || !segPw1} style={{ width: "100%", padding: "10px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--primario)", borderRadius: 8, cursor: "pointer", opacity: (segLoading || !segPw1) ? 0.5 : 1, marginBottom: 14 }}>{segLoading ? "Guardando…" : "Actualizar contraseña"}</button>
 
             <label style={lbl}>Cambiar correo de inicio de sesión</label>
@@ -715,7 +762,7 @@ function OnboardingPushModal({ currentUser, onClose }) {
         <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", lineHeight: 1.5, marginBottom: 16 }}>
           Recibe avisos de cirugías, pendientes e interconsultas aunque tengas UroSearch cerrada.
         </div>
-        {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 10 }}>{msg}</div>}
+        {msg && <div style={{ ...estiloMsg(false), marginBottom: 10 }}>{msg}</div>}
         <button onClick={activar} disabled={cargando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: cargando ? "default" : "pointer", opacity: cargando ? 0.6 : 1, marginBottom: 8 }}>{cargando ? "Activando…" : "Activar notificaciones"}</button>
         <button onClick={ahoraNo} disabled={cargando} style={{ width: "100%", padding: 10, fontSize: "var(--fs-2)", background: "none", color: "var(--texto-ter)", border: "none", cursor: "pointer" }}>Ahora no</button>
       </div>
@@ -823,7 +870,7 @@ function SeguridadLock() {
           <button onClick={desactivar} style={{ width: "100%", padding: 9, fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--peligro)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Desactivar bloqueo</button>
         </>
       )}
-      {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginTop: 8 }}>{msg}</div>}
+      {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), marginTop: 8 }}>{msg}</div>}
     </div>
   );
 }
@@ -1044,9 +1091,9 @@ function NuevaPasswordModal({ onClose }) {
       <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: "22px 18px 18px", width: "min(380px, 100%)" }}>
         <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", marginBottom: 4 }}>🔑 Nueva contraseña</div>
         <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginBottom: 14, lineHeight: 1.5 }}>Entraste desde el link de recuperación. Define tu nueva contraseña:</div>
-        <input type="password" autoFocus value={pw1} onChange={e => setPw1(e.target.value)} placeholder="Nueva contraseña" style={inp} disabled={loading} />
+        <InputPassword estilo={inp} autoFocus value={pw1} onChange={e => setPw1(e.target.value)} placeholder="Nueva contraseña" disabled={loading} />
         <MedidorPassword password={pw1} />
-        <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} onKeyDown={e => { if (e.key === "Enter") guardar(); }} placeholder="Confirmar contraseña" style={inp} disabled={loading} />
+        <InputPassword estilo={inp} value={pw2} onChange={e => setPw2(e.target.value)} onKeyDown={e => { if (e.key === "Enter") guardar(); }} placeholder="Confirmar contraseña" disabled={loading} />
         {err && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", background: "var(--peligro-bg)", padding: "8px 10px", borderRadius: 6, marginBottom: 10 }}>{err}</div>}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onClose} disabled={loading} style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>Ahora no</button>
@@ -1492,7 +1539,7 @@ function PrescripcionesPanel({ currentUser }) {
       <label style={lbl}>Escribir de forma libre (una línea por ítem)</label>
       <textarea value={extra} onChange={e => setExtra(e.target.value)} rows={3} placeholder={cat === "medicamentos" ? "Ej: Omeprazol 20 mg — 1 comp en ayunas por 14 días" : "Ej: control con nefrología en 15 días"} style={{ ...inp, resize: "vertical", marginBottom: 12 }} />
 
-      {msg && <div style={{ fontSize: "var(--fs-1)", padding: "8px 10px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? "var(--exito-bg)" : "var(--peligro-bg)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", border: "0.5px solid " + (msg.startsWith("✓") ? "var(--exito-borde)" : "var(--peligro)") }}>{msg}</div>}
+      {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), marginBottom: 10 }}>{msg}</div>}
 
       <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1 }}>{generando ? "Generando…" : "📄 Generar receta en PDF"}</button>
       <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", textAlign: "center", marginTop: 8, lineHeight: 1.4 }}>Los datos del médico salen de tu perfil. La receta lleva la marca de agua de UroSearch.</div>
@@ -2410,10 +2457,51 @@ function ChipsSugeridas({ onPick, disabled }) {
   );
 }
 
-function PortadaChat({ nombre }) {
+// Banco de preguntas predeterminadas de la portada: se muestran 3 al azar y
+// van rotando solas. Tocar una la envía directo al chat.
+const PREGUNTAS_UROS = [
+  "¿Cómo se maneja un cólico renal en urgencias?",
+  "Indicaciones de nefrectomía parcial vs radical",
+  "¿Cuándo pedir biopsia prostática según PSA?",
+  "Manejo de la hematuria macroscópica",
+  "Clasificación de Bosniak en quistes renales",
+  "Tratamiento de la ITU complicada",
+  "¿Qué pacientes tengo hospitalizados hoy?",
+  "¿Qué cirugías tengo esta semana?",
+  "Seguimiento del cáncer de próstata post prostatectomía",
+  "Manejo de litiasis ureteral según tamaño",
+  "Indicaciones de RTU de próstata",
+  "Escala de Clavien-Dindo: resumen",
+  "Estudio de microhematuria persistente",
+  "Manejo del trauma renal según grado",
+  "Vigilancia activa en cáncer de próstata: criterios",
+  "Profilaxis antibiótica en cirugía urológica",
+  "Manejo de la torsión testicular",
+  "BCG en cáncer vesical no músculo-invasor",
+];
+function elegirPreguntas(n = 3, evitar = []) {
+  const pool = PREGUNTAS_UROS.filter(p => !evitar.includes(p));
+  const out = [];
+  const copia = [...pool];
+  while (out.length < n && copia.length) out.push(copia.splice(Math.floor(Math.random() * copia.length), 1)[0]);
+  return out;
+}
+
+function PortadaChat({ nombre, onPregunta }) {
   const movil = useIsMobile();
   // Un saludo al azar, fijo mientras la portada esté montada
   const saludo = useMemo(() => saludoAleatorio(nombre), [nombre]);
+  // 3 preguntas sugeridas que rotan solas cada 12 s (o al tocar ↻)
+  const [preguntas, setPreguntas] = useState(() => elegirPreguntas(3));
+  const [visible, setVisible] = useState(true);
+  const rotar = () => {
+    setVisible(false);
+    setTimeout(() => { setPreguntas(prev => elegirPreguntas(3, prev)); setVisible(true); }, 220);
+  };
+  useEffect(() => {
+    const t = setInterval(rotar, 12000);
+    return () => clearInterval(t);
+  }, []);
   // Y una pose de Uros al azar, para que cada entrada al chat se sienta distinta
   const pose = useMemo(() => {
     const poses = [
@@ -2451,36 +2539,72 @@ function PortadaChat({ nombre }) {
 
   return (
     <div style={{
-      display:"flex",
-      flexDirection: movil ? "column" : "row",
+      display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center",
-      gap: movil ? 4 : 0,
+      gap: movil ? 10 : 16,
       padding: movil ? "12px 12px 8px" : "20px 4px 8px",
       minHeight:"48vh"
     }}>
-      <Uros
-        expresion={pose}
-        size={movil ? 220 : 260}
-        style={ movil
-          ? { order:1, flex:"0 0 auto", width:"auto", maxWidth:"72%", maxHeight:"34vh" }
-          : { order:2, flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh", marginLeft:4 } }
-      />
-
       <div style={{
-        order: movil ? 2 : 1,
-        position:"relative",
-        padding: movil ? "18px 20px" : "26px 30px",
-        borderRadius:"22px",
-        background:"var(--superficie)",
-        border:"1.5px solid var(--borde)",
-        fontSize: movil ? 16 : 22,          // en celular el texto ya no se ve gigante
-        lineHeight:1.5,
-        color:"var(--texto)",
-        maxWidth: movil ? "92%" : 440,
-        boxShadow:"0 10px 28px rgba(37,99,235,.15)"
+        display:"flex",
+        flexDirection: movil ? "column" : "row",
+        alignItems:"center", justifyContent:"center",
+        gap: movil ? 4 : 0,
+        width:"100%",
       }}>
-        {saludo}
-        <div style={bubbleTail} />
+        <Uros
+          expresion={pose}
+          size={movil ? 220 : 260}
+          style={ movil
+            ? { order:1, flex:"0 0 auto", width:"auto", maxWidth:"72%", maxHeight:"34vh" }
+            : { order:2, flex:"0 0 auto", width:"auto", maxWidth:"46%", maxHeight:"46vh", marginLeft:4 } }
+        />
+
+        <div style={{
+          order: movil ? 2 : 1,
+          position:"relative",
+          padding: movil ? "18px 20px" : "26px 30px",
+          borderRadius:"22px",
+          background:"var(--superficie)",
+          border:"1.5px solid var(--borde)",
+          fontSize: movil ? 16 : 22,          // en celular el texto ya no se ve gigante
+          lineHeight:1.5,
+          color:"var(--texto)",
+          maxWidth: movil ? "92%" : 440,
+          boxShadow:"0 10px 28px rgba(37,99,235,.15)"
+        }}>
+          {saludo}
+          <div style={bubbleTail} />
+        </div>
+      </div>
+
+      {/* Preguntas predeterminadas rotativas: 3 al azar, cambian solas cada 12 s */}
+      <div style={{
+        width:"100%", maxWidth: movil ? 420 : 620,
+        display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+        opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(4px)",
+        transition:"opacity .22s ease, transform .22s ease",
+      }}>
+        <div style={{fontSize:"var(--fs-0)", color:"var(--texto-ter)", display:"flex", alignItems:"center", gap:6}}>
+          Prueba preguntarme
+          <button onClick={rotar} title="Ver otras preguntas" aria-label="Ver otras preguntas" style={{background:"none", border:"none", color:"var(--primario)", cursor:"pointer", fontSize:"var(--fs-2)", lineHeight:1, padding:"2px 4px"}}>↻</button>
+        </div>
+        <div style={{display:"flex", flexDirection: movil ? "column" : "row", flexWrap: movil ? "nowrap" : "wrap", justifyContent:"center", gap:8, width:"100%"}}>
+          {preguntas.map(p => (
+            <button
+              key={p}
+              onClick={() => onPregunta && onPregunta(p)}
+              style={{
+                padding: movil ? "10px 14px" : "9px 14px",
+                fontSize:"var(--fs-1)", fontWeight:500,
+                background:"var(--fondo-suave)", color:"var(--primario)",
+                border:"0.5px solid var(--borde)", borderRadius:14,
+                cursor:"pointer", lineHeight:1.35, textAlign: movil ? "left" : "center",
+                width: movil ? "100%" : "auto", maxWidth: movil ? "none" : 290,
+              }}
+            >{p}</button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -3384,6 +3508,41 @@ function TutorialInstalacion({ onClose }) {
   );
 }
 
+// ─── Campo de contraseña con botón de ojo para mostrar/ocultar la clave ───
+function InputPassword({ value, onChange, placeholder, onKeyDown, disabled, estilo, autoFocus }) {
+  const [ver, setVer] = useState(false);
+  return (
+    <div style={{ position: "relative", marginBottom: 10 }}>
+      <input
+        type={ver ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoFocus={autoFocus}
+        style={{ ...(estilo || inputStyle), marginBottom: 0, paddingRight: 44 }}
+      />
+      <button
+        type="button"
+        onClick={() => setVer(v => !v)}
+        tabIndex={-1}
+        aria-label={ver ? "Ocultar contraseña" : "Mostrar contraseña"}
+        title={ver ? "Ocultar contraseña" : "Mostrar contraseña"}
+        style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: "6px 8px", color: "var(--texto-ter)", display: "flex", alignItems: "center", lineHeight: 1 }}
+      >
+        {ver ? (
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        ) : (
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
 function AuthScreen({ onLogin }) {
   const [view, setView] = useState("welcome");
   const [form, setForm] = useState({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
@@ -3490,7 +3649,7 @@ function AuthScreen({ onLogin }) {
         <label style={labelStyle}>Correo o RUT</label>
         <input type="text" autoCapitalize="none" autoCorrect="off" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl  o  12.345.678-9" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Contraseña</label>
-        <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" style={inputStyle} disabled={loading}/>
+        <InputPassword value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" disabled={loading}/>
         {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
         <button onClick={handleLogin} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
           {loading ? "Ingresando..." : "Ingresar"}
@@ -3551,10 +3710,10 @@ function AuthScreen({ onLogin }) {
       <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile} style={{display:"none"}} disabled={loading}/>
       <button onClick={()=>fileRef.current?.click()} disabled={loading} style={{width:"100%",padding:"10px",fontSize:"var(--fs-2)",background:"var(--superficie)",color:"var(--primario)",border:"1px dashed var(--primario)",borderRadius:8,cursor:loading?"default":"pointer",marginBottom:10,textAlign:"left",opacity:loading?0.6:1}}>📎 {form.documentoNombre || "Seleccionar archivo..."}</button>
       <label style={labelStyle}>Contraseña</label>
-      <input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 8 caracteres, letras y números" style={inputStyle} disabled={loading}/>
+      <InputPassword value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 8 caracteres, letras y números" disabled={loading}/>
       <MedidorPassword password={form.password}/>
       <label style={labelStyle}>Confirmar contraseña</label>
-      <input type="password" value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" style={inputStyle} disabled={loading}/>
+      <InputPassword value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleRegister();}} placeholder="Repite tu contraseña" disabled={loading}/>
       {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
       {info && <div style={{fontSize:"var(--fs-1)",color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
       <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:10,marginTop:4}}>
@@ -5582,6 +5741,14 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
     await recargarMiembros(seleccionado.id);
   };
 
+  // Cancelar una invitación que envié (si la persona nunca respondió)
+  const cancelarInv = async (inv) => {
+    if (!(await uroConfirm(`¿Cancelar la invitación a ${inv.perfiles?.nombre || "este usuario"}?`))) return;
+    const r = await cancelarInvitacion(inv.id);
+    if (!r.ok) return uroToast("Error: " + r.error);
+    await recargarMiembros(seleccionado.id);
+  };
+
   const expulsar = async (userId) => {
     if (!(await uroConfirm("¿Expulsar a este miembro del equipo?"))) return;
     const result = await expulsarMiembro(seleccionado.id, userId);
@@ -5680,14 +5847,15 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
               <input value={invitarCorreo} onChange={e=>setInvitarCorreo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")invitar();}} placeholder="correo del usuario" style={{flex:1,padding:"9px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",outline:"none"}} disabled={loading}/>
               <button onClick={invitar} disabled={!invitarCorreo.trim() || loading} style={{padding:"9px 14px",fontSize:"var(--fs-2)",fontWeight:500,background:invitarCorreo.trim() && !loading ?"var(--primario)":"var(--borde)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>{loading ? "..." : "Invitar"}</button>
             </div>
-            {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginTop:8}}>{error}</div>}
+            {error && <div style={{...estiloMsg(false),marginTop:8}}>{error}</div>}
 
             {invitacionesEquipo.length > 0 && (
               <div style={{marginTop:12}}>
                 <div style={{fontSize:"var(--fs-0)",fontWeight:500,color:"var(--texto-ter)",marginBottom:4}}>Invitaciones pendientes</div>
                 {invitacionesEquipo.map(i => (
-                  <div key={i.id} style={{padding:"6px 10px",background:"var(--alerta-bg)",borderRadius:6,fontSize:"var(--fs-0)",color:"var(--alerta)",marginBottom:4}}>
-                    📨 {i.perfiles?.nombre} ({i.perfiles?.correo})
+                  <div key={i.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"var(--alerta-bg)",borderRadius:6,fontSize:"var(--fs-0)",color:"var(--alerta)",marginBottom:4}}>
+                    <span style={{flex:1,minWidth:0}}>📨 {i.perfiles?.nombre} ({i.perfiles?.correo})</span>
+                    <button onClick={()=>cancelarInv(i)} style={{flexShrink:0,background:"none",border:"none",color:"var(--peligro)",fontSize:"var(--fs-0)",fontWeight:700,cursor:"pointer",padding:"2px 4px"}}>Cancelar</button>
                   </div>
                 ))}
               </div>
@@ -7386,7 +7554,7 @@ function PlantillasExamenesModal({ paciente, currentUser, onGuardado, onClose })
           </>
         )}
 
-        {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", marginTop: 10 }}>{msg}</div>}
+        {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), marginTop: 10 }}>{msg}</div>}
       </div>
     </div>
   );
@@ -8069,7 +8237,8 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Genitales", "genitales")}{campo("T. rectal", "rectal")}</div>
         {campo("Hipótesis diagnóstica", "hipotesis", true)}
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
-        {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        <button type="button" onClick={() => { if (!confirm("¿Borrar TODOS los campos del ingreso y partir de cero?")) return; setF({ ...DEFAULTS, fingreso: new Date().toISOString().slice(0, 10) }); setCarpeta(""); setMsg(""); }} style={{ width: "100%", padding: "9px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: "var(--peligro)", border: "1px solid var(--peligro)", borderRadius: 8, cursor: "pointer", margin: "2px 0 8px" }}>🧹 Limpiar todos los campos</button>
+        {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), margin: "4px 0 8px" }}>{msg}</div>}
         {onGuardarIngreso && (
           <div style={{ marginBottom: 8 }}>
             <label style={lbl}>Carpeta</label>
@@ -8137,7 +8306,7 @@ function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
         <textarea rows={4} value={f.acuerdos} onChange={e => set("acuerdos", e.target.value)} style={{ ...inp, resize: "vertical" }} />
         <label style={lbl}>Carpeta</label>
         <div style={{ marginBottom: 8 }}><SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} /></div>
-        {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", marginBottom: 8 }}>{msg}</div>}
+        {msg && <div style={{ ...estiloMsg(false), marginBottom: 8 }}>{msg}</div>}
         <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
       </div>
     </div>
@@ -8649,7 +8818,7 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
           <input value={reaccionTipo} onChange={e => setReaccionTipo(e.target.value)} placeholder="Tipo de reacción" style={inp} />
         )}
 
-        {msg && <div style={{ fontSize: "var(--fs-1)", color: msg.startsWith("✓") ? "var(--exito)" : "var(--peligro)", margin: "4px 0 8px" }}>{msg}</div>}
+        {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), margin: "4px 0 8px" }}>{msg}</div>}
         <button onClick={generarPDF} disabled={generando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: generando ? "default" : "pointer", opacity: generando ? 0.6 : 1, marginTop: 4 }}>{generando ? "Generando…" : "📄 Generar orden en PDF"}</button>
       </div>
     </div>
@@ -8856,6 +9025,12 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipo
   const [filtroServicio, setFiltroServicio] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("activo");
   const [error, setError] = useState("");
+  // Toast de confirmación al cambiar el estado (alta/reactivación) con "Deshacer"
+  const [toastEstado, setToastEstado] = useState(null); // { texto, deshacer }
+  const toastTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+  // Buscador de la lista de pacientes dados de alta
+  const [busquedaAlta, setBusquedaAlta] = useState("");
   const [editandoFicha, setEditandoFicha] = useState(false);
   const [otroAntecedente, setOtroAntecedente] = useState("");
   const [editandoHistoria, setEditandoHistoria] = useState(false);
@@ -9096,6 +9271,18 @@ const cargarMiembrosEquipo = async () => {
     }
     return true;
   });
+
+  // Pacientes dados de alta: listado simple ordenado por fecha de alta (más reciente primero)
+  const altasFiltradas = useMemo(() => {
+    if (filtroEstado !== "alta") return [];
+    const q = busquedaAlta.trim().toLowerCase();
+    const clave = p => String(p.fecha_alta || (p.updated_at || "").slice(0, 10) || p.fecha_ingreso || "");
+    return pacientes
+      .filter(p => p.estado === "alta")
+      .filter(p => filtroServicio === "todos" || p.servicio === filtroServicio)
+      .filter(p => !q || [p.iniciales, p.rut, p.ficha_clinica, p.diagnostico, p.servicio].some(v => (v || "").toLowerCase().includes(q)))
+      .sort((a, b) => clave(b).localeCompare(clave(a)));
+  }, [pacientes, filtroEstado, filtroServicio, busquedaAlta]);
 
   // Estados disponibles en el menú (valor, etiqueta)
   const ESTADOS_PACIENTE = [
@@ -9576,10 +9763,38 @@ const cargarMiembrosEquipo = async () => {
   };
 
   const cambiarEstado = async (paciente, nuevoEstado) => {
-    const result = await actualizarPaciente(paciente.id, { estado: nuevoEstado });
+    // La fecha de alta acompaña al estado: se fija al dar de alta y se limpia al reactivar.
+    const previo = { estado: paciente.estado, fecha_alta: paciente.fecha_alta ?? null };
+    const cambios = nuevoEstado === "alta"
+      ? { estado: "alta", fecha_alta: new Date().toISOString().slice(0, 10) }
+      : { estado: nuevoEstado, fecha_alta: null };
+    let result = await actualizarPaciente(paciente.id, cambios);
+    // Si la columna fecha_alta aún no existe en la BD, se reintenta solo con el estado.
+    if (!result.ok && /fecha_alta/i.test(result.error || "")) {
+      result = await actualizarPaciente(paciente.id, { estado: nuevoEstado });
+    }
     if (!result.ok) return uroToast("Error: " + result.error);
     setPacientes(prev => prev.map(p => p.id === paciente.id ? result.paciente : p));
-    if (seleccionado?.id === paciente.id) setSeleccionado(result.paciente);
+    setSeleccionado(prev => prev?.id === paciente.id ? result.paciente : prev);
+
+    // Toast persistente unos segundos con opción de deshacer
+    clearTimeout(toastTimerRef.current);
+    setToastEstado({
+      texto: nuevoEstado === "alta"
+        ? `✅ ${paciente.iniciales} dado de alta`
+        : `↩️ ${paciente.iniciales} reactivado (hospitalizado)`,
+      deshacer: async () => {
+        clearTimeout(toastTimerRef.current);
+        setToastEstado(null);
+        let r = await actualizarPaciente(paciente.id, previo);
+        if (!r.ok && /fecha_alta/i.test(r.error || "")) r = await actualizarPaciente(paciente.id, { estado: previo.estado });
+        if (!r.ok) return uroToast("Error al deshacer: " + r.error);
+        setPacientes(prev => prev.map(p => p.id === paciente.id ? r.paciente : p));
+        setSeleccionado(prev => prev?.id === paciente.id ? r.paciente : prev);
+      },
+    });
+    toastTimerRef.current = setTimeout(() => setToastEstado(null), 6000);
+
     // Avisar a los encargados cuando se da de alta
     if (nuevoEstado === "alta" && Array.isArray(paciente.encargados)) {
       paciente.encargados.filter(id => id !== currentUser.id).forEach(id => {
@@ -9587,6 +9802,17 @@ const cargarMiembrosEquipo = async () => {
       });
     }
   };
+
+  // Elemento visual del toast (se incluye en la lista y en la ficha)
+  const toastEstadoEl = toastEstado ? (
+    <div style={{position:"fixed", left:0, right:0, bottom:"calc(18px + env(safe-area-inset-bottom, 0px))", zIndex:220, display:"flex", justifyContent:"center", pointerEvents:"none", padding:"0 14px"}}>
+      <div style={{pointerEvents:"auto", display:"flex", alignItems:"center", gap:12, maxWidth:520, width:"100%", background:"var(--navy-fijo)", color:"#fff", border:"1px solid var(--primario)", borderRadius:12, padding:"12px 16px", boxShadow:"0 10px 28px rgba(0,0,0,0.4)", fontSize:"var(--fs-2)", fontWeight:600}}>
+        <span style={{flex:1, minWidth:0}}>{toastEstado.texto}</span>
+        <button onClick={toastEstado.deshacer} style={{flexShrink:0, background:"var(--primario)", color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:"var(--fs-1)", fontWeight:700, cursor:"pointer"}}>Deshacer</button>
+        <button onClick={()=>{clearTimeout(toastTimerRef.current); setToastEstado(null);}} aria-label="Cerrar aviso" style={{flexShrink:0, background:"none", border:"none", color:"rgba(255,255,255,0.75)", fontSize:15, cursor:"pointer", padding:"2px 4px", lineHeight:1}}>✕</button>
+      </div>
+    </div>
+  ) : null;
   const iniciarEdicion = () => {
   setEditForm({
     iniciales: seleccionado.iniciales || "",
@@ -9717,6 +9943,30 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     } catch {}
     cargarPendientesPaciente(paciente.id);
   };
+
+  // ─── Persistencia de lo que se está viendo ───
+  // Si se cierra o minimiza la app mirando la ficha de un paciente, al volver se
+  // restaura ese mismo paciente (antes se perdía y quedaba la lista por defecto).
+  const claveVistaPac = `uro_pac_vista:${contexto || "personal"}`;
+  const vistaRestauradaRef = useRef(false);
+  useEffect(() => { vistaRestauradaRef.current = false; }, [contexto]);
+  useEffect(() => {
+    try {
+      if (vista === "ficha" && seleccionado?.id) localStorage.setItem(claveVistaPac, JSON.stringify({ vista: "ficha", id: seleccionado.id }));
+      else if (vista === "lista") localStorage.setItem(claveVistaPac, JSON.stringify({ vista: "lista" }));
+    } catch {}
+  }, [vista, seleccionado?.id, claveVistaPac]);
+  useEffect(() => {
+    if (vistaRestauradaRef.current || vista !== "lista" || !pacientes.length) return;
+    vistaRestauradaRef.current = true;
+    try {
+      const g = JSON.parse(localStorage.getItem(claveVistaPac) || "null");
+      if (g?.vista === "ficha" && g.id) {
+        const p = pacientes.find(x => x.id === g.id);
+        if (p) abrirFicha(p);
+      }
+    } catch {}
+  }, [pacientes]);
 
   const imprimirNota = async (ev) => {
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
@@ -10364,6 +10614,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     const esCreador = seleccionado.medico_id === currentUser.id;
     return (
       <div style={{padding:"16px",overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        {toastEstadoEl}
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
         {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setPlantillasAbierto(false)} />}
@@ -11239,6 +11490,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   return (
     <div ref={listaScrollElRef} onScroll={e=>{listaScrollPosRef.current = e.currentTarget.scrollTop;}} style={{padding:"16px",overflowY:"auto"}}>
 
+      {toastEstadoEl}
+
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {!soloLectura && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap",position:"relative"}}>
@@ -11418,15 +11671,55 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Cargando pacientes...</div>
       )}
 
-      {!loadingPacientes && pacientesFiltrados.length === 0 && (
+      {!loadingPacientes && filtroEstado !== "alta" && pacientesFiltrados.length === 0 && (
         <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
           No hay pacientes en este contexto.<br/>
           {soloLectura ? "" : (esEquipo ? "Toca de nuevo la pestaña para agregar con + Nuevo" : "Toca de nuevo la pestaña y crea tu primer paciente con + Nuevo")}
         </div>
       )}
 
+      {/* Vista simple de dados de alta: listado ordenado por fecha de alta + buscador */}
+      {!loadingPacientes && filtroEstado === "alta" && (
+        <div style={{maxWidth:720, margin:"0 auto", width:"100%"}}>
+          <input
+            value={busquedaAlta}
+            onChange={e=>setBusquedaAlta(e.target.value)}
+            placeholder="🔍 Buscar por iniciales, RUT, ficha, diagnóstico o servicio…"
+            style={{...inputStyle, marginBottom:8}}
+          />
+          <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8}}>
+            {altasFiltradas.length} paciente{altasFiltradas.length===1?"":"s"} · ordenados por fecha de alta
+          </div>
+          {altasFiltradas.length === 0 ? (
+            <div style={{textAlign:"center",padding:"30px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
+              {busquedaAlta.trim() ? "Ningún paciente dado de alta coincide con la búsqueda." : "Aún no hay pacientes dados de alta en este contexto."}
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {altasFiltradas.map(p => (
+                <div key={p.id} onClick={()=>abrirFicha(p)} style={{display:"flex",alignItems:"center",gap:10,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderLeft:"3px solid var(--neutro)",borderRadius:8,padding:"10px 12px",cursor:"pointer"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {p.iniciales}
+                      <span style={{fontWeight:700,color:p.sexo==="F"?"var(--chip-rosa)":"var(--primario)"}}>{p.sexo==="F"?"♀":"♂"}</span>
+                      <span style={{fontWeight:400,color:"var(--texto-sec)",fontSize:"var(--fs-1)"}}>{p.edad ? `${p.edad} años` : ""}</span>
+                      {p.operado && <span title="Operado">🔪</span>}
+                    </div>
+                    <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.diagnostico || "—"}</div>
+                  </div>
+                  <div style={{flexShrink:0,textAlign:"right"}}>
+                    <div style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--texto-sec)"}}>Alta: {fmtFecha(p.fecha_alta || (p.updated_at || "").slice(0,10))}</div>
+                    <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)"}}>{p.servicio || ""}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Vista kanban por servicio: se reordena dejando presionado el título y arrastrando */}
-      {!loadingPacientes && pacientesFiltrados.length > 0 && (
+      {!loadingPacientes && filtroEstado !== "alta" && pacientesFiltrados.length > 0 && (
         <>
           <div ref={kanbanRef} style={orientacionPac==="horizontal"
             ? {display:"flex",flexDirection:"row",flexWrap:"nowrap",gap:12,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:8,position:"relative",touchAction:dragCol?"none":"auto"}
@@ -11971,6 +12264,10 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   const appMovil = useIsMobile();  // ocultar el header solo tiene sentido en celular
   const [headerOculto, setHeaderOculto] = useState(false); // se oculta al hacer scroll hacia abajo
   const scrollRef = useRef({ ultimo: 0, acum: 0, bloqueoHasta: 0 });
+  // Al cambiar de pestaña el header vuelve a mostrarse siempre: si la vista nueva
+  // no tiene scroll, no habría eventos de scroll que lo hicieran reaparecer y el
+  // menú quedaba inaccesible hasta cerrar la app.
+  useEffect(() => { setHeaderOculto(false); scrollRef.current.acum = 0; }, [tab]);
   // Detección estable: hay que acumular movimiento sostenido en una dirección para
   // cambiar de estado (evita el parpadeo por el "salto" del contenido al colapsar).
   const onScrollContenido = (e) => {
@@ -12007,6 +12304,7 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [perfilOpen, setPerfilOpen] = useState(false); // modal "Mi perfil"
   const bottomRef = useRef(null);
+  const chatScrollRef = useRef(null); // contenedor scrolleable de los mensajes del chat
 
   useEffect(() => {
   try { localStorage.setItem("uro_tab", tab); }
@@ -12162,7 +12460,15 @@ useEffect(() => {
   pushActivo().then((activo) => { if (!activo && !cancelado) setMostrarOnboardingPush(true); });
   return () => { cancelado = true; };
 }, [currentUser]);
-  useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, loading]);
+  // Autoscroll SOLO dentro del contenedor del chat. scrollIntoView desplazaba
+  // también los contenedores ancestros (overflow:hidden) en Safari/iOS, dejando
+  // la vista corrida y el chat "bloqueado" sin poder subir.
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    try { el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }); }
+    catch { el.scrollTop = el.scrollHeight; }
+  }, [messages, loading]);
 
   const isAdmin = currentUser?.rol === "admin";
   const [pendientesCount, setPendientesCount] = useState(0);
@@ -12558,6 +12864,16 @@ if (videosResult.ok) {
   setInput(""); 
   setLoading(true);
   
+  // ── Detección de intención ANTES de todo ──────────────────────
+  // Permite saltarse búsquedas innecesarias (respuesta más rápida) y no citar
+  // la base de conocimiento cuando no corresponde (saludos, pacientes, tabla).
+  const esCharla = esCharlaBasica(txt);
+  const consultaCirugias = buscarCirugiasRelevantes(txt);
+  const consultaPacientes = buscarPacientesRelevantes(txt);
+  const necesitaBase = !esCharla && !consultaCirugias && !consultaPacientes;
+  // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
+  const busquedaPromise = necesitaBase ? buscarChunks(txt, 8) : Promise.resolve({ ok: true, chunks: [] });
+  
   // ============================================
   // PERSISTENCIA: obtener sesión actual de Supabase
   // ============================================
@@ -12588,22 +12904,22 @@ if (videosResult.ok) {
     }
   }
   
-  // Guardar mensaje del usuario en Supabase
+  // Guardar mensaje del usuario en Supabase (sin bloquear la respuesta de la IA)
   if (conversacionId && sesionActiva) {
-    await agregarMensaje(conversacionId, sesionActiva.user.id, "usuario", txt, modo);
+    agregarMensaje(conversacionId, sesionActiva.user.id, "usuario", txt, modo).catch(() => {});
   }
   
   // ============================================
   // LÓGICA ORIGINAL DEL CHAT
   // ============================================
-  const videosRelevantes = buscarVideosRelevantes(txt);
-  // Buscar fragmentos relevantes DEL LADO DE LA BASE (entre todos los chunks)
+  const videosRelevantes = esCharla ? [] : buscarVideosRelevantes(txt);
+  // Fragmentos de la base (la búsqueda ya venía corriendo en paralelo).
+  // Se filtran por relevancia real: si el calce con la consulta es pobre,
+  // no se usan ni se citan.
   let docsRelevantes = [];
-  const busqueda = await buscarChunks(txt, 8);
-  if (busqueda.ok) docsRelevantes = busqueda.chunks;
+  const busqueda = await busquedaPromise;
+  if (busqueda.ok) docsRelevantes = filtrarChunksRelevantes(txt, busqueda.chunks || []);
   const tieneFuentes = docsRelevantes.length > 0;
-  const consultaCirugias = buscarCirugiasRelevantes(txt);
-  const consultaPacientes = buscarPacientesRelevantes(txt);
   // Contexto del logbook quirúrgico si la pregunta lo amerita
   let ctxLogbook = "";
   {
@@ -12670,7 +12986,9 @@ if (videosResult.ok) {
       ? "\n\nMODO PRECISA: Responde en máximo 3-4 líneas (aproximadamente 50 palabras). Sé estricto con esta extensión: solo lo esencial, directo al grano, sin introducción ni rodeos. NO te extiendas."
       : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
     let ctx = "";
-    if (usarConocimientoPropio) {
+    if (esCharla) {
+      ctx += "\n\n=== CONVERSACIÓN CASUAL ===\nEl mensaje del usuario es un saludo, agradecimiento o conversación social, NO una consulta clínica. Responde breve (1-3 frases), cercano y natural, como Uros. Puedes cerrar con UNA pregunta corta de seguimiento u ofrecer ayuda concreta (revisar sus pacientes hospitalizados, su tabla quirúrgica de la semana, o resolver una duda clínica). NO agregues información clínica, NO digas que no encontraste información en la base y NO menciones documentos.";
+    } else if (usarConocimientoPropio) {
       // El usuario autorizó explícitamente responder con conocimiento propio
       ctx += "\n\n=== RESPUESTA CON CONOCIMIENTO PROPIO (AUTORIZADA POR EL USUARIO) ===\n"
         + "El usuario NO encontró la información en la base de conocimiento de UroSearch y te ha autorizado explícitamente a responder con tu propio conocimiento clínico. "
@@ -12683,7 +13001,7 @@ if (videosResult.ok) {
       // El usuario rechazó la oferta de conocimiento propio
       ctx += "\n\n=== EL USUARIO DECLINÓ ===\nEl usuario NO quiere que uses conocimiento fuera de la base. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar información clínica: \"De acuerdo, me limito a la base de conocimiento de UroSearch. ¿Puedo ayudarte con otra consulta?\"";
     } else if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,8000)}`).join("\n\n");
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,6500)}`).join("\n\n");
     } else if (!consultaCirugias && !consultaPacientes) {
       if ((config.chatModo || "verificada") === "general") {
         // Configuración "conocimiento general": responde directo con conocimiento
@@ -12752,7 +13070,7 @@ if (videosResult.ok) {
     const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
     // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
-    if (!usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && (config.chatModo || "verificada") !== "general") {
+    if (!esCharla && !usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && (config.chatModo || "verificada") !== "general") {
       respuesta.ofrecioConocimiento = true;
     }
     if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
@@ -12925,6 +13243,17 @@ if (!currentUser) {
     if (!s0) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s0.x, dy = t.clientY - s0.y;
+
+    // ── Rescate del header oculto ──
+    // Si el contenido está en un tope (o no scrollea), el navegador no emite
+    // eventos de scroll y el header nunca reaparecería. Un arrastre claramente
+    // vertical hacia abajo lo muestra siempre, sin depender del scroll.
+    if (headerOculto && dy > 70 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+      setHeaderOculto(false);
+      scrollRef.current.acum = 0;
+      scrollRef.current.bloqueoHasta = Date.now() + 350;
+    }
+
     if (Date.now() - s0.t > 600) return;
 
     // ── Deslizar hacia ABAJO estando arriba del todo: abre el submenú de la pestaña ──
@@ -13245,7 +13574,7 @@ if (!currentUser) {
     )}
   </div>
 )}
-<div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",minHeight:0}}>
+<div ref={chatScrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 16px 8px",minHeight:0}}>
   {loadingConversaciones && (
     <div style={{textAlign:"center",padding:"40px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>
       Cargando conversación...
@@ -13255,7 +13584,7 @@ if (!currentUser) {
 
 {!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
   <>
-    <PortadaChat nombre={currentUser?.nombre} />
+    <PortadaChat nombre={currentUser?.nombre} onPregunta={(q)=>sendMsg(q)} />
     <ChipsSugeridas onPick={(q) => sendMsg(q)} disabled={loading} />
   </>
 )}
