@@ -226,7 +226,7 @@ function filtrarChunksRelevantes(consulta, chunks) {
   });
   // Con 3+ términos sustantivos se exige que calcen al menos 2; con menos, basta 1.
   const minHits = terms.length >= 3 ? 2 : 1;
-  return puntuados.filter(s => s.hits >= minHits).sort((a, b) => b.score - a.score).slice(0, 6).map(s => s.c);
+  return puntuados.filter(s => s.hits >= minHits).sort((a, b) => b.score - a.score).slice(0, 5).map(s => s.c);
 }
 
 // Estilo de ALTO CONTRASTE para los mensajes de confirmación/error de formularios.
@@ -1059,6 +1059,79 @@ async function cambiarCorreoUsuario(nuevoCorreo) {
 
 // Token para la Edge Function de IA: usa la sesión del usuario
 // (la función valida que el usuario exista y esté aprobado antes de llamar a Anthropic).
+// ════════════════════════════════════════════════════════════════
+// Petición al modelo con STREAMING (respuesta que se va escribiendo).
+//
+// La edge function puede o no soportar streaming, así que la primera vez
+// se prueba y el resultado se recuerda en localStorage:
+//   "1" → soporta streaming, se usa siempre (respuesta visible en ~1 s)
+//   "0" → no lo soporta, se va directo al camino clásico (sin reintentos)
+// Si la prueba falla, se reintenta de inmediato sin streaming, así el
+// usuario nunca ve un error por esto.
+// ════════════════════════════════════════════════════════════════
+// La clave incluye la versión de la app: al publicar una versión nueva se
+// vuelve a probar el streaming (si la edge function ya se actualizó, se activa
+// solo, sin que nadie tenga que borrar datos del navegador).
+const claveStream = () => `uro_chat_stream_${VERSION}`;
+function soportaStream() {
+  try { return localStorage.getItem(claveStream()); } catch { return null; }
+}
+function marcarStream(v) {
+  try { localStorage.setItem(claveStream(), v); } catch {}
+}
+
+async function pedirRespuestaIA({ model, maxTokens, system, messages, token, onDelta }) {
+  const url = import.meta.env.VITE_CHAT_FUNCTION_URL;
+  const headers = { "Content-Type": "application/json", "Authorization": `Bearer ${token}` };
+  const cuerpo = (stream) => JSON.stringify({ model, max_tokens: maxTokens, system, messages, ...(stream ? { stream: true } : {}) });
+
+  // ── Intento con streaming ──
+  if (soportaStream() !== "0" && onDelta) {
+    try {
+      const res = await fetch(url, { method: "POST", headers, body: cuerpo(true) });
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (res.ok && res.body && ct.includes("event-stream")) {
+        marcarStream("1");
+        const lector = res.body.getReader();
+        const dec = new TextDecoder();
+        let buffer = "", texto = "";
+        while (true) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          buffer += dec.decode(value, { stream: true });
+          const lineas = buffer.split("\n");
+          buffer = lineas.pop() || "";
+          for (const linea of lineas) {
+            if (!linea.startsWith("data:")) continue;
+            const crudo = linea.slice(5).trim();
+            if (!crudo || crudo === "[DONE]") continue;
+            try {
+              const ev = JSON.parse(crudo);
+              if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+                texto += ev.delta.text;
+                onDelta(texto);
+              }
+            } catch {}
+          }
+        }
+        if (texto) return texto;
+      }
+      // La función respondió, pero no en streaming: se recuerda y se sigue abajo.
+      marcarStream("0");
+      if (res.ok && !ct.includes("event-stream")) {
+        const data = await res.json();
+        const t = data.content?.find((b) => b.type === "text")?.text;
+        if (t) return t;
+      }
+    } catch { marcarStream("0"); }
+  }
+
+  // ── Camino clásico (una sola respuesta al final) ──
+  const res = await fetch(url, { method: "POST", headers, body: cuerpo(false) });
+  const data = await res.json();
+  return data.content?.find((b) => b.type === "text")?.text || "";
+}
+
 async function tokenFuncionIA() {
   try {
     const { data } = await supabase.auth.getSession();
@@ -2217,7 +2290,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.0.0";
+const VERSION = "v2.1.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -12877,37 +12950,40 @@ if (videosResult.ok) {
   // ============================================
   // PERSISTENCIA: obtener sesión actual de Supabase
   // ============================================
-  let conversacionId = conversacionActual;
   const sesionResult = await getSession();
   const sesionActiva = sesionResult.ok ? sesionResult.session : null;
-  
-  if (!conversacionId && currentUser && sesionActiva) {
-    // Es el primer mensaje de una nueva conversación
-    const titulo = generarTituloDesdeMensaje(txt);
-    const crearResult = await crearConversacion(sesionActiva.user.id, titulo, modo);
-    
-    if (crearResult.ok) {
-      conversacionId = crearResult.conversacion.id;
-      setConversacionActual(conversacionId);
-      // Agregar la nueva conversación al inicio; limitar a MAX_CONVERSACIONES
-      setConversaciones(prev => {
-        const nueva = [crearResult.conversacion, ...prev];
-        if (nueva.length > MAX_CONVERSACIONES) {
-          const sobrantes = nueva.slice(MAX_CONVERSACIONES); // las más antiguas
-          sobrantes.forEach(c => { eliminarConversacion(c.id).catch(()=>{}); });
-          return nueva.slice(0, MAX_CONVERSACIONES);
-        }
-        return nueva;
-      });
-    } else {
-      console.error("Error al crear conversación:", crearResult.error);
+
+  // Crear la conversación y guardar el mensaje del usuario son escrituras en
+  // la base que ANTES bloqueaban la llamada al modelo. Ahora corren en
+  // paralelo: solo se espera su resultado al final, para guardar la respuesta.
+  const conversacionPromise = (async () => {
+    let id = conversacionActual;
+    if (!id && currentUser && sesionActiva) {
+      const titulo = generarTituloDesdeMensaje(txt);
+      const crearResult = await crearConversacion(sesionActiva.user.id, titulo, modo);
+      if (crearResult.ok) {
+        id = crearResult.conversacion.id;
+        setConversacionActual(id);
+        // Agregar la nueva conversación al inicio; limitar a MAX_CONVERSACIONES
+        setConversaciones(prev => {
+          const nueva = [crearResult.conversacion, ...prev];
+          if (nueva.length > MAX_CONVERSACIONES) {
+            const sobrantes = nueva.slice(MAX_CONVERSACIONES); // las más antiguas
+            sobrantes.forEach(c => { eliminarConversacion(c.id).catch(()=>{}); });
+            return nueva.slice(0, MAX_CONVERSACIONES);
+          }
+          return nueva;
+        });
+      } else {
+        console.error("Error al crear conversación:", crearResult.error);
+      }
     }
-  }
-  
-  // Guardar mensaje del usuario en Supabase (sin bloquear la respuesta de la IA)
-  if (conversacionId && sesionActiva) {
-    agregarMensaje(conversacionId, sesionActiva.user.id, "usuario", txt, modo).catch(() => {});
-  }
+    if (id && sesionActiva) {
+      agregarMensaje(id, sesionActiva.user.id, "usuario", txt, modo).catch(() => {});
+    }
+    return id;
+  })();
+  conversacionPromise.catch(() => {});
   
   // ============================================
   // LÓGICA ORIGINAL DEL CHAT
@@ -13001,7 +13077,7 @@ if (videosResult.ok) {
       // El usuario rechazó la oferta de conocimiento propio
       ctx += "\n\n=== EL USUARIO DECLINÓ ===\nEl usuario NO quiere que uses conocimiento fuera de la base. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar información clínica: \"De acuerdo, me limito a la base de conocimiento de UroSearch. ¿Puedo ayudarte con otra consulta?\"";
     } else if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,6500)}`).join("\n\n");
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,5000)}`).join("\n\n");
     } else if (!consultaCirugias && !consultaPacientes) {
       if ((config.chatModo || "verificada") === "general") {
         // Configuración "conocimiento general": responde directo con conocimiento
@@ -13052,21 +13128,32 @@ if (videosResult.ok) {
     const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
     const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon;
     const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
-    const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${await tokenFuncionIA()}`,
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 2000,
-        system: sysPrompt,
-        messages: apiMsgs,
-      }),
-    });
-    const data = await res.json();
-    const reply = data.content?.find(b => b.type==="text")?.text || "Sin respuesta.";
+    // El token ya viene de la sesión que se pidió arriba: evita un segundo
+    // getSession() justo antes de disparar la petición.
+    const token = sesionActiva?.access_token || await tokenFuncionIA();
+
+    // La respuesta se va mostrando mientras se escribe (si la función lo permite).
+    let placeholder = false;
+    const onDelta = (acumulado) => {
+      const visible = desanonimizar(acumulado, mapaAnon);
+      setMessages(prev => {
+        if (!placeholder) { placeholder = true; return [...prev, { role: "assistant", content: visible, streaming: true }]; }
+        const copia = [...prev];
+        const ultimo = copia[copia.length - 1];
+        if (ultimo && ultimo.streaming) copia[copia.length - 1] = { ...ultimo, content: visible };
+        return copia;
+      });
+    };
+
+    const reply = (await pedirRespuestaIA({
+      // Para saludos y charla no hace falta el modelo grande: responde bastante antes.
+      model: esCharla ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
+      maxTokens: esCharla ? 500 : 2000,
+      system: sysPrompt,
+      messages: apiMsgs,
+      token,
+      onDelta,
+    })) || "Sin respuesta.";
     const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
     // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
@@ -13083,11 +13170,15 @@ if (videosResult.ok) {
     if (consultaCirugias && consultaCirugias.cirugias.length > 0) respuesta.cirugiasConsulta = { rango: consultaCirugias.rango, cantidad: consultaCirugias.cirugias.length };
     if (consultaPacientes && !consultaPacientes.ningun && consultaPacientes.pacientes.length > 0) respuesta.pacientesConsulta = { cantidad: consultaPacientes.pacientes.length };
     
-    setMessages(prev => [...prev, respuesta]);
+    setMessages(prev => {
+      const base = (placeholder && prev.length && prev[prev.length - 1]?.streaming) ? prev.slice(0, -1) : prev;
+      return [...base, respuesta];
+    });
     
     // ============================================
     // PERSISTENCIA: guardar respuesta de Claude
     // ============================================
+    const conversacionId = await conversacionPromise;
     if (conversacionId && sesionActiva) {
       await agregarMensaje(conversacionId, sesionActiva.user.id, "asistente", reply, modo);
       setConversaciones(prev => {
@@ -13102,7 +13193,11 @@ if (videosResult.ok) {
       });
     }
   } catch(e) {
-    setMessages(prev => [...prev, {role:"assistant", content:"Error al conectar."}]);
+    // Si se alcanzó a mostrar texto parcial, se descarta antes del aviso de error.
+    setMessages(prev => {
+      const base = prev.length && prev[prev.length - 1]?.streaming ? prev.slice(0, -1) : prev;
+      return [...base, {role:"assistant", content:"Error al conectar."}];
+    });
   }
   setLoading(false);
 };
@@ -13595,7 +13690,7 @@ if (!currentUser) {
   if (esPortada && i === 0) return null;
   return <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>;
 })}
-            {loading && (
+            {loading && !(messages[messages.length - 1]?.streaming) && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:"var(--fs-2)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>

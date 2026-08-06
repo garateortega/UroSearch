@@ -19,15 +19,33 @@ export async function listarLogbook(userId) {
   }
 }
 
+// Columnas agregadas después de la creación de la tabla. Si la migración
+// todavía no se ha corrido en la base, el insert/update falla nombrando la
+// columna; en ese caso se quita y se reintenta, para que la app siga
+// funcionando (solo se pierde ese dato hasta ejecutar el SQL).
+const COLUMNAS_OPCIONALES = ["momento_complicacion"];
+
+function columnaFaltante(mensaje) {
+  const m = (mensaje || "").toLowerCase();
+  return COLUMNAS_OPCIONALES.find((c) => m.includes(c)) || null;
+}
+
 export async function crearRegistroLogbook(datos) {
   try {
-    const { data, error } = await supabase
-      .from("logbook_cirugias")
-      .insert(datos)
-      .select()
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, registro: data };
+    let payload = datos;
+    for (let intento = 0; intento <= COLUMNAS_OPCIONALES.length; intento++) {
+      const { data, error } = await supabase
+        .from("logbook_cirugias")
+        .insert(payload)
+        .select()
+        .single();
+      if (!error) return { ok: true, registro: data };
+      const falta = columnaFaltante(error.message);
+      if (!falta) return { ok: false, error: error.message };
+      const { [falta]: _omitida, ...resto } = payload;
+      payload = resto;
+    }
+    return { ok: false, error: "No se pudo guardar el registro." };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -35,14 +53,21 @@ export async function crearRegistroLogbook(datos) {
 
 export async function actualizarRegistroLogbook(id, datos) {
   try {
-    const { data, error } = await supabase
-      .from("logbook_cirugias")
-      .update(datos)
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, registro: data };
+    let payload = datos;
+    for (let intento = 0; intento <= COLUMNAS_OPCIONALES.length; intento++) {
+      const { data, error } = await supabase
+        .from("logbook_cirugias")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+      if (!error) return { ok: true, registro: data };
+      const falta = columnaFaltante(error.message);
+      if (!falta) return { ok: false, error: error.message };
+      const { [falta]: _omitida, ...resto } = payload;
+      payload = resto;
+    }
+    return { ok: false, error: "No se pudo actualizar el registro." };
   } catch (e) {
     return { ok: false, error: e.message };
   }

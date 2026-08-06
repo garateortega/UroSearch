@@ -124,6 +124,19 @@ function familiaProc(nombre) {
 }
 const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
 
+// ─── Momento en que ocurrió la complicación ───
+// Distinguir el pabellón del post-operatorio cambia por completo la lectura
+// de la casuística: una lesión vascular intraoperatoria y una fístula al
+// séptimo día no son el mismo evento aunque compartan el Clavien-Dindo.
+const MOMENTOS_COMPLICACION = [
+  ["intraoperatoria", "🔪 Intraoperatoria (en pabellón)"],
+  ["postoperatoria", "🏥 Post-operatoria"],
+  ["ambas", "Ambas"],
+];
+const LABEL_MOMENTO = { intraoperatoria: "Intraoperatoria", postoperatoria: "Post-operatoria", ambas: "Intra y post-operatoria" };
+const esIntra = (r) => !!r.complicacion && (r.momento_complicacion || "intraoperatoria") !== "postoperatoria";
+const esPost = (r) => !!r.complicacion && ["postoperatoria", "ambas"].includes(r.momento_complicacion || "intraoperatoria");
+
 const REGISTRO_VACIO = {
   fecha: new Date().toISOString().slice(0, 10),
   iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "", diagnostico_pre: "", diagnostico_post: "",
@@ -131,7 +144,7 @@ const REGISTRO_VACIO = {
   cirujano: "", ayudantes: "", anestesia: "", hora_inicio: "", hora_termino: "",
   duracion_min: "", sangrado_ml: "", tamano_litiasis_mm: "", tamano_prostata_cc: "",
   hallazgos: "", tecnica: "",
-  complicacion: false, clavien: "", detalles_complicacion: "", observaciones: "",
+  complicacion: false, clavien: "", momento_complicacion: "intraoperatoria", detalles_complicacion: "", observaciones: "",
   // Complementos posteriores (biopsia / control imagenológico)
   biopsia_resultado: "", biopsia_isup: "", control_stone_free: "", control_imagen_detalle: "",
   // Control post-operatorio: cómo llegó el paciente al control (comentario + Clavien-Dindo)
@@ -281,8 +294,8 @@ function ultimosMeses(n) {
 }
 
 // ─── Gráfico de barras mensual (SVG, sin librerías) ───
-function BarrasMensuales({ datos }) {
-  const W = 620, H = 170, padL = 26, padB = 26, padT = 12;
+function BarrasMensuales({ datos, onMes, alto = 170, resaltado = null }) {
+  const W = 620, H = alto, padL = 26, padB = 26, padT = 12;
   const max = Math.max(1, ...datos.map((d) => d.total));
   const bw = (W - padL - 8) / datos.length;
   return (
@@ -305,6 +318,8 @@ function BarrasMensuales({ datos }) {
           <Fragment key={d.mes}>
             <rect x={x} y={H - padB - hTot} width={ancho} height={hTot} rx="3" fill="var(--primario)" opacity="0.25" />
             <rect x={x} y={H - padB - hCx} width={ancho} height={hCx} rx="3" fill="var(--primario)" />
+            {resaltado === d.mes && <rect x={x - 2} y={padT} width={ancho + 4} height={H - padT - padB} rx="4" fill="none" stroke="var(--primario)" strokeWidth="1.5" strokeDasharray="3 2" />}
+            {onMes && <rect x={x - bw * 0.15} y={padT} width={bw} height={H - padT - padB + 16} fill="transparent" style={{ cursor: "pointer" }} onClick={() => onMes(d.mes)} />}
             {d.total > 0 && <text x={x + ancho / 2} y={H - padB - hTot - 3} fontSize="9" fill="var(--texto-sec)" textAnchor="middle">{d.total}</text>}
             <text x={x + ancho / 2} y={H - padB + 12} fontSize="8.5" fill="var(--texto-ter)" textAnchor="middle">{mesLabel(d.mes)}</text>
           </Fragment>
@@ -445,6 +460,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [criterioMet, setCriterioMet] = useState("todas"); // "todas" | "onco" | "noonco"
   const [metPorCxOpen, setMetPorCxOpen] = useState(false);  // "Métricas por cirugía" colapsado por defecto
   const [procAbierto, setProcAbierto] = useState(null);     // procedimiento expandido (muestra gráfico)
+  const [graficoOpen, setGraficoOpen] = useState(false);    // gráfico mensual ampliado (modal)
+  const [mesAbierto, setMesAbierto] = useState(null);       // mes seleccionado dentro del gráfico ampliado
+  const [duplicadosOpen, setDuplicadosOpen] = useState(false); // revisor de posibles duplicados
   const [resumenIA, setResumenIA] = useState("");           // resumen escrito por la IA
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState("");
@@ -648,6 +666,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       tecnica: reg.tecnica.trim() || null,
       complicacion: !!reg.complicacion,
       clavien: reg.complicacion ? (reg.clavien || null) : null,
+      momento_complicacion: reg.complicacion ? (reg.momento_complicacion || "intraoperatoria") : null,
       detalles_complicacion: reg.complicacion ? (reg.detalles_complicacion.trim() || null) : null,
       observaciones: reg.observaciones.trim() || null,
       extraido_ia: extraidoOk,
@@ -746,7 +765,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       control_stone_free: r.control_stone_free || "", control_imagen_detalle: r.control_imagen_detalle || "",
       control_fecha: r.control_fecha || "", control_evolucion: r.control_evolucion || "", control_resultado: r.control_resultado || "",
       hallazgos: r.hallazgos || "", tecnica: r.tecnica || "",
-      complicacion: !!r.complicacion, clavien: r.clavien || "", detalles_complicacion: r.detalles_complicacion || "",
+      complicacion: !!r.complicacion, clavien: r.clavien || "", momento_complicacion: r.momento_complicacion || "intraoperatoria", detalles_complicacion: r.detalles_complicacion || "",
       observaciones: r.observaciones || "",
     });
     setError("");
@@ -769,9 +788,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   // ─── Exportar CSV (incluye complicaciones y complementos) ───
   const exportarCSV = () => {
-    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
+    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : c === "control_resultado" ? (LABEL_CONTROL_POSTOP[r[c]] || r[c]) : r[c])).join(";"))];
+    const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : c === "momento_complicacion" ? (r.complicacion ? (LABEL_MOMENTO[r[c] || "intraoperatoria"]) : "") : c === "control_resultado" ? (LABEL_CONTROL_POSTOP[r[c]] || r[c]) : r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -781,6 +800,29 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   };
 
   // ─── Lista filtrada ───
+  // ─── Posibles duplicados ───────────────────────────────────────
+  // Al registrar una cirugía por foto y además recibirla del logbook de un
+  // compañero, el mismo caso puede entrar dos veces. Se agrupan los registros
+  // que comparten fecha + familia de procedimiento y, además, algún
+  // identificador del paciente (RUT, ficha o iniciales). Nunca se borra nada
+  // solo: se marcan para que tú revises y decidas.
+  const gruposDuplicados = useMemo(() => {
+    const norm = (t) => sinTildes(t || "").replace(/[^a-z0-9]/g, "");
+    const grupos = new Map();
+    registros.forEach((r) => {
+      if (!r.fecha) return;
+      const ident = norm(r.rut) || norm(r.ficha_clinica) || norm(r.iniciales);
+      if (!ident) return;
+      const clave = `${r.fecha}|${familiaProc(r.procedimiento)}|${ident}`;
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave).push(r);
+    });
+    return Array.from(grupos.values())
+      .filter((g) => g.length > 1)
+      .sort((a, b) => (b[0].fecha || "").localeCompare(a[0].fecha || ""));
+  }, [registros]);
+  const nDuplicados = gruposDuplicados.reduce((acc, g) => acc + (g.length - 1), 0);
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return registros.filter((r) => {
@@ -813,6 +855,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     const comoCirujano = base.filter((r) => r.rol === "cirujano").length;
     const comoAyudante = base.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
     const conComplicacion = base.filter((r) => r.complicacion).length;
+    const complIntra = base.filter(esIntra).length;
+    const complPost = base.filter(esPost).length;
     const clavienAlto = base.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
     // Nota: no se calcula una "duración promedio global" — mezclar cirugías
     // heterogéneas da un número que no significa nada. La duración va por procedimiento.
@@ -824,7 +868,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     base.forEach((r) => {
       porCat[r.categoria || "Otro"] = (porCat[r.categoria || "Otro"] || 0) + 1;
       const p = familiaProc(r.procedimiento);
-      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, stoneFree: 0, stoneTotal: 0, durCasos: [], sangradoCasos: [], ctrlTotal: 0, ctrlFav: 0, ctrlMayor: 0 };
+      if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, complIntra: 0, complPost: 0, stoneFree: 0, stoneTotal: 0, durCasos: [], sangradoCasos: [], ctrlTotal: 0, ctrlFav: 0, ctrlMayor: 0 };
       const v = porProc[p];
       v.n++;
       if (r.rol === "cirujano") v.cx++;
@@ -838,15 +882,21 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (r.tamano_litiasis_mm > 0) v.litiasis.push(r.tamano_litiasis_mm);
       if (r.tamano_prostata_cc > 0) v.prostata.push(r.tamano_prostata_cc);
       if (r.complicacion) v.compl++;
+      if (esIntra(r)) v.complIntra++;
+      if (esPost(r)) v.complPost++;
       if (r.control_stone_free) { v.stoneTotal++; if (r.control_stone_free === "stone_free") v.stoneFree++; }
       if (r.control_resultado) { v.ctrlTotal++; if (r.control_resultado === "favorable") v.ctrlFav++; if (esClavienMayor(r.control_resultado)) v.ctrlMayor++; }
     });
 
-    const meses = ultimosMeses(12).map((mes) => ({
-      mes,
-      total: base.filter((r) => mesClave(r.fecha) === mes).length,
-      cirujano: base.filter((r) => mesClave(r.fecha) === mes && r.rol === "cirujano").length,
-    }));
+    const meses = ultimosMeses(12).map((mes) => {
+      const delMes = base.filter((r) => mesClave(r.fecha) === mes);
+      return {
+        mes,
+        total: delMes.length,
+        cirujano: delMes.filter((r) => r.rol === "cirujano").length,
+        registros: [...delMes].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")),
+      };
+    });
 
     // Detalle completo por procedimiento (para tarjetas de métricas)
     const ordenarPorFecha = (a) => [...a].sort((x, y) => (x.fecha || "").localeCompare(y.fecha || ""));
@@ -857,7 +907,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         dur: stat(v.dur), sangrado: stat(v.sangrado),
         litiasis: stat(v.litiasis), prostata: stat(v.prostata),
         durProm: prom(v.dur),   // se mantiene para el orden y el KPI
-        compl: v.compl,
+        compl: v.compl, complIntra: v.complIntra, complPost: v.complPost,
         stoneFree: v.stoneTotal > 0 ? { free: v.stoneFree, total: v.stoneTotal } : null,
         controlPostop: v.ctrlTotal > 0 ? { fav: v.ctrlFav, mayor: v.ctrlMayor, total: v.ctrlTotal } : null,
         durCasos: ordenarPorFecha(v.durCasos),      // puntos para el gráfico de tiempos
@@ -881,7 +931,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     // Procedimiento más frecuente (reemplaza a la duración promedio global)
     const masFrecuente = detalleProc.length ? detalleProc[0] : null;
-    return { total, comoCirujano, comoAyudante, conComplicacion, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, porRol, detalleProc, ayudantiasPorProc, onco };
+    return { total, comoCirujano, comoAyudante, conComplicacion, complIntra, complPost, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, porRol, detalleProc, ayudantiasPorProc, onco };
   }, [registros, criterioMet]);
 
   // ─── Estilos compartidos ───
@@ -1174,7 +1224,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     <select style={{ ...inp, width: "auto" }} value={reg.clavien} onChange={(e) => set("clavien", e.target.value)}>
                       {CLAVIEN.map((c) => <option key={c} value={c}>{c ? `Clavien-Dindo ${c}` : "Clavien-Dindo…"}</option>)}
                     </select>
-                    <button type="button" onClick={() => { set("complicacion", false); set("clavien", ""); set("detalles_complicacion", ""); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)", fontWeight: 600 }}>Quitar</button>
+                    <select style={{ ...inp, width: "auto" }} value={reg.momento_complicacion || "intraoperatoria"} onChange={(e) => set("momento_complicacion", e.target.value)}>
+                      {MOMENTOS_COMPLICACION.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                    <button type="button" onClick={() => { set("complicacion", false); set("clavien", ""); set("momento_complicacion", "intraoperatoria"); set("detalles_complicacion", ""); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)", fontWeight: 600 }}>Quitar</button>
                   </div>
                   {campo("Detalle de la complicación", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.detalles_complicacion} onChange={(e) => set("detalles_complicacion", e.target.value)} />)}
                 </div>
@@ -1238,6 +1291,15 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             {registros.length > 0 && <button onClick={exportarCSV} style={btnSec}>⬇ CSV</button>}
           </div>
 
+          {nDuplicados > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--alerta-bg)", border: "1px solid var(--alerta)", borderRadius: 10, fontSize: "var(--fs-1)", color: "var(--alerta)", fontWeight: 600 }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                ⚠️ Hay {nDuplicados} registro{nDuplicados === 1 ? "" : "s"} que parece{nDuplicados === 1 ? "" : "n"} repetido{nDuplicados === 1 ? "" : "s"} ({gruposDuplicados.length} caso{gruposDuplicados.length === 1 ? "" : "s"}).
+              </span>
+              <button onClick={() => setDuplicadosOpen(true)} style={{ flexShrink: 0, padding: "6px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--alerta)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Revisar</button>
+            </div>
+          )}
+
           {cargando && <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", textAlign: "center", padding: 20 }}>Cargando registros…</div>}
 
           {!cargando && filtrados.length === 0 && (
@@ -1268,7 +1330,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   </span>
                   {r.complicacion && (
                     <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "var(--peligro-bg)", color: "var(--peligro)", border: "0.5px solid var(--peligro)" }}>
-                      ⚠ {r.clavien ? `CD ${r.clavien}` : "Complicación"}
+                      ⚠ {esPost(r) && !esIntra(r) ? "Post-op" : esIntra(r) && esPost(r) ? "Intra+post" : "Intraop"}{r.clavien ? ` · CD ${r.clavien}` : ""}
                     </span>
                   )}
                 </div>
@@ -1288,7 +1350,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {(r.control_resultado || r.control_evolucion) && <div><b>Control post-op{r.control_fecha ? ` (${r.control_fecha})` : ""}:</b> {LABEL_CONTROL_POSTOP[r.control_resultado] || ""}{r.control_evolucion ? `${r.control_resultado ? " — " : ""}${r.control_evolucion}` : ""}</div>}
                   {r.hallazgos && <div><b>Hallazgos:</b> {r.hallazgos}</div>}
                   {r.tecnica && <div><b>Técnica:</b> {r.tecnica}</div>}
-                  {r.detalles_complicacion && <div style={{ color: "var(--peligro)" }}><b>Complicación:</b> {r.detalles_complicacion}</div>}
+                  {r.detalles_complicacion && <div style={{ color: "var(--peligro)" }}><b>Complicación ({LABEL_MOMENTO[r.momento_complicacion || "intraoperatoria"].toLowerCase()}):</b> {r.detalles_complicacion}</div>}
                   {r.observaciones && <div><b>Obs:</b> {r.observaciones}</div>}
                   <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                     {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>🖼 Ver protocolo</button>}
@@ -1335,12 +1397,29 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             </div>
           </div>
 
-          <div style={card}>
-            <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 8 }}>
-              Volumen mensual (últimos 12 meses)
-              <span style={{ fontSize: "var(--fs-0)", fontWeight: 400, color: "var(--texto-ter)", marginLeft: 8 }}>■ como cirujano · <span style={{ opacity: 0.4 }}>■</span> total</span>
+          {(met.complIntra > 0 || met.complPost > 0) && (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ ...kpi, minWidth: 150 }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--peligro)" }}>{met.complIntra}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones intraoperatorias{met.total > 0 ? ` (${Math.round((met.complIntra / met.total) * 100)}%)` : ""}</div>
+              </div>
+              <div style={{ ...kpi, minWidth: 150 }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--alerta)" }}>{met.complPost}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones post-operatorias{met.total > 0 ? ` (${Math.round((met.complPost / met.total) * 100)}%)` : ""}</div>
+              </div>
             </div>
-            <BarrasMensuales datos={met.meses} />
+          )}
+
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+              <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>
+                Volumen mensual (últimos 12 meses)
+                <span style={{ fontSize: "var(--fs-0)", fontWeight: 400, color: "var(--texto-ter)", marginLeft: 8 }}>■ como cirujano · <span style={{ opacity: 0.4 }}>■</span> total</span>
+              </div>
+              <button onClick={() => setGraficoOpen(true)} title="Ampliar gráfico" style={{ flexShrink: 0, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 8, color: "var(--primario)", cursor: "pointer", fontSize: "var(--fs-1)", fontWeight: 700, padding: "5px 10px" }}>⤢ Ampliar</button>
+            </div>
+            <BarrasMensuales datos={met.meses} onMes={(m) => { setGraficoOpen(true); setMesAbierto(m); }} />
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 6, textAlign: "center" }}>Toca un mes para ver sus cirugías</div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
@@ -1390,7 +1469,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                               {d.sangrado && <Chip label="Sangrado" val={`${d.sangrado.med} ml`} sub={`n=${d.sangrado.n}`} />}
                               {d.litiasis && <Chip label="Litiasis" val={`${d.litiasis.med} mm`} sub={`n=${d.litiasis.n}`} />}
                               {d.prostata && <Chip label="Próstata" val={`${d.prostata.med} cc`} sub={`n=${d.prostata.n}`} />}
-                              {d.compl > 0 && <Chip label="Complic." val={d.compl} />}
+                              {d.complIntra > 0 && <Chip label="Complic. intraop." val={d.complIntra} />}
+                              {d.complPost > 0 && <Chip label="Complic. post-op" val={d.complPost} />}
                               {d.stoneFree && <Chip label="Stone free" val={`${d.stoneFree.free}/${d.stoneFree.total}`} ok />}
                               {d.controlPostop && <Chip label="Control favorable" val={`${d.controlPostop.fav}/${d.controlPostop.total}`} ok />}
                               {d.controlPostop && d.controlPostop.mayor > 0 && <Chip label="Clavien ≥ III" val={`${d.controlPostop.mayor}/${d.controlPostop.total}`} />}
@@ -1443,6 +1523,107 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       {fotoUrl && (
         <div onClick={() => setFotoUrl(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "zoom-out" }}>
           <img src={fotoUrl} alt="Protocolo operatorio" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+        </div>
+      )}
+
+      {/* ─── Modal: gráfico mensual ampliado + cirugías del mes ─── */}
+      {graficoOpen && (
+        <div onClick={() => { setGraficoOpen(false); setMesAbierto(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 720, maxHeight: "88vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)" }}>📊 Volumen mensual</div>
+              <button onClick={() => { setGraficoOpen(false); setMesAbierto(null); }} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+
+            <BarrasMensuales datos={met.meses} alto={260} onMes={(m) => setMesAbierto((prev) => (prev === m ? null : m))} resaltado={mesAbierto} />
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", textAlign: "center", margin: "6px 0 12px" }}>
+              ■ como cirujano · <span style={{ opacity: 0.4 }}>■</span> total — toca un mes para ver el detalle
+            </div>
+
+            {(() => {
+              const m = met.meses.find((x) => x.mes === mesAbierto);
+              if (!m) return (
+                <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: "14px 8px" }}>
+                  Selecciona un mes en el gráfico para ver las cirugías de ese período.
+                </div>
+              );
+              if (m.registros.length === 0) return (
+                <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: "14px 8px" }}>
+                  No hay cirugías registradas en {mesLabel(m.mes)}.
+                </div>
+              );
+              return (
+                <div>
+                  <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>
+                    {mesLabel(m.mes)} — {m.total} cirugía{m.total === 1 ? "" : "s"} ({m.cirujano} como cirujano)
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {m.registros.map((r) => (
+                      <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
+                        <div style={{ flexShrink: 0, fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--primario)", minWidth: 56 }}>{(r.fecha || "").split("-").reverse().slice(0, 2).join("/")}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{r.procedimiento || "—"}{r.lateralidad ? ` (${r.lateralidad})` : ""}</div>
+                          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>{(ROLES.find(([id]) => id === r.rol) || [, r.rol])[1]}</span>
+                            {r.categoria && <span>· {r.categoria}</span>}
+                            {r.duracion_min > 0 && <span>· {r.duracion_min} min</span>}
+                            {r.iniciales && <span>· {r.iniciales}</span>}
+                            {r.complicacion && <span style={{ color: "var(--peligro)", fontWeight: 700 }}>· ⚠ {LABEL_MOMENTO[r.momento_complicacion || "intraoperatoria"]}{r.clavien ? ` (CD ${r.clavien})` : ""}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal: revisar posibles duplicados ─── */}
+      {duplicadosOpen && (
+        <div onClick={() => setDuplicadosOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 620, maxHeight: "88vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)" }}>⚠️ Posibles duplicados</div>
+              <button onClick={() => setDuplicadosOpen(false)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 12, lineHeight: 1.5 }}>
+              Registros que comparten fecha, tipo de cirugía y paciente. Puede ser un duplicado real (por ejemplo, la misma cirugía cargada por foto y recibida del logbook de un compañero) o dos procedimientos distintos el mismo día. Revisa y elimina solo lo que corresponda.
+            </div>
+
+            {gruposDuplicados.length === 0 && (
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: "16px 8px" }}>✓ No quedan registros repetidos.</div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {gruposDuplicados.map((g, gi) => (
+                <div key={gi} style={{ border: "1px solid var(--alerta)", borderRadius: 10, padding: 10, background: "var(--superficie)" }}>
+                  <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--alerta)", marginBottom: 6 }}>
+                    {(g[0].fecha || "").split("-").reverse().join("/")} · {familiaProc(g[0].procedimiento)} · {g[0].iniciales || g[0].ficha_clinica || g[0].rut || ""} — {g.length} registros
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {g.map((r) => (
+                      <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 9px", background: "var(--fondo-suave)", borderRadius: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{r.procedimiento || "—"}</div>
+                          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>
+                            {(ROLES.find(([id]) => id === r.rol) || [, r.rol])[1]}
+                            {r.cirujano ? ` · Cx: ${r.cirujano}` : ""}
+                            {r.duracion_min > 0 ? ` · ${r.duracion_min} min` : ""}
+                            {r.foto_path ? " · 🖼 con protocolo" : ""}
+                            {r.extraido_ia ? " · leído por IA" : ""}
+                          </div>
+                        </div>
+                        <button onClick={() => eliminar(r)} style={{ flexShrink: 0, background: "none", border: "1px solid var(--peligro)", color: "var(--peligro)", borderRadius: 8, padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 700, cursor: "pointer" }}>🗑 Eliminar</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
