@@ -4507,8 +4507,177 @@ function AdminPanel() {
         </div>
       )}
 
+      <CentrosAdmin />
       <BoletinesAdmin />
       <FeedbackAdmin />
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// CENTROS (equipos) — Vista de soporte para administradores
+//
+// Cada equipo es, en la práctica, un centro que usa la app. El admin puede
+// listarlos todos y abrir sus pacientes en SOLO LECTURA para dar soporte.
+// Los miembros del equipo no reciben ninguna notificación, pero cada acceso
+// queda registrado en una bitácora (admin_accesos) que los propios RPC
+// escriben en la base: el acceso es discreto, nunca oculto. Todo pasa por
+// funciones SECURITY DEFINER que validan el rol admin del lado del servidor,
+// así que el RLS normal de los equipos no se toca.
+// ════════════════════════════════════════════════════════════════
+function CentrosAdmin({ currentUser }) {
+  const [equipos, setEquipos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState("");
+  const [abierto, setAbierto] = useState(null);        // equipo cuyos pacientes se están viendo
+  const [pacientesEq, setPacientesEq] = useState([]);
+  const [cargandoPac, setCargandoPac] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [fichaVer, setFichaVer] = useState(null);      // paciente en la ficha de solo lectura
+  const [accesos, setAccesos] = useState(null);        // bitácora (null = plegada)
+
+  useEffect(() => {
+    (async () => {
+      const { data, error: e } = await supabase.rpc("admin_listar_equipos");
+      if (e) setError("No se pudo cargar la lista de centros: " + e.message + (/(does not exist|not find)/i.test(e.message) ? " — ¿ejecutaste la migración SQL?" : ""));
+      else setEquipos(data || []);
+      setCargando(false);
+    })();
+  }, []);
+
+  const abrirEquipo = async (eq) => {
+    setAbierto(eq); setPacientesEq([]); setBusqueda(""); setCargandoPac(true);
+    const { data, error: e } = await supabase.rpc("admin_listar_pacientes_equipo", { p_equipo: eq.id });
+    if (e) { uroToast("Error: " + e.message); setAbierto(null); }
+    else setPacientesEq(data || []);
+    setCargandoPac(false);
+  };
+
+  const verBitacora = async () => {
+    if (accesos) return setAccesos(null);
+    const { data, error: e } = await supabase.rpc("admin_listar_accesos");
+    if (e) return uroToast("Error: " + e.message);
+    setAccesos(data || []);
+  };
+
+  const fmtF = (f) => { const [a, m, d] = String(f || "").split("T")[0].split("-"); return d ? `${d}/${m}/${a}` : (f || ""); };
+  const pacFiltrados = pacientesEq.filter((p) => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return true;
+    return [p.iniciales, p.rut, p.ficha_clinica, p.diagnostico, p.servicio].some((v) => (v || "").toLowerCase().includes(q));
+  });
+  const ORDEN_ESTADOS = ["hospitalizado", "ambulatorio", "alta"];
+  const pacOrdenados = [...pacFiltrados].sort((a, b) =>
+    (ORDEN_ESTADOS.indexOf(a.estado) - ORDEN_ESTADOS.indexOf(b.estado)) || (a.servicio || "").localeCompare(b.servicio || ""));
+
+  // Ficha de solo lectura: muestra los campos con contenido, nada editable.
+  const CAMPOS_FICHA = [
+    ["iniciales", "Paciente"], ["edad", "Edad"], ["sexo", "Sexo"], ["rut", "RUT"], ["ficha_clinica", "Ficha clínica"],
+    ["estado", "Estado"], ["servicio", "Servicio"], ["cama", "Cama"], ["fecha_ingreso", "Ingreso"], ["fecha_alta", "Alta"],
+    ["diagnostico", "Diagnóstico"], ["antecedentes", "Antecedentes"], ["historia", "Historia"], ["examen_fisico", "Examen físico"],
+    ["laboratorio", "Laboratorio"], ["imagenes", "Imágenes"], ["plan", "Plan"], ["indicaciones", "Indicaciones"], ["observaciones", "Observaciones"],
+  ];
+
+  return (
+    <div style={{ marginTop: 24, paddingTop: 18, borderTop: "0.5px solid var(--borde)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", flex: 1 }}>🏥 Centros (equipos)</div>
+        <button onClick={verBitacora} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 600, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>
+          {accesos ? "Ocultar bitácora" : "📖 Bitácora de accesos"}
+        </button>
+      </div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.5, marginBottom: 12 }}>
+        Acceso de soporte en <b>solo lectura</b> a los pacientes de cada equipo. Los miembros no reciben avisos, pero cada apertura queda registrada en la bitácora.
+      </div>
+
+      {accesos && (
+        <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 10, marginBottom: 12, maxHeight: 220, overflowY: "auto" }}>
+          {accesos.length === 0 && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", textAlign: "center", padding: 8 }}>Sin accesos registrados.</div>}
+          {accesos.map((a) => (
+            <div key={a.id} style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", padding: "3px 0" }}>
+              {fmtF(a.created_at)} {String(a.created_at || "").slice(11, 16)} · <b>{a.admin_nombre || "Admin"}</b> {a.accion === "ver_pacientes" ? "abrió los pacientes de" : "listó"} <b>{a.equipo_nombre || "los centros"}</b>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cargando && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: 14 }}>Cargando centros…</div>}
+      {error && <div style={estiloMsg(false)}>{error}</div>}
+
+      {!cargando && !error && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {equipos.length === 0 && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: 14 }}>Aún no hay equipos creados.</div>}
+          {equipos.map((eq) => (
+            <div key={eq.id} style={{ display: "flex", gap: 10, alignItems: "center", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>{eq.nombre}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>
+                  Dueño: {eq.dueno_nombre || "—"} · {eq.n_miembros} miembro{eq.n_miembros === 1 ? "" : "s"} · {eq.n_pacientes_activos} paciente{eq.n_pacientes_activos === 1 ? "" : "s"} activo{eq.n_pacientes_activos === 1 ? "" : "s"} ({eq.n_pacientes_total} en total) · creado {fmtF(eq.fecha_creacion)}
+                </div>
+              </div>
+              <button onClick={() => abrirEquipo(eq)} style={{ flexShrink: 0, padding: "7px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>👁 Ver pacientes</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Pacientes del equipo (solo lectura) ─── */}
+      {abierto && (
+        <div onClick={() => { setAbierto(null); setFichaVer(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 10 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 14, width: "100%", maxWidth: 640, maxHeight: "90dvh", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>👁 {abierto.nombre} — pacientes</div>
+              <button onClick={() => { setAbierto(null); setFichaVer(null); }} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--alerta)", background: "var(--alerta-bg)", border: "0.5px solid var(--alerta)", borderRadius: 8, padding: "6px 10px", marginBottom: 10 }}>
+              🔒 Vista de soporte en solo lectura. Este acceso quedó registrado en la bitácora.
+            </div>
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Buscar por iniciales, RUT, ficha, diagnóstico o servicio…" style={{ ...inputStyle, marginBottom: 8 }} />
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+              {cargandoPac && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: 14 }}>Cargando…</div>}
+              {!cargandoPac && pacOrdenados.length === 0 && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: 14 }}>Sin pacientes{busqueda ? " que coincidan con la búsqueda" : " registrados en este equipo"}.</div>}
+              {pacOrdenados.map((p) => (
+                <div key={p.id} onClick={() => setFichaVer(p)} style={{ display: "flex", gap: 10, alignItems: "center", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderLeft: "3px solid " + (p.estado === "alta" ? "var(--neutro)" : "var(--primario)"), borderRadius: 8, padding: "9px 11px", cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>
+                      {p.iniciales} <span style={{ fontWeight: 400, color: "var(--texto-sec)" }}>{p.edad ? `· ${p.edad}a` : ""} {p.sexo ? `· ${p.sexo}` : ""}</span>
+                    </div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.diagnostico || "—"}</div>
+                  </div>
+                  <div style={{ flexShrink: 0, textAlign: "right", fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>
+                    <div style={{ fontWeight: 700, color: p.estado === "alta" ? "var(--texto-ter)" : "var(--primario)" }}>{p.estado}</div>
+                    <div>{p.servicio || ""}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Ficha de solo lectura ─── */}
+      {fichaVer && (
+        <div onClick={() => setFichaVer(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: 10 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 560, maxHeight: "90dvh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>📄 {fichaVer.iniciales} <span style={{ fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--alerta)" }}>· solo lectura</span></div>
+              <button onClick={() => setFichaVer(null)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {CAMPOS_FICHA.map(([campo, rot]) => {
+                const v = fichaVer[campo];
+                if (v === null || v === undefined || v === "") return null;
+                return (
+                  <div key={campo}>
+                    <div style={{ fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--texto-ter)", textTransform: "uppercase", letterSpacing: 0.4 }}>{rot}</div>
+                    <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{String(v)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
