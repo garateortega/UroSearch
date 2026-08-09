@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, Fragment } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, Component, Fragment } from "react";
 import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
@@ -20,6 +20,7 @@ function horaLocalHM() {
 }import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
 import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
+import { uroToast, uroConfirm, UroDialogHost } from "./ui";
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
@@ -210,6 +211,39 @@ function esCharlaBasica(txt) {
 // La RPC devuelve hasta 8 chunks aunque el calce sea pobre; aquí se exige que
 // los términos sustantivos de la consulta aparezcan de verdad en el fragmento,
 // para no citar capítulos que solo comparten una palabra suelta.
+// Siglas y jerga urológica → término desarrollado. Se AGREGA a la consulta
+// (no reemplaza), para que la búsqueda encuentre tanto la sigla como el término.
+const SIGLAS_URO = {
+  hbp: "hiperplasia prostatica benigna", hpb: "hiperplasia prostatica benigna",
+  cap: "cancer de prostata", pca: "cancer de prostata",
+  itu: "infeccion del tracto urinario", "itu complicada": "infeccion urinaria complicada",
+  rtu: "reseccion transuretral", rtup: "reseccion transuretral de prostata", rtuv: "reseccion transuretral vesical",
+  rirs: "cirugia retrograda intrarrenal nefrolitotomia flexible", urs: "ureteroscopia",
+  nlpc: "nefrolitotomia percutanea", pcnl: "nefrolitotomia percutanea",
+  lec: "litotricia extracorporea", eswl: "litotricia extracorporea",
+  psa: "antigeno prostatico especifico",
+  vpp: "valor predictivo positivo", stui: "sintomas del tracto urinario inferior", luts: "sintomas del tracto urinario inferior",
+  cacu: "cancer urotelial", cis: "carcinoma in situ",
+  isup: "grado isup gleason", pirads: "pi-rads resonancia prostata",
+  tvnm: "tumor vesical no musculo invasor", nmibc: "tumor vesical no musculo invasor", mibc: "tumor vesical musculo invasor",
+  bcg: "inmunoterapia intravesical bcg", mmc: "mitomicina intravesical",
+  hda: "hematuria", tr: "tacto rectal", eco: "ecografia", uro_tac: "urotac", pielotac: "pielotac",
+  dj: "cateter doble j", jj: "cateter doble j",
+  vur: "reflujo vesicoureteral", rvu: "reflujo vesicoureteral",
+  hul: "hiperactividad vesical", vh: "vejiga hiperactiva",
+  ioe: "incontinencia de orina de esfuerzo", iu: "incontinencia urinaria",
+  de: "disfuncion erectil", epoc: "enfermedad pulmonar obstructiva cronica",
+  tuc: "tumor urotelial", gleason: "score de gleason grado isup",
+};
+function expandirSiglas(texto) {
+  const base = sinTildes(texto);
+  const extras = [];
+  for (const [sigla, termino] of Object.entries(SIGLAS_URO)) {
+    if (new RegExp(`(^|[^a-z])${sigla}([^a-z]|$)`).test(base)) extras.push(termino);
+  }
+  return extras.length ? `${texto} ${extras.join(" ")}` : texto;
+}
+
 const STOP_CHAT = new Set(["para","como","cual","cuales","donde","cuando","sobre","entre","desde","hasta","este","esta","estos","estas","tiene","tienen","hacer","puede","pueden","puedo","segun","cada","tras","pero","porque","tambien","cuanto","cuanta","cuantos","cuantas","dime","dame","quiero","necesito","favor","podrias","puedes","explica","explicame","resume","resumen","informacion","sirve","sirven","tipo","tipos","cosa","cosas","tema","acerca","respecto","manejo","cuadro","caso","casos","mejor","peor","debe","deben","deberia","seria","estan","esta","hay","que","con","por","los","las","del","una","uno","unos","unas"]);
 function terminosConsulta(txt) {
   const norm = (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -934,73 +968,62 @@ function EditorSugerencias({ currentUser }) {
   );
 }
 
-// ─── Diálogos y toasts propios (reemplazan alert/confirm nativos) ───
-let _mostrarDialogo = null;   // setter registrado por UroDialogHost
-let _mostrarToast = null;
+// ─── Puente entre la tabla quirúrgica y el logbook personal ───
+// Antes había que escribir la misma cirugía dos veces: una en Hospital y otra
+// en el Logbook. Ahora la ficha de una cirugía completada deja un borrador
+// preparado y el Logbook lo abre con el formulario ya lleno. No guarda nada
+// solo: el usuario revisa, completa lo que falte y confirma.
+const CLAVE_BORRADOR_LOGBOOK = "uro_logbook_borrador";
 
-function uroToast(mensaje, tipo) {
-  const t = tipo || (/error|no se pudo|falló|fallo|inválid|incorrect/i.test(String(mensaje)) ? "error" : "ok");
-  if (_mostrarToast) _mostrarToast({ id: Date.now() + Math.random(), texto: String(mensaje), tipo: t });
-  else { try { window.alert(mensaje); } catch {} }
+// Deduce el rol a partir de dónde aparece el nombre del usuario en la cirugía.
+function rolEnCirugia(nombreUsuario, cirugia) {
+  const norm = (t) => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const tokens = norm(nombreUsuario).split(/[\s.,]+/).filter(t => t.length >= 4 && t !== "doctor");
+  if (!tokens.length) return "cirujano";
+  const aparece = (campo) => tokens.some(t => norm(campo).includes(t));
+  if (aparece(cirugia.cirujano)) return "cirujano";
+  if (aparece(cirugia.primer_ayudante)) return "primer_ayudante";
+  return "primer_ayudante";
 }
 
-function uroConfirm(mensaje, opciones = {}) {
-  if (!_mostrarDialogo) return Promise.resolve(window.confirm(mensaje)); // fallback
-  const m = String(mensaje);
-  const etiqueta = opciones.confirmar
-    || (/expulsar/i.test(m) ? "Expulsar"
-    : /¿salir/i.test(m) ? "Salir"
-    : /importar/i.test(m) ? "Importar"
-    : /restaurar/i.test(m) ? "Restaurar"
-    : /borrar/i.test(m) ? "Borrar"
-    : /eliminar/i.test(m) ? "Eliminar"
-    : "Confirmar");
-  const peligro = (opciones.peligro !== undefined)
-    ? opciones.peligro
-    : /eliminar|borrar|expulsar|no se puede deshacer|se perderán/i.test(m);
-  return new Promise((resolve) => {
-    _mostrarDialogo({ texto: m, confirmar: etiqueta, cancelar: opciones.cancelar || "Cancelar", peligro, resolve });
-  });
+// Rescata datos que suelen ir escritos a mano dentro de Observaciones
+// (p. ej. "Abordaje: Laparoscópico | Duración: 120 MIN | Dg: CA RENAL").
+function datosDeObservaciones(texto) {
+  const t = String(texto || "");
+  const buscar = (re) => { const m = t.match(re); return m ? m[1].trim() : ""; };
+  const dur = buscar(/duraci[oó]n\s*:?\s*(\d{1,4})\s*(?:min|minutos)?/i);
+  return {
+    duracion_min: dur || "",
+    tecnica: buscar(/abordaje\s*:?\s*([^|\n]+)/i),
+    diagnostico_pre: buscar(/\bdg\.?\s*:?\s*([^|\n]+)/i) || buscar(/diagn[oó]stico\s*:?\s*([^|\n]+)/i),
+  };
 }
 
-function UroDialogHost() {
-  const [dialogo, setDialogo] = useState(null);
-  const [toasts, setToasts] = useState([]);
-  useEffect(() => {
-    _mostrarDialogo = setDialogo;
-    _mostrarToast = (t) => {
-      setToasts(prev => [...prev.slice(-2), t]);
-      const dur = Math.min(8000, Math.max(3500, String(t.texto).length * 45));
-      setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), dur);
-    };
-    return () => { _mostrarDialogo = null; _mostrarToast = null; };
-  }, []);
-  const responder = (ok) => { if (dialogo) { dialogo.resolve(ok); setDialogo(null); } };
-  return (
-    <>
-      {dialogo && (
-        <div onClick={() => responder(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: "20px 18px 16px", width: "min(360px, 100%)", boxShadow: "0 14px 40px rgba(0,0,0,0.35)" }}>
-            <div style={{ fontSize: 26, marginBottom: 8, textAlign: "center" }}>{dialogo.peligro ? "⚠️" : "❓"}</div>
-            <div style={{ fontSize: "var(--fs-2)", color: "var(--texto)", lineHeight: 1.5, whiteSpace: "pre-line", textAlign: "center", marginBottom: 16 }}>{dialogo.texto}</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => responder(false)} style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>{dialogo.cancelar}</button>
-              <button onClick={() => responder(true)} autoFocus style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: dialogo.peligro ? "var(--peligro)" : "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>{dialogo.confirmar}</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {toasts.length > 0 && (
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: "calc(18px + env(safe-area-inset-bottom, 0px))", zIndex: 3100, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, pointerEvents: "none", padding: "0 16px" }}>
-          {toasts.map(t => (
-            <div key={t.id} style={{ maxWidth: 420, background: t.tipo === "error" ? "var(--peligro)" : "var(--texto)", color: "var(--texto-inv)", borderRadius: 10, padding: "10px 16px", fontSize: "var(--fs-1)", lineHeight: 1.45, whiteSpace: "pre-line", boxShadow: "0 6px 20px rgba(0,0,0,0.3)", textAlign: "center" }}>
-              {t.tipo === "error" ? "⚠️ " : ""}{t.texto}
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
+function prepararBorradorLogbook(cirugia, nombreUsuario) {
+  const extra = datosDeObservaciones(cirugia.observaciones);
+  const borrador = {
+    fecha: cirugia.fecha || new Date().toISOString().slice(0, 10),
+    iniciales: cirugia.iniciales || "",
+    ficha_clinica: cirugia.ficha_clinica || "",
+    rut: cirugia.rut || "",
+    edad: cirugia.edad ? String(cirugia.edad) : "",
+    sexo: cirugia.sexo || "",
+    procedimiento: cirugia.procedimiento || "",
+    lateralidad: cirugia.lateralidad || "",
+    rol: rolEnCirugia(nombreUsuario, cirugia),
+    cirujano: cirugia.cirujano || "",
+    ayudantes: cirugia.primer_ayudante || "",
+    hora_inicio: (cirugia.hora || "").slice(0, 5),
+    diagnostico_pre: extra.diagnostico_pre,
+    duracion_min: extra.duracion_min,
+    tecnica: extra.tecnica,
+    observaciones: cirugia.observaciones || "",
+  };
+  try {
+    localStorage.setItem(CLAVE_BORRADOR_LOGBOOK, JSON.stringify(borrador));
+    window.dispatchEvent(new CustomEvent("uro-logbook-borrador"));
+    return true;
+  } catch { return false; }
 }
 
 // ─── Seguridad de contraseñas ───
@@ -7250,7 +7273,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                 </div>
               )}
               <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)",marginTop:4}}>{seleccionado.procedimiento}{seleccionado.lateralidad && ` • ${seleccionado.lateralidad}`}</div>
-              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:4}}>📅 {seleccionado.fecha} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
+              <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:4}}>📅 {fmtFecha(seleccionado.fecha)} {seleccionado.hora?.slice(0,5)} | {seleccionado.pabellon==="CCV" ? "CCV (Costanera)" : `Pabellón ${seleccionado.pabellon}`}</div>
               {seleccionado.cirujano && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>👨‍⚕️ Cirujano: {seleccionado.cirujano}</div>}
               {seleccionado.primer_ayudante && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>🧑‍⚕️ Primer ayudante: {seleccionado.primer_ayudante}</div>}
             </div>
@@ -7290,6 +7313,21 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
               <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:6}}>Al completar la cirugía, esta historia pasa a la ficha del paciente hospitalizado.</div>
             </div>
           )}
+          {/* Puente al logbook personal: evita escribir la misma cirugía dos veces */}
+          {seleccionado.estado === "completada" && (
+            <button
+              onClick={() => {
+                if (prepararBorradorLogbook(seleccionado, currentUser?.nombre)) {
+                  uroToast("Revisa y completa los datos antes de guardar");
+                  window.dispatchEvent(new CustomEvent("uro-ir-a-tab", { detail: "logbook" }));
+                } else {
+                  uroToast("No se pudo preparar el registro");
+                }
+              }}
+              style={{marginBottom:10,width:"100%",padding:"10px",fontSize:"var(--fs-1)",background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700}}
+            >📓 Agregar a mi logbook</button>
+          )}
+
           {/* #14: adjuntar un ingreso desde la tabla quirúrgica */}
           {!ingresoVinculado && !soloLectura && (
             <button onClick={()=>setIngresoModalCirugia(true)} style={{marginBottom:10,width:"100%",padding:"9px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer",fontWeight:600}}>📄 Adjuntar ingreso a este paciente</button>
@@ -8310,7 +8348,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>{campo("Genitales", "genitales")}{campo("T. rectal", "rectal")}</div>
         {campo("Hipótesis diagnóstica", "hipotesis", true)}
         <div><label style={lbl}>Indicaciones</label><textarea rows={11} value={f.indicaciones} onChange={e => set("indicaciones", e.target.value)} style={{ ...inp, resize: "vertical", minHeight: 210, fontFamily: "inherit", lineHeight: 1.5 }} /></div>
-        <button type="button" onClick={() => { if (!confirm("¿Borrar TODOS los campos del ingreso y partir de cero?")) return; setF({ ...DEFAULTS, fingreso: new Date().toISOString().slice(0, 10) }); setCarpeta(""); setMsg(""); }} style={{ width: "100%", padding: "9px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: "var(--peligro)", border: "1px solid var(--peligro)", borderRadius: 8, cursor: "pointer", margin: "2px 0 8px" }}>🧹 Limpiar todos los campos</button>
+        <button type="button" onClick={async () => { if (!(await uroConfirm("¿Borrar TODOS los campos del ingreso y partir de cero?"))) return; setF({ ...DEFAULTS, fingreso: new Date().toISOString().slice(0, 10) }); setCarpeta(""); setMsg(""); }} style={{ width: "100%", padding: "9px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: "var(--peligro)", border: "1px solid var(--peligro)", borderRadius: 8, cursor: "pointer", margin: "2px 0 8px" }}>🧹 Limpiar todos los campos</button>
         {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), margin: "4px 0 8px" }}>{msg}</div>}
         {onGuardarIngreso && (
           <div style={{ marginBottom: 8 }}>
@@ -10686,7 +10724,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (vista === "ficha" && seleccionado) {
     const esCreador = seleccionado.medico_id === currentUser.id;
     return (
-      <div style={{padding:"16px",overflowY:"auto",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"16px", paddingBottom:"calc(110px + env(safe-area-inset-bottom, 0px))", overflowY:"auto",display:"flex",flexDirection:"column"}}>
         {toastEstadoEl}
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
@@ -11561,7 +11599,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   // ============================================================
 
   return (
-    <div ref={listaScrollElRef} onScroll={e=>{listaScrollPosRef.current = e.currentTarget.scrollTop;}} style={{padding:"16px",overflowY:"auto"}}>
+    <div ref={listaScrollElRef} onScroll={e=>{listaScrollPosRef.current = e.currentTarget.scrollTop;}} style={{padding:"16px", paddingBottom:"calc(110px + env(safe-area-inset-bottom, 0px))", overflowY:"auto"}}>
 
       {toastEstadoEl}
 
@@ -12171,7 +12209,7 @@ function OfflineBanner() {
   );
 }
 
-export default function App() {
+function AppInterna() {
   const [session, setSession] = useState(null);
   const [users, setUsers] = useState([]); // TEMPORAL: hasta migrar AdminPanel/EquiposPanel
   const [loadingSession, setLoadingSession] = useState(true);
@@ -12327,6 +12365,27 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [modo, setModo] = useState("precisa");
+  const [feedbackDado, setFeedbackDado] = useState({}); // índice de mensaje → "up" | "down"
+
+  // Registro de feedback: la materia prima para mejorar al asistente.
+  // Con los pulgares abajo se arma la lista de preguntas donde Uros falla,
+  // y esa lista dicta qué capítulos agregar a la biblioteca o qué ajustar
+  // en el prompt. Falla en silencio: nunca molesta al usuario por esto.
+  const enviarFeedback = async (idx, voto) => {
+    setFeedbackDado(prev => ({ ...prev, [idx]: voto }));
+    try {
+      const respuesta = messages[idx]?.content || "";
+      const pregunta = [...messages.slice(0, idx)].reverse().find(m => m.role === "user")?.content || "";
+      await supabase.from("chat_feedback").insert({
+        user_id: currentUser?.id || null,
+        voto,
+        modo,
+        pregunta: String(pregunta).slice(0, 1200),
+        respuesta: String(respuesta).slice(0, 2000),
+        version_app: VERSION,
+      });
+    } catch {}
+  };
   const [mapaTema, setMapaTema] = useState("");
   const [mapaActual, setMapaActual] = useState(null);
   const [mapaLoading, setMapaLoading] = useState(false);
@@ -12341,6 +12400,14 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   // no tiene scroll, no habría eventos de scroll que lo hicieran reaparecer y el
   // menú quedaba inaccesible hasta cerrar la app.
   useEffect(() => { setHeaderOculto(false); scrollRef.current.acum = 0; }, [tab]);
+
+  // Permite que un panel pida saltar a otra pestaña sin encadenar props
+  // (lo usa el botón "Agregar a mi logbook" de la tabla quirúrgica).
+  useEffect(() => {
+    const h = (e) => { if (typeof e.detail === "string") setTab(e.detail); };
+    window.addEventListener("uro-ir-a-tab", h);
+    return () => window.removeEventListener("uro-ir-a-tab", h);
+  }, []);
   // Detección estable: hay que acumular movimiento sostenido en una dirección para
   // cambiar de estado (evita el parpadeo por el "salto" del contenido al colapsar).
   const onScrollContenido = (e) => {
@@ -12352,6 +12419,16 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
 
     // Tras cambiar de estado, ignorar el rebote que produce el reflow del contenido
     if (ahora < s.bloqueoHasta) { s.ultimo = y; return; }
+
+    // Zona muerta inferior: al llegar al final, mostrar u ocultar el header
+    // cambia la altura útil y el navegador reajusta el scroll, con lo que la
+    // lista "salta" y no se alcanzan a ver las últimas fichas. Cerca del
+    // final, el header se queda como esté.
+    const el = e.target;
+    if (el.scrollHeight - y - el.clientHeight < 90) {
+      s.ultimo = y; s.acum = 0;
+      return;
+    }
 
     // Zona muerta: cerca del tope, el header siempre visible
     if (y < 40) {
@@ -12945,7 +13022,7 @@ if (videosResult.ok) {
   const consultaPacientes = buscarPacientesRelevantes(txt);
   const necesitaBase = !esCharla && !consultaCirugias && !consultaPacientes;
   // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
-  const busquedaPromise = necesitaBase ? buscarChunks(txt, 8) : Promise.resolve({ ok: true, chunks: [] });
+  const busquedaPromise = necesitaBase ? buscarChunks(expandirSiglas(txt), 8) : Promise.resolve({ ok: true, chunks: [] });
   
   // ============================================
   // PERSISTENCIA: obtener sesión actual de Supabase
@@ -13612,6 +13689,7 @@ if (!currentUser) {
 
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onScrollCapture={onScrollContenido} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,overflow:"hidden"}}>
       <div key={tab} style={{flex:1,display:"flex",flexDirection:"column",minHeight:0,animation:`uro-slide-${dirTab < 0 ? "izq" : "der"} .24s cubic-bezier(.22,.8,.3,1)`}}>
+      <ErrorBoundary compacto seccion={tab} onVolver={() => setTab("chat")}>
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
       {(tab==="hospital" || promovida?.padre==="hospital") && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={promovida?.padre==="hospital" ? promovida.sub : subTabHospital} setSubTab={promovida?.padre==="hospital" ? (()=>{}) : setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
@@ -13688,7 +13766,24 @@ if (!currentUser) {
   // En la portada el saludo va dentro de PortadaChat, no como burbuja duplicada
   const esPortada = messages.length === 1 && messages[0].role === "assistant" && !isAdmin;
   if (esPortada && i === 0) return null;
-  return <ChatBubble key={i} msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>;
+  const conFeedback = m.role === "assistant" && !m.streaming && i > 0; // el saludo inicial no se evalúa
+  return (
+    <Fragment key={i}>
+      <ChatBubble msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>
+      {conFeedback && (
+        <div style={{display:"flex",gap:4,margin:"-4px 0 8px 40px",alignItems:"center"}}>
+          {feedbackDado[i] ? (
+            <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>{feedbackDado[i]==="up" ? "✓ Gracias por tu evaluación" : "✓ Anotado, esto ayuda a mejorar a Uros"}</span>
+          ) : (
+            <>
+              <button onClick={()=>enviarFeedback(i,"up")} title="Respuesta útil" aria-label="Respuesta útil" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px",opacity:0.55}}>👍</button>
+              <button onClick={()=>enviarFeedback(i,"down")} title="Respuesta con errores o poco útil" aria-label="Respuesta poco útil" style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px",opacity:0.55}}>👎</button>
+            </>
+          )}
+        </div>
+      )}
+    </Fragment>
+  );
 })}
             {loading && !(messages[messages.length - 1]?.streaming) && (
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
@@ -13716,6 +13811,7 @@ if (!currentUser) {
         </div>
       )}
 
+      </ErrorBoundary>
       </div>
       </div>
 
@@ -13736,5 +13832,135 @@ if (!currentUser) {
         </div>
       )}
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// RED DE SEGURIDAD (Error Boundary)
+//
+// Si cualquier componente lanza un error mientras dibuja la pantalla, React
+// desmonta TODO el árbol y deja la pantalla en blanco: sin menú, sin botones,
+// sin forma de volver. En una app que se usa junto al paciente eso es lo peor
+// que puede pasar.
+//
+// Esta clase intercepta ese error y muestra una pantalla de recuperación con
+// dos salidas: reintentar (vuelve a dibujar sin recargar, conserva la sesión)
+// o recargar la app. Además deja el detalle técnico a mano para poder
+// reportarlo, porque un error que nadie sabe describir no se arregla nunca.
+// ════════════════════════════════════════════════════════════════
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, info: null, intentos: 0 };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    this.setState({ info });
+    // Queda en la consola para poder revisarlo con el teléfono conectado.
+    console.error("[UroSearch] Error no controlado:", error, info?.componentStack);
+    // Se guarda el último error para poder adjuntarlo a un reporte.
+    try {
+      localStorage.setItem("uro_ultimo_error", JSON.stringify({
+        version: VERSION,
+        fecha: new Date().toISOString(),
+        seccion: this.props.seccion || "app",
+        mensaje: String(error?.message || error),
+        pila: String(info?.componentStack || "").slice(0, 2000),
+      }));
+    } catch {}
+  }
+
+  reintentar = () => {
+    this.setState(prev => ({ error: null, info: null, intentos: prev.intentos + 1 }));
+  };
+
+  recargar = () => {
+    try { window.location.reload(); } catch {}
+  };
+
+  copiarDetalle = async () => {
+    const txt = `UroSearch ${VERSION}\n${new Date().toISOString()}\n${String(this.state.error?.message || this.state.error)}\n${String(this.state.info?.componentStack || "").slice(0, 1500)}`;
+    try { await navigator.clipboard.writeText(txt); uroToast("✓ Detalle copiado"); }
+    catch { uroToast("No se pudo copiar el detalle"); }
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    // Variante compacta: se usa dentro de una pestaña, así que el encabezado y
+    // la navegación siguen ahí y basta con ofrecer reintentar o irse a otra parte.
+    if (this.props.compacto) {
+      return (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ maxWidth: 380, textAlign: "center" }}>
+            <div style={{ fontSize: 34, marginBottom: 8 }}>⚠️</div>
+            <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>Esta sección no se pudo mostrar</div>
+            <div style={{ fontSize: "var(--fs-1)", lineHeight: 1.6, color: "var(--texto-sec)", marginBottom: 16 }}>
+              El resto de la app sigue funcionando y tus datos están intactos. Puedes reintentar o cambiar de pestaña.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              <button onClick={this.reintentar} style={{ padding: "10px 18px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>Reintentar</button>
+              {this.props.onVolver && (
+                <button onClick={this.props.onVolver} style={{ padding: "10px 18px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>Ir al chat</button>
+              )}
+            </div>
+            <button onClick={this.copiarDetalle} style={{ marginTop: 12, padding: 8, fontSize: "var(--fs-0)", background: "none", color: "var(--texto-ter)", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+              Copiar detalle técnico
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Estilos literales: si el error ocurrió antes de montar los tokens de
+    // tema, las variables CSS podrían no existir todavía.
+    return (
+      <div style={{ minHeight: "100dvh", background: "#0d1b2a", color: "#dcebf7", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "system-ui, -apple-system, sans-serif" }}>
+        <div style={{ maxWidth: 460, width: "100%", textAlign: "center" }}>
+          <div style={{ fontSize: 44, marginBottom: 10 }}>🩺</div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Algo se rompió en esta pantalla</div>
+          <div style={{ fontSize: 15, lineHeight: 1.6, color: "#9db8d0", marginBottom: 20 }}>
+            Tus datos están a salvo: nada de lo que guardaste se perdió. Puedes reintentar y seguir trabajando.
+          </div>
+
+          <button onClick={this.reintentar} style={{ width: "100%", padding: 13, fontSize: 16, fontWeight: 700, background: "#2563eb", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", marginBottom: 8 }}>
+            Reintentar
+          </button>
+          <button onClick={this.recargar} style={{ width: "100%", padding: 13, fontSize: 15, fontWeight: 600, background: "transparent", color: "#dcebf7", border: "1px solid #2f5f8f", borderRadius: 10, cursor: "pointer", marginBottom: 8 }}>
+            Recargar la app
+          </button>
+          <button onClick={this.copiarDetalle} style={{ width: "100%", padding: 10, fontSize: 13, background: "none", color: "#7f9db8", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+            Copiar detalle técnico para reportarlo
+          </button>
+
+          {this.state.intentos > 1 && (
+            <div style={{ marginTop: 14, fontSize: 13, lineHeight: 1.5, color: "#e8a33d" }}>
+              El error se repite. Prueba con "Recargar la app"; si sigue igual, copia el detalle y repórtalo.
+            </div>
+          )}
+
+          <details style={{ marginTop: 18, textAlign: "left" }}>
+            <summary style={{ fontSize: 13, color: "#7f9db8", cursor: "pointer" }}>Detalle técnico</summary>
+            <pre style={{ fontSize: 11, lineHeight: 1.4, color: "#9db8d0", background: "#12253b", padding: 10, borderRadius: 8, overflowX: "auto", marginTop: 8, whiteSpace: "pre-wrap" }}>
+              {String(this.state.error?.message || this.state.error)}
+              {"\n"}
+              {String(this.state.info?.componentStack || "").slice(0, 800)}
+            </pre>
+          </details>
+        </div>
+      </div>
+    );
+  }
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInterna />
+    </ErrorBoundary>
   );
 }

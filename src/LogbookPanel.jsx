@@ -5,13 +5,14 @@
 // - Métricas de la casuística personal (KPIs + gráficos SVG)
 // Estilo: mismas CSS vars y patrones del resto de UroSearch.
 // ============================================================
-import { useState, useRef, useEffect, useMemo, Fragment } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from "react";
 import {
   listarLogbook, crearRegistroLogbook, actualizarRegistroLogbook,
   eliminarRegistroLogbook, subirFotoLogbook, obtenerUrlFoto, eliminarFotoLogbook,
   listarCompanerosEquipo, agregarLogbookACompanero,
 } from "./logbook";
 import { supabase } from "./supabase";
+import { uroToast, uroConfirm } from "./ui";
 
 // Token para la Edge Function de IA: usa la sesión del usuario (la función
 // valida que el usuario exista y esté aprobado antes de llamar a Anthropic).
@@ -24,8 +25,24 @@ async function tokenFuncionIA() {
 }
 
 const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Otro"];
-const ROLES = [["cirujano", "Cirujano principal"], ["primer_ayudante", "1er ayudante"], ["segundo_ayudante", "2do ayudante"], ["observador", "Observador"]];
-const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante"]; // cuentan como "ayudante" en las métricas
+const ROLES = [["cirujano", "Cirujano principal"], ["primer_ayudante", "1er ayudante"], ["segundo_ayudante", "2do ayudante"], ["tercer_ayudante", "3er ayudante"], ["cuarto_ayudante", "4to ayudante"], ["observador", "Observador"]];
+const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante", "tercer_ayudante", "cuarto_ayudante"]; // cuentan como "ayudante" en las métricas
+
+// Filtros de rol disponibles en las métricas
+const FILTROS_ROL = [
+  ["todos", "Todos"],
+  ["cirujano", "Cirujano principal"],
+  ["ayudante", "Cualquier ayudantía"],
+  ["primer_ayudante", "1er ayudante"],
+  ["segundo_ayudante", "2do ayudante"],
+  ["tercer_ayudante", "3er ayudante"],
+  ["cuarto_ayudante", "4to ayudante"],
+  ["observador", "Observador"],
+];
+const cumpleRol = (r, filtro) =>
+  filtro === "todos" ? true
+  : filtro === "ayudante" ? ROLES_AYUDANTE.includes(r.rol)
+  : r.rol === filtro;
 
 // ─── Agrupación de procedimientos ───
 // Junta las variantes de una misma intervención (técnicas, lateralidad, siglas)
@@ -118,8 +135,18 @@ function familiaProc(nombre) {
     .replace(/\s+/g, " ")
     .trim();
   for (const [re, fam] of FAMILIAS) if (re.test(t)) return fam;
-  // Si no calza, se normaliza para que al menos las variantes de escritura se junten
-  const limpio = t.replace(/[.,;]+$/, "");
+  // Si no calza con ninguna familia conocida, se normaliza fuerte para que las
+  // variantes de escritura del MISMO procedimiento terminen en el mismo grupo:
+  // se quitan la vía de abordaje, los conectores y la puntuación.
+  const limpio = t
+    .replace(/\b(laparoscopic[ao]|laparoscopia|videolaparoscopic[ao]|robotic[ao]|asistida\s*por\s*robot|abiert[ao]|endoscopic[ao]|percutane[ao]|transuretral|retroperitoneoscopic[ao]|mano\s*asistida|video\s*asistida)\b/g, " ")
+    .replace(/\b(cirugia|operacion|procedimiento)\s+(de|del|de\s*la)?\s*/g, " ")
+    .replace(/\b(de|del|la|el|los|las|por|con|via|mas|y)\b/g, " ")
+    .replace(/[.,;:()\-]+/g, " ")
+    .replace(/s\b/g, "")            // singular/plural no separan
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!limpio) return "Sin especificar";
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
@@ -198,7 +225,14 @@ function detectarRol(nombreUsuario, cirujano, ayudantes) {
   const tokens = norm(nombreUsuario).split(/[\s.,]+/).filter((t) => t.length >= 4 && !["doctor"].includes(t));
   const aparece = (campo) => tokens.some((t) => norm(campo).includes(t));
   if (aparece(cirujano)) return "cirujano";
-  if (aparece(ayudantes)) return "primer_ayudante";
+  if (aparece(ayudantes)) {
+    // El orden en que aparece en la lista del protocolo indica la ayudantía:
+    // "Dr. X, Dr. Y, Dr. Z" → 1er, 2do y 3er ayudante respectivamente.
+    const lista = String(ayudantes || "").split(/[,;/]|\by\b|\n/).map((x) => x.trim()).filter(Boolean);
+    const idx = lista.findIndex((x) => tokens.some((t) => norm(x).includes(t)));
+    const porOrden = ["primer_ayudante", "segundo_ayudante", "tercer_ayudante", "cuarto_ayudante"];
+    return porOrden[idx] || "primer_ayudante";
+  }
   return "cirujano";
 }
 
@@ -458,11 +492,33 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [modoFotos, setModoFotos] = useState("distintas"); // "distintas" | "misma"
   // Métricas: criterio de separación y secciones colapsables
   const [criterioMet, setCriterioMet] = useState("todas"); // "todas" | "onco" | "noonco"
+  const [filtroRolMet, setFiltroRolMet] = useState("todos"); // rol con el que se filtran las métricas
+  const [agruparOpen, setAgruparOpen] = useState(false);     // modal para unir procedimientos
+  const [seleccionGrupos, setSeleccionGrupos] = useState([]);
+  // Uniones manuales: { "nombre detectado": "nombre definitivo" }. Se guardan en
+  // el navegador porque son una preferencia de lectura, no un dato clínico.
+  const [aliasProc, setAliasProc] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("uro_logbook_alias") || "{}"); } catch { return {}; }
+  });
+  const guardarAlias = (nuevo) => {
+    setAliasProc(nuevo);
+    try { localStorage.setItem("uro_logbook_alias", JSON.stringify(nuevo)); } catch {}
+  };
+  // Grupo definitivo de un registro: familia detectada, salvo que se haya unido a mano.
+  const grupoProc = useCallback((nombre) => {
+    const fam = familiaProc(nombre);
+    return aliasProc[fam] || fam;
+  }, [aliasProc]);
   const [metPorCxOpen, setMetPorCxOpen] = useState(false);  // "Métricas por cirugía" colapsado por defecto
   const [procAbierto, setProcAbierto] = useState(null);     // procedimiento expandido (muestra gráfico)
   const [graficoOpen, setGraficoOpen] = useState(false);    // gráfico mensual ampliado (modal)
   const [mesAbierto, setMesAbierto] = useState(null);       // mes seleccionado dentro del gráfico ampliado
   const [duplicadosOpen, setDuplicadosOpen] = useState(false); // revisor de posibles duplicados
+  const [desdeTabla, setDesdeTabla] = useState(false);         // el formulario viene precargado desde una cirugía
+  const [certOpen, setCertOpen] = useState(false);             // modal del certificado de casuística
+  const [certDesde, setCertDesde] = useState("");
+  const [certHasta, setCertHasta] = useState("");
+  const [certGenerando, setCertGenerando] = useState(false);
   const [resumenIA, setResumenIA] = useState("");           // resumen escrito por la IA
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState("");
@@ -740,12 +796,188 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   const resetForm = () => {
     setReg({ ...REGISTRO_VACIO });
+    setDesdeTabla(false);
     setFotos([]);
     setEditId(null);
     setExtraidoOk(false);
     setError("");
     setCola([]); setColaTotal(0);
     setExtractProgreso(null);
+  };
+
+  // Borrador enviado desde la ficha de una cirugía completada: abre el
+  // formulario ya lleno para no escribir dos veces el mismo caso. No guarda
+  // nada solo; el usuario revisa, completa y confirma.
+  useEffect(() => {
+    const tomar = () => {
+      let borrador = null;
+      try {
+        const crudo = localStorage.getItem("uro_logbook_borrador");
+        if (!crudo) return;
+        borrador = JSON.parse(crudo);
+        localStorage.removeItem("uro_logbook_borrador");
+      } catch { return; }
+      if (!borrador) return;
+      setEditId(null);
+      setReg({ ...REGISTRO_VACIO, ...borrador });
+      setDesdeTabla(true);
+      setVista("nueva");
+    };
+    tomar();
+    window.addEventListener("uro-logbook-borrador", tomar);
+    return () => window.removeEventListener("uro-logbook-borrador", tomar);
+  }, []);
+
+  // ─── Certificado de casuística en PDF ───────────────────────────
+  // El documento que todo residente termina armando a mano en Excel para la
+  // certificación: casuística por procedimiento y rol, en un rango de fechas,
+  // con línea de firma para el tutor. Acá sale de los datos ya registrados.
+  const generarCertificado = async () => {
+    setCertGenerando(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+
+      const desde = certDesde || "0000-00-00";
+      const hasta = certHasta || "9999-12-31";
+      const enRango = registros.filter((r) => r.fecha && r.fecha >= desde && r.fecha <= hasta);
+      if (enRango.length === 0) { uroToast("No hay cirugías registradas en ese rango de fechas."); setCertGenerando(false); return; }
+
+      // Conteo por grupo de procedimiento × rol
+      const ORD_ROLES = ["cirujano", "primer_ayudante", "segundo_ayudante", "tercer_ayudante", "cuarto_ayudante", "observador"];
+      const porProc = new Map();
+      enRango.forEach((r) => {
+        const g = grupoProc(r.procedimiento);
+        if (!porProc.has(g)) porProc.set(g, { cirujano: 0, primer_ayudante: 0, segundo_ayudante: 0, tercer_ayudante: 0, cuarto_ayudante: 0, observador: 0, total: 0 });
+        const e = porProc.get(g);
+        e[ORD_ROLES.includes(r.rol) ? r.rol : "observador"]++;
+        e.total++;
+      });
+      const filas = Array.from(porProc.entries()).sort((a, b) => b[1].total - a[1].total);
+
+      const nCx = enRango.filter((r) => r.rol === "cirujano").length;
+      const nAy = enRango.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
+      const nObs = enRango.filter((r) => r.rol === "observador").length;
+      const nComplIntra = enRango.filter(esIntra).length;
+      const nComplPost = enRango.filter(esPost).length;
+      const nClavAlto = enRango.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
+
+      const fmtCL = (iso) => { const [a, m, d] = String(iso || "").split("-"); return d ? `${d}/${m}/${a}` : (iso || ""); };
+      const fechas = enRango.map((r) => r.fecha).sort();
+      const periodoTxt = `${fmtCL(certDesde || fechas[0])} — ${fmtCL(certHasta || fechas[fechas.length - 1])}`;
+
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const W = 210, M = 18;
+      let y = 20;
+      const azul = [26, 58, 92];
+
+      // Encabezado
+      doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...azul);
+      doc.text("CERTIFICADO DE CASUÍSTICA QUIRÚRGICA", W / 2, y, { align: "center" }); y += 7;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(90);
+      doc.text("Registro personal de actividad quirúrgica — UroSearch", W / 2, y, { align: "center" }); y += 10;
+      doc.setDrawColor(...azul); doc.setLineWidth(0.5); doc.line(M, y, W - M, y); y += 8;
+
+      // Identificación
+      doc.setTextColor(30); doc.setFontSize(10.5);
+      const linea = (rot, val) => { doc.setFont("helvetica", "bold"); doc.text(rot, M, y); doc.setFont("helvetica", "normal"); doc.text(String(val), M + 42, y); y += 6; };
+      linea("Profesional:", currentUser?.nombre || "—");
+      if (currentUser?.especialidad) linea("Especialidad:", currentUser.especialidad);
+      linea("Período:", periodoTxt);
+      linea("Fecha de emisión:", fmtCL(new Date().toISOString().slice(0, 10)));
+      y += 3;
+
+      // Resumen
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...azul);
+      doc.text("RESUMEN", M, y); y += 6;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(30);
+      const resumen = [
+        `Total de cirugías registradas: ${enRango.length}`,
+        `Como cirujano principal: ${nCx}   ·   Como ayudante (1º–4º): ${nAy}${nObs ? `   ·   Como observador: ${nObs}` : ""}`,
+        `Complicaciones intraoperatorias: ${nComplIntra}   ·   Post-operatorias: ${nComplPost}   ·   Clavien-Dindo ≥ IIIb: ${nClavAlto}`,
+      ];
+      resumen.forEach((t) => { doc.text(t, M, y); y += 5.5; });
+      y += 4;
+
+      // Tabla por procedimiento × rol
+      doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...azul);
+      doc.text("DETALLE POR PROCEDIMIENTO Y ROL", M, y); y += 6;
+
+      const cols = [
+        { t: "Procedimiento", x: M, w: 78, align: "left" },
+        { t: "Cx", x: M + 80, w: 12 },
+        { t: "1º", x: M + 94, w: 12 },
+        { t: "2º", x: M + 108, w: 12 },
+        { t: "3º", x: M + 122, w: 12 },
+        { t: "4º", x: M + 136, w: 12 },
+        { t: "Obs", x: M + 150, w: 12 },
+        { t: "Total", x: M + 164, w: 12 },
+      ];
+      const encabezadoTabla = () => {
+        doc.setFillColor(238, 243, 249);
+        doc.rect(M - 2, y - 4.2, W - 2 * M + 4, 6.4, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...azul);
+        cols.forEach((c) => doc.text(c.t, c.align === "left" ? c.x : c.x + c.w / 2, y, { align: c.align === "left" ? "left" : "center" }));
+        y += 5.5;
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.setTextColor(30);
+      };
+      encabezadoTabla();
+
+      filas.forEach(([nombre, v], i) => {
+        if (y > 262) { doc.addPage(); y = 20; encabezadoTabla(); }
+        if (i % 2 === 1) { doc.setFillColor(248, 250, 252); doc.rect(M - 2, y - 3.9, W - 2 * M + 4, 5.6, "F"); }
+        const nom = doc.splitTextToSize(nombre, 76)[0];
+        doc.text(nom, M, y);
+        const vals = [v.cirujano, v.primer_ayudante, v.segundo_ayudante, v.tercer_ayudante, v.cuarto_ayudante, v.observador, v.total];
+        vals.forEach((n, j) => { const c = cols[j + 1]; doc.setFont("helvetica", j === 6 ? "bold" : "normal"); doc.text(n ? String(n) : "·", c.x + c.w / 2, y, { align: "center" }); });
+        doc.setFont("helvetica", "normal");
+        y += 5.6;
+      });
+
+      // Totales
+      if (y > 255) { doc.addPage(); y = 20; }
+      y += 1.5;
+      doc.setDrawColor(...azul); doc.setLineWidth(0.4); doc.line(M - 2, y - 3.5, W - M + 2, y - 3.5);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.8);
+      doc.text("TOTAL", M, y);
+      const tot = [nCx,
+        enRango.filter((r) => r.rol === "primer_ayudante").length,
+        enRango.filter((r) => r.rol === "segundo_ayudante").length,
+        enRango.filter((r) => r.rol === "tercer_ayudante").length,
+        enRango.filter((r) => r.rol === "cuarto_ayudante").length,
+        nObs, enRango.length];
+      tot.forEach((n, j) => { const c = cols[j + 1]; doc.text(String(n), c.x + c.w / 2, y, { align: "center" }); });
+      y += 12;
+
+      // Firmas
+      if (y > 240) { doc.addPage(); y = 30; }
+      y = Math.max(y, 230);
+      doc.setLineWidth(0.3); doc.setDrawColor(60);
+      doc.line(M + 6, y, M + 76, y);
+      doc.line(W - M - 76, y, W - M - 6, y);
+      y += 4.5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(60);
+      doc.text(currentUser?.nombre || "Residente", M + 41, y, { align: "center" });
+      doc.text("Tutor / Jefe de Programa", W - M - 41, y, { align: "center" });
+      y += 4.5;
+      doc.setFontSize(7.5); doc.setTextColor(120);
+      doc.text("Firma del profesional", M + 41, y, { align: "center" });
+      doc.text("Firma y timbre", W - M - 41, y, { align: "center" });
+
+      // Pie en todas las páginas
+      const paginas = doc.getNumberOfPages();
+      for (let p = 1; p <= paginas; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7); doc.setTextColor(150);
+        doc.text("Generado por UroSearch · datos autorreportados por el profesional · verificar contra protocolos operatorios", M, 290);
+        doc.text(`${p} / ${paginas}`, W - M, 290, { align: "right" });
+      }
+
+      doc.save(`casuistica_${(currentUser?.nombre || "residente").split(" ")[0].toLowerCase()}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      setCertOpen(false);
+    } catch (e) {
+      uroToast("No se pudo generar el certificado: " + (e?.message || e));
+    }
+    setCertGenerando(false);
   };
 
   const empezarEdicion = (r) => {
@@ -773,9 +1005,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   };
 
   const eliminar = async (r) => {
-    if (!confirm(`¿Eliminar "${r.procedimiento}" del ${r.fecha}?\n\nNo podrás recuperarlo.`)) return;
+    if (!(await uroConfirm(`¿Eliminar "${r.procedimiento}" del ${r.fecha}?\n\nNo podrás recuperarlo.`))) return;
     const result = await eliminarRegistroLogbook(r.id);
-    if (!result.ok) return alert("Error: " + result.error);
+    if (!result.ok) return uroToast("Error: " + result.error);
     if (r.foto_path) eliminarFotoLogbook(r.foto_path);
     setRegistros((prev) => prev.filter((x) => x.id !== r.id));
   };
@@ -783,7 +1015,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const verFoto = async (path) => {
     const r = await obtenerUrlFoto(path);
     if (r.ok) setFotoUrl(r.url);
-    else alert("No se pudo cargar la foto: " + r.error);
+    else uroToast("No se pudo cargar la foto: " + r.error);
   };
 
   // ─── Exportar CSV (incluye complicaciones y complementos) ───
@@ -813,14 +1045,14 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (!r.fecha) return;
       const ident = norm(r.rut) || norm(r.ficha_clinica) || norm(r.iniciales);
       if (!ident) return;
-      const clave = `${r.fecha}|${familiaProc(r.procedimiento)}|${ident}`;
+      const clave = `${r.fecha}|${grupoProc(r.procedimiento)}|${ident}`;
       if (!grupos.has(clave)) grupos.set(clave, []);
       grupos.get(clave).push(r);
     });
     return Array.from(grupos.values())
       .filter((g) => g.length > 1)
       .sort((a, b) => (b[0].fecha || "").localeCompare(a[0].fecha || ""));
-  }, [registros]);
+  }, [registros, grupoProc]);
   const nDuplicados = gruposDuplicados.reduce((acc, g) => acc + (g.length - 1), 0);
 
   const filtrados = useMemo(() => {
@@ -848,9 +1080,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const stat = (arr) => (arr.length ? { med: mediana(arr), prom: prom(arr), n: arr.length } : null);
   const met = useMemo(() => {
     // Criterio de separación (oncológicas / no oncológicas / todas)
-    const base = criterioMet === "onco" ? registros.filter(esOncologica)
+    const porCriterio = criterioMet === "onco" ? registros.filter(esOncologica)
       : criterioMet === "noonco" ? registros.filter((r) => !esOncologica(r))
       : registros;
+    // Filtro por rol: permite mirar solo lo operado como cirujano principal, o
+    // solo las ayudantías de cierto orden.
+    const base = porCriterio.filter((r) => cumpleRol(r, filtroRolMet));
     const total = base.length;
     const comoCirujano = base.filter((r) => r.rol === "cirujano").length;
     const comoAyudante = base.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
@@ -867,7 +1102,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     const porProc = {};
     base.forEach((r) => {
       porCat[r.categoria || "Otro"] = (porCat[r.categoria || "Otro"] || 0) + 1;
-      const p = familiaProc(r.procedimiento);
+      const p = grupoProc(r.procedimiento);
       if (!porProc[p]) porProc[p] = { n: 0, cx: 0, ayud: 0, dur: [], sangrado: [], litiasis: [], prostata: [], compl: 0, complIntra: 0, complPost: 0, stoneFree: 0, stoneTotal: 0, durCasos: [], sangradoCasos: [], ctrlTotal: 0, ctrlFav: 0, ctrlMayor: 0 };
       const v = porProc[p];
       v.n++;
@@ -932,7 +1167,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     // Procedimiento más frecuente (reemplaza a la duración promedio global)
     const masFrecuente = detalleProc.length ? detalleProc[0] : null;
     return { total, comoCirujano, comoAyudante, conComplicacion, complIntra, complPost, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, porRol, detalleProc, ayudantiasPorProc, onco };
-  }, [registros, criterioMet]);
+  }, [registros, criterioMet, filtroRolMet, grupoProc]);
 
   // ─── Estilos compartidos ───
   const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", outline: "none" };
@@ -1080,8 +1315,17 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       {/* ============ VISTA: NUEVA / EDITAR ============ */}
       {vista === "nueva" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {desdeTabla && (
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", background: "var(--exito-bg)", border: "1px solid var(--exito)", borderRadius: 10 }}>
+              <span style={{ fontSize: 18, lineHeight: 1 }}>📋</span>
+              <div style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.5 }}>
+                <b style={{ color: "var(--exito)" }}>Datos traídos desde la tabla quirúrgica.</b> Revisa el rol y completa lo que falte (duración, hallazgos, complicaciones) antes de guardar.
+              </div>
+            </div>
+          )}
+
           {/* Captura */}
-          {!editId && (
+          {!editId && !desdeTabla && (
             <div style={{ ...card, textAlign: "center", borderStyle: "dashed", borderWidth: 1.5, padding: "18px 14px" }}>
               <input ref={inputFotoRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }} onChange={onFotos} />
               <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onFotos} />
@@ -1378,6 +1622,34 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               );
             })}
           </div>
+
+          {/* Filtro por rol: ver la casuística solo como cirujano o como ayudante de cierto orden */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginRight: 2 }}>Rol:</span>
+            {FILTROS_ROL.map(([id, label]) => {
+              const on = filtroRolMet === id;
+              return (
+                <button key={id} onClick={() => { setFiltroRolMet(id); setProcAbierto(null); setResumenIA(""); }} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: on ? 700 : 500, borderRadius: 20, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>
+                  {label}
+                </button>
+              );
+            })}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              <button onClick={() => { setSeleccionGrupos([]); setAgruparOpen(true); }} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: 600, borderRadius: 20, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--primario)" }}>
+                🧩 Agrupar{Object.keys(aliasProc).length > 0 ? ` (${Object.keys(aliasProc).length})` : ""}
+              </button>
+              <button onClick={() => setCertOpen(true)} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: 700, borderRadius: 20, cursor: "pointer", border: "none", background: "var(--primario)", color: "var(--texto-inv)" }}>
+                📜 Certificado
+              </button>
+            </div>
+          </div>
+
+          {filtroRolMet !== "todos" && (
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: -4 }}>
+              Mostrando solo: {(FILTROS_ROL.find(([id]) => id === filtroRolMet) || [, filtroRolMet])[1]}
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <div style={kpi}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.total}</div>
@@ -1580,6 +1852,126 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           </div>
         </div>
       )}
+
+      {/* ─── Modal: certificado de casuística en PDF ─── */}
+      {certOpen && (() => {
+        const fechas = registros.map((r) => r.fecha).filter(Boolean).sort();
+        const desde = certDesde || fechas[0] || "";
+        const hasta = certHasta || new Date().toISOString().slice(0, 10);
+        const enRango = registros.filter((r) => r.fecha && r.fecha >= (desde || "0000") && r.fecha <= (hasta || "9999"));
+        const nCx = enRango.filter((r) => r.rol === "cirujano").length;
+        const nAy = enRango.filter((r) => ROLES_AYUDANTE.includes(r.rol)).length;
+        return (
+          <div onClick={() => setCertOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 460 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)" }}>📜 Certificado de casuística</div>
+                <button onClick={() => setCertOpen(false)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 14, lineHeight: 1.5 }}>
+                Documento PDF con tu casuística por procedimiento y rol, listo para presentar: incluye resumen, tabla detallada, complicaciones y líneas de firma para ti y tu tutor.
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4 }}>Desde</label>
+                  <input type="date" value={certDesde || fechas[0] || ""} onChange={(e) => setCertDesde(e.target.value)} style={{ width: "100%", padding: "9px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", marginBottom: 4 }}>Hasta</label>
+                  <input type="date" value={certHasta || new Date().toISOString().slice(0, 10)} onChange={(e) => setCertHasta(e.target.value)} style={{ width: "100%", padding: "9px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, boxSizing: "border-box" }} />
+                </div>
+              </div>
+
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", background: "var(--fondo-suave)", borderRadius: 8, padding: "9px 12px", marginBottom: 12 }}>
+                En este rango: <b>{enRango.length}</b> cirugía{enRango.length === 1 ? "" : "s"} — {nCx} como cirujano, {nAy} como ayudante.
+              </div>
+
+              <button onClick={generarCertificado} disabled={certGenerando || enRango.length === 0} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: enRango.length === 0 ? "var(--borde)" : "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: certGenerando || enRango.length === 0 ? "default" : "pointer", opacity: certGenerando ? 0.6 : 1 }}>
+                {certGenerando ? "Generando…" : "📄 Generar PDF"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Modal: agrupar cirugías escritas de distinta forma ─── */}
+      {agruparOpen && (() => {
+        // Todos los grupos detectados hoy, con su conteo y los nombres crudos que contienen.
+        const mapa = new Map();
+        registros.forEach((r) => {
+          const g = grupoProc(r.procedimiento);
+          if (!mapa.has(g)) mapa.set(g, { nombre: g, n: 0, crudos: new Set() });
+          const e = mapa.get(g);
+          e.n++;
+          if (r.procedimiento) e.crudos.add(r.procedimiento.trim());
+        });
+        const grupos = Array.from(mapa.values()).sort((a, b) => b.n - a.n);
+        return (
+          <div onClick={() => setAgruparOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 620, maxHeight: "88vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--texto)" }}>🧩 Agrupar cirugías</div>
+                <button onClick={() => setAgruparOpen(false)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 12, lineHeight: 1.5 }}>
+                UroSearch junta solo las variantes de escritura que reconoce. Si dos grupos son en realidad la misma cirugía, márcalos y únelos: las métricas los contarán juntos. Esto no modifica ningún registro, solo cómo se agrupan.
+              </div>
+
+              {seleccionGrupos.length >= 2 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, background: "var(--fondo-suave)", border: "1px solid var(--primario)", borderRadius: 10, marginBottom: 12 }}>
+                  <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)" }}>Unir {seleccionGrupos.length} grupos bajo el nombre:</div>
+                  {seleccionGrupos.map((g) => (
+                    <button key={g} onClick={() => {
+                      const nuevo = { ...aliasProc };
+                      seleccionGrupos.forEach((origen) => { if (origen !== g) nuevo[origen] = g; });
+                      // Reencadenar: si algo apuntaba a uno de los unidos, ahora apunta al destino
+                      Object.keys(nuevo).forEach((k) => { if (seleccionGrupos.includes(nuevo[k]) && nuevo[k] !== g) nuevo[k] = g; });
+                      delete nuevo[g];
+                      guardarAlias(nuevo);
+                      setSeleccionGrupos([]);
+                    }} style={{ textAlign: "left", padding: "8px 10px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>
+                      → {g}
+                    </button>
+                  ))}
+                  <button onClick={() => setSeleccionGrupos([])} style={{ padding: "6px", fontSize: "var(--fs-0)", background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Cancelar selección</button>
+                </div>
+              )}
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {grupos.map((g) => {
+                  const marcado = seleccionGrupos.includes(g.nombre);
+                  const variantes = Array.from(g.crudos);
+                  return (
+                    <div key={g.nombre} onClick={() => setSeleccionGrupos((prev) => marcado ? prev.filter((x) => x !== g.nombre) : [...prev, g.nombre])}
+                      style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 11px", background: marcado ? "var(--fondo-suave)" : "var(--superficie)", border: "1px solid " + (marcado ? "var(--primario)" : "var(--borde)"), borderRadius: 9, cursor: "pointer" }}>
+                      <span style={{ flexShrink: 0, width: 18, height: 18, marginTop: 1, borderRadius: 4, border: "1px solid " + (marcado ? "var(--primario)" : "var(--borde)"), background: marcado ? "var(--primario)" : "transparent", color: "var(--texto-inv)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>{marcado ? "✓" : ""}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{g.nombre} <span style={{ color: "var(--texto-ter)", fontWeight: 400 }}>· {g.n}</span></div>
+                        {variantes.length > 1 && (
+                          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis" }}>{variantes.slice(0, 3).join(" · ")}{variantes.length > 3 ? ` · +${variantes.length - 3}` : ""}</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {Object.keys(aliasProc).length > 0 && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: "0.5px solid var(--borde)" }}>
+                  <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>Uniones activas</div>
+                  {Object.entries(aliasProc).map(([origen, destino]) => (
+                    <div key={origen} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--fs-0)", color: "var(--texto-sec)", padding: "4px 0" }}>
+                      <span style={{ flex: 1, minWidth: 0 }}>{origen} → <b>{destino}</b></span>
+                      <button onClick={() => { const n = { ...aliasProc }; delete n[origen]; guardarAlias(n); }} style={{ background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontWeight: 700, fontSize: "var(--fs-0)" }}>Deshacer</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── Modal: revisar posibles duplicados ─── */}
       {duplicadosOpen && (
