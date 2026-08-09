@@ -18,7 +18,7 @@ function horaLocalHM() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
+import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, crearFigurasCapitulo, listarFigurasPendientes, marcarFiguraCurada, eliminarFiguraCapitulo, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import { uroToast, uroConfirm, UroDialogHost } from "./ui";
 import LogbookPanel from "./LogbookPanel";
@@ -966,6 +966,66 @@ function EditorSugerencias({ currentUser }) {
       )}
     </div>
   );
+}
+
+// ─── Imágenes de la biblioteca para el chat ───
+// Catálogo curado de láminas (clasificaciones, algoritmos, anatomía) que
+// Uros puede insertar en sus respuestas CUANDO son atingentes. El modelo
+// recibe el catálogo y coloca marcadores [IMAGEN:clave]; el chat solo
+// dibuja claves que existen, así que no puede inventar imágenes.
+async function listarImagenesChat() {
+  try {
+    const { data, error } = await supabase
+      .from("chat_imagenes")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) return { ok: false, error: error.message };
+    const conUrl = (data || []).map((im) => ({
+      ...im,
+      url: supabase.storage.from("chat-imagenes").getPublicUrl(im.path).data.publicUrl,
+    }));
+    return { ok: true, imagenes: conUrl };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+async function crearImagenChat(userId, { archivo, clave, titulo, descripcion, keywords, fuente }) {
+  try {
+    const ext = (archivo.name.split(".").pop() || "png").toLowerCase();
+    const path = `${clave}-${Date.now()}.${ext}`;
+    const { error: eSt } = await supabase.storage
+      .from("chat-imagenes")
+      .upload(path, archivo, { contentType: archivo.type || "image/png", upsert: false });
+    if (eSt) return { ok: false, error: eSt.message };
+    const { data, error } = await supabase
+      .from("chat_imagenes")
+      .insert({ clave, titulo, descripcion, keywords, fuente: fuente || null, path, created_by: userId })
+      .select()
+      .single();
+    if (error) { supabase.storage.from("chat-imagenes").remove([path]); return { ok: false, error: error.message }; }
+    return { ok: true, imagen: data };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+async function eliminarImagenChat(imagen) {
+  try {
+    const { error } = await supabase.from("chat_imagenes").delete().eq("id", imagen.id);
+    if (error) return { ok: false, error: error.message };
+    if (imagen.path) supabase.storage.from("chat-imagenes").remove([imagen.path]);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+// Divide el texto de una respuesta en segmentos de texto y marcadores de
+// imagen. Un marcador incompleto al final (streaming a medio llegar) se corta.
+function segmentarConImagenes(texto) {
+  const limpio = String(texto || "").replace(/\[IMAGEN:[^\]]*$/i, "");
+  const partes = limpio.split(/\[IMAGEN:([a-z0-9_\-]+)\]/gi);
+  const segmentos = [];
+  for (let i = 0; i < partes.length; i++) {
+    if (i % 2 === 0) { if (partes[i]) segmentos.push({ tipo: "texto", valor: partes[i] }); }
+    else segmentos.push({ tipo: "imagen", clave: partes[i].toLowerCase() });
+  }
+  return segmentos;
 }
 
 // ─── Puente entre la tabla quirúrgica y el logbook personal ───
@@ -3283,17 +3343,48 @@ function renderMarkdown(texto) {
   return html;
 }
 
-function ChatBubble({ msg, userInitials, onPlayVideo }) {
+function ChatBubble({ msg, userInitials, onPlayVideo, imagenes }) {
   const isUser = msg.role === "user";
   const [fuentesExpandidas, setFuentesExpandidas] = useState(false);
   const bubbleStyle = { padding:"10px 14px", borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isUser ? "var(--primario)" : "var(--superficie)", color: isUser ?"var(--texto-inv)":"var(--texto)", fontSize:"var(--fs-2)", lineHeight:1.6, border: isUser ? "none" : "0.5px solid var(--borde)", whiteSpace:"pre-wrap" };
+
+  // Respuestas del asistente: el texto puede traer marcadores [IMAGEN:clave].
+  // Se dibujan solo las claves que existen en el catálogo; el resto se omite,
+  // así el modelo no puede "inventar" una imagen que no está curada.
+  const cuerpoAsistente = () => {
+    const segs = segmentarConImagenes(msg.content);
+    const hayImagenes = imagenes && Object.keys(imagenes).length > 0 && segs.some(sg => sg.tipo === "imagen" && imagenes[sg.clave]);
+    if (!hayImagenes) {
+      return <div style={{...bubbleStyle, whiteSpace:"normal"}} dangerouslySetInnerHTML={{__html: renderMarkdown(msg.content.replace(/\[IMAGEN:[a-z0-9_\-]*\]?/gi, ""))}} />;
+    }
+    return (
+      <div style={{...bubbleStyle, whiteSpace:"normal"}}>
+        {segs.map((sg, i) => {
+          if (sg.tipo === "texto") return <div key={i} dangerouslySetInnerHTML={{__html: renderMarkdown(sg.valor)}} />;
+          const im = imagenes[sg.clave];
+          if (!im) return null;
+          return (
+            <figure key={i} style={{margin:"10px 0"}}>
+              <a href={im.url} target="_blank" rel="noopener noreferrer">
+                <img src={im.url} alt={im.titulo} loading="lazy" style={{maxWidth:"100%",borderRadius:10,border:"0.5px solid var(--borde)",display:"block"}} />
+              </a>
+              <figcaption style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:4,lineHeight:1.4}}>
+                🖼 {im.titulo}{im.fuente ? <span> — {im.fuente}</span> : null}
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div style={{display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:"12px"}}>
       {!isUser && <div style={{marginRight:8,marginTop:2}}><UrosAvatar size={30}/></div>}
       <div style={{maxWidth:"82%"}}>
         {isUser
           ? <div style={bubbleStyle}>{msg.content}</div>
-          : <div style={{...bubbleStyle, whiteSpace:"normal"}} dangerouslySetInnerHTML={{__html: renderMarkdown(msg.content)}} />
+          : cuerpoAsistente()
         }
         {msg.cirugiasConsulta && (
           <div style={{marginTop:6,padding:"7px 10px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:8}}>
@@ -5046,6 +5137,7 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
   const [busqueda, setBusqueda] = useState("");
   const [filtroCat, setFiltroCat] = useState("Todas");
   const [nuevoForm, setNuevoForm] = useState({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"", fuente:"" });
+  const [figurasDelPdf, setFigurasDelPdf] = useState([]); // pies de figura detectados en el PDF subido
   const [errorForm, setErrorForm] = useState("");
   const [cargandoLista, setCargandoLista] = useState(false);
   const [cargandoDoc, setCargandoDoc] = useState(false);
@@ -5122,26 +5214,26 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
       if (f.name.endsWith(".doc")) { setErrorForm("El formato .doc no es compatible. Guarda como .docx"); return; }
       if (f.name.endsWith(".pdf")) {
         setErrorForm("Procesando PDF...");
-        if (!window.pdfjsLib) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-            script.onload = resolve; script.onerror = reject;
-            document.head.appendChild(script);
-          });
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-        }
+        const pdfjsLib = await cargarPdfJs();
         const arrayBuffer = await f.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         let texto = "";
+        const figurasDetectadas = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          texto += `\n--- Página ${i} ---\n${content.items.map(it => it.str).join(" ")}\n`;
+          const textoPagina = content.items.map(it => it.str).join(" ");
+          texto += `\n--- Página ${i} ---\n${textoPagina}\n`;
+          // Los pies de figura de esta página se anotan con su número de
+          // página: al guardar el capítulo quedan como "figuras por curar".
+          detectarFigurasEnTexto(textoPagina).forEach((fig) => {
+            if (!figurasDetectadas.some((x) => x.ref === fig.ref)) figurasDetectadas.push({ ...fig, pagina: i });
+          });
         }
+        setFigurasDelPdf(figurasDetectadas);
         if (!texto.trim() || texto.replace(/--- Página \d+ ---/g,"").trim().length < 100) { setErrorForm("⚠ Este PDF no contiene texto extraíble (probablemente está escaneado como imágenes). Necesitas un PDF con texto digital, o pega el texto manualmente abajo."); return; }
         setNuevoForm({...nuevoForm, contenido: texto, titulo: nuevoForm.titulo || tituloSugerido});
-        setErrorForm("");
+        setErrorForm(figurasDetectadas.length > 0 ? `✓ Texto extraído. Además se detectaron ${figurasDetectadas.length} figuras: al guardar quedarán como pendientes de recortar en Biblioteca › Imágenes.` : "");
         return;
       }
       setErrorForm("Formato no soportado. Usa .txt, .md, .docx o .pdf");
@@ -5183,8 +5275,21 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
     await crearChunks(chunksData);
   }
   
+  // Las figuras detectadas en el PDF quedan registradas como "por curar":
+  // aparecen en Biblioteca › Imágenes como lista de tareas con su página.
+  if (figurasDelPdf.length > 0) {
+    crearFigurasCapitulo(figurasDelPdf.map((f) => ({
+      documento_id: result.item.id,
+      capitulo: nuevoForm.titulo,
+      pagina: f.pagina,
+      ref: f.ref,
+      caption: f.caption,
+    }))).catch(() => {});
+  }
+
   setConocimiento([result.item, ...conocimiento]);
   setNuevoForm({ titulo:"", categoria:"Guías clínicas", contenido:"", tags:"", fuente:"" });
+  setFigurasDelPdf([]);
   setErrorForm("");
   setVista("lista");
 };
@@ -5604,7 +5709,7 @@ function CirugiasBiblioteca() {
   );
 }
 
-function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa, subTab, setSubTab }) {
+function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, videos, setVideos, setPlayingVideo, imagenesChat, setImagenesChat, mapaTema, setMapaTema, mapaActual, setMapaActual, mapaLoading, generarMapa, topicOpen, setTopicOpen, mapasGuardados, onGuardarMapa, onEliminarMapa, onCargarMapaGuardado, guardandoMapa, subTab, setSubTab }) {
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
 
@@ -5736,6 +5841,426 @@ function ConocimientoHub({ conocimiento, setConocimiento, isAdmin, currentUser, 
       {subTab === "scores" && <ScoresPanel/>}
 
       {subTab === "documentos" && isAdmin && <ConocimientoPanel conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin}/>}
+      {subTab === "imagenes" && isAdmin && <ImagenesChatPanel imagenesChat={imagenesChat} setImagenesChat={setImagenesChat} currentUser={currentUser}/>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// Imágenes del chat — administración (solo admin)
+// Catálogo de láminas que Uros puede insertar en sus respuestas.
+// La CLAVE es el identificador que usa el modelo; el TÍTULO y el
+// "cuándo usarla" son lo que el modelo lee para decidir atingencia,
+// así que conviene escribirlos pensando en eso.
+// ════════════════════════════════════════════════════════════════
+// ─── pdf.js compartido (CDN) ───
+// Un solo cargador para la ingesta de capítulos Y el recortador de láminas.
+// Antes el recortador dependía del paquete pdfjs-dist; ya no hace falta.
+async function cargarPdfJs() {
+  if (!window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = resolve; script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+  return window.pdfjsLib;
+}
+
+// Detecta pies de figura en el texto de una página: "Figura 12-4. Algoritmo…".
+// Devuelve [{ref, caption}]. El caption se corta en el primer punto razonable.
+function detectarFigurasEnTexto(texto) {
+  const out = [];
+  const re = /\b[Ff][Ii][Gg](?:[Uu][Rr][Aa])?\.?\s{0,3}([0-9]{1,3}(?:\s?[-–.]\s?[0-9A-Za-z]{1,4})?)\s*[.:\-–]\s*([^\n]{8,240})/g;
+  let m;
+  while ((m = re.exec(texto)) !== null) {
+    const ref = m[1].replace(/\s/g, "");
+    let cap = m[2].trim();
+    const punto = cap.search(/\.\s+[A-ZÁÉÍÓÚÑ(]/); // fin de la primera oración
+    if (punto > 15) cap = cap.slice(0, punto + 1);
+    if (cap.length > 200) cap = cap.slice(0, 200).replace(/\s+\S*$/, "") + "…";
+    // Se descartan falsos positivos obvios (referencias tipo "ver Figura 3")
+    if (/^(ver|véase|vease|en la|de la)\b/i.test(cap)) continue;
+    if (!out.some((f) => f.ref === ref)) out.push({ ref, caption: cap });
+  }
+  return out;
+}
+
+// ─── Recortador de láminas desde un PDF ───
+// Resuelve el hueco del flujo de la biblioteca: al subir capítulos solo se
+// indexa el TEXTO, y las figuras se pierden. Con esto el admin abre el mismo
+// PDF del capítulo, navega a la página de la figura, la enmarca con el dedo o
+// el mouse, y el recorte pasa directo al formulario del catálogo.
+function RecortadorPDF({ onRecorte, onCerrar, objetivo }) {
+  const [doc, setDoc] = useState(null);
+  const [nombrePdf, setNombrePdf] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [numPaginas, setNumPaginas] = useState(0);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState("");
+  const [sel, setSel] = useState(null); // {x,y,w,h} en píxeles mostrados
+  const [figuras, setFiguras] = useState([]); // pies de figura detectados en este PDF
+  const canvasRef = useRef(null);
+  const marcoRef = useRef(null);
+  const arrastreRef = useRef(null);
+
+  const abrirPdf = async (file) => {
+    if (!file) return;
+    setCargando(true); setError(""); setSel(null); setFiguras([]);
+    try {
+      const lib = await cargarPdfJs();
+      const buf = await file.arrayBuffer();
+      const d = await lib.getDocument({ data: buf }).promise;
+      setDoc(d); setNumPaginas(d.numPages); setNombrePdf(file.name.replace(/\.pdf$/i, ""));
+      // Si venimos de una figura pendiente, saltar directo a su página
+      const inicial = objetivo?.pagina && objetivo.pagina <= d.numPages ? objetivo.pagina : 1;
+      setPagina(inicial);
+      await dibujarPagina(d, inicial);
+      escanearFiguras(d);
+    } catch (e) {
+      setError("No se pudo abrir el PDF: " + (e?.message || e));
+    }
+    setCargando(false);
+  };
+
+  // Recorre el PDF en segundo plano buscando pies de figura, para poder
+  // saltar a cada uno con un toque. No bloquea la navegación.
+  const escanearFiguras = async (d) => {
+    const halladas = [];
+    for (let i = 1; i <= d.numPages; i++) {
+      try {
+        const page = await d.getPage(i);
+        const content = await page.getTextContent();
+        detectarFigurasEnTexto(content.items.map((it) => it.str).join(" ")).forEach((f) => {
+          if (!halladas.some((x) => x.ref === f.ref)) halladas.push({ ...f, pagina: i });
+        });
+      } catch {}
+      if (i % 10 === 0) { setFiguras([...halladas]); await new Promise((r) => setTimeout(r, 0)); }
+    }
+    setFiguras(halladas);
+  };
+
+  const dibujarPagina = async (d, num) => {
+    const page = await d.getPage(num);
+    const base = page.getViewport({ scale: 1 });
+    // Se renderiza en alta resolución (≈1800 px de ancho) para que el recorte
+    // salga nítido aunque en pantalla el PDF se vea chico.
+    const escala = Math.min(1800 / base.width, 3);
+    const vp = page.getViewport({ scale: escala });
+    const c = canvasRef.current;
+    if (!c) return;
+    c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+  };
+
+  const irA = async (num) => {
+    if (!doc || num < 1 || num > numPaginas) return;
+    setPagina(num); setSel(null); setCargando(true);
+    try { await dibujarPagina(doc, num); } catch {}
+    setCargando(false);
+  };
+
+  // Selección del marco con mouse o dedo
+  const posLocal = (e) => {
+    const r = marcoRef.current.getBoundingClientRect();
+    return { x: Math.max(0, Math.min(e.clientX - r.left, r.width)), y: Math.max(0, Math.min(e.clientY - r.top, r.height)) };
+  };
+  const alBajar = (e) => { if (!doc) return; e.preventDefault(); marcoRef.current.setPointerCapture?.(e.pointerId); arrastreRef.current = posLocal(e); setSel(null); };
+  const alMover = (e) => {
+    if (!arrastreRef.current) return;
+    const p = posLocal(e), o = arrastreRef.current;
+    setSel({ x: Math.min(o.x, p.x), y: Math.min(o.y, p.y), w: Math.abs(p.x - o.x), h: Math.abs(p.y - o.y) });
+  };
+  const alSoltar = () => { arrastreRef.current = null; };
+
+  const usarRecorte = () => {
+    const c = canvasRef.current;
+    if (!c || !sel || sel.w < 12 || sel.h < 12) return;
+    const factor = c.width / c.clientWidth; // mostrado → resolución real
+    const rc = document.createElement("canvas");
+    rc.width = Math.round(sel.w * factor); rc.height = Math.round(sel.h * factor);
+    rc.getContext("2d").drawImage(c, sel.x * factor, sel.y * factor, rc.width, rc.height, 0, 0, rc.width, rc.height);
+    rc.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `lamina_p${pagina}.png`, { type: "image/png" });
+      const figPagina = (objetivo && objetivo.pagina === pagina) ? objetivo : figuras.find((f) => f.pagina === pagina);
+      onRecorte(file, { pagina, nombrePdf, caption: figPagina?.caption || "", ref: figPagina?.ref || "" });
+    }, "image/png");
+  };
+
+  return (
+    <div onClick={onCerrar} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 10 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 14, width: "100%", maxWidth: 760, maxHeight: "92dvh", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>✂️ Extraer lámina desde PDF</div>
+          <button onClick={onCerrar} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+
+        {!doc && (
+          <div style={{ textAlign: "center", padding: "26px 14px", border: "1.5px dashed var(--borde)", borderRadius: 12 }}>
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginBottom: 12, lineHeight: 1.6 }}>
+              Abre el PDF del capítulo, ve a la página de la figura y enmárcala arrastrando sobre ella.
+            </div>
+            <label style={{ display: "inline-block", padding: "10px 18px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", borderRadius: 9, cursor: "pointer" }}>
+              📄 Elegir PDF
+              <input type="file" accept="application/pdf" onChange={(e) => abrirPdf(e.target.files?.[0])} style={{ display: "none" }} />
+            </label>
+            {cargando && <div style={{ marginTop: 10, fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>Abriendo…</div>}
+          </div>
+        )}
+
+        {error && <div style={{ ...estiloMsg(false), marginTop: 8 }}>{error}</div>}
+
+        {doc && objetivo && (
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--primario)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 8, padding: "7px 10px", marginBottom: 8, lineHeight: 1.45 }}>
+            🎯 Buscando: <b>Figura {objetivo.ref}</b> (pág. {objetivo.pagina}) — {objetivo.caption}
+          </div>
+        )}
+
+        {doc && figuras.length > 0 && (
+          <select value="" onChange={(e) => { const f = figuras.find((x) => x.ref === e.target.value); if (f) irA(f.pagina); }}
+            style={{ marginBottom: 8, padding: "7px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, width: "100%" }}>
+            <option value="">🖼 Ir a una figura detectada ({figuras.length})…</option>
+            {figuras.map((f) => <option key={f.ref} value={f.ref}>Fig. {f.ref} · pág. {f.pagina} — {f.caption.slice(0, 70)}</option>)}
+          </select>
+        )}
+
+        {doc && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <button onClick={() => irA(pagina - 1)} disabled={pagina <= 1} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: pagina <= 1 ? "var(--texto-ter)" : "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: pagina <= 1 ? "default" : "pointer" }}>←</button>
+              <input type="number" min={1} max={numPaginas} value={pagina} onChange={(e) => irA(Number(e.target.value) || 1)} style={{ width: 64, padding: "6px 8px", fontSize: "var(--fs-1)", textAlign: "center", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8 }} />
+              <span style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>/ {numPaginas}</span>
+              <button onClick={() => irA(pagina + 1)} disabled={pagina >= numPaginas} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: pagina >= numPaginas ? "var(--texto-ter)" : "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: pagina >= numPaginas ? "default" : "pointer" }}>→</button>
+              <span style={{ marginLeft: "auto", fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{cargando ? "Cargando…" : sel ? "Marco listo" : "Arrastra sobre la figura"}</span>
+            </div>
+
+            <div ref={marcoRef} onPointerDown={alBajar} onPointerMove={alMover} onPointerUp={alSoltar} onPointerCancel={alSoltar}
+              style={{ position: "relative", overflowY: "auto", flex: 1, minHeight: 0, border: "0.5px solid var(--borde)", borderRadius: 10, touchAction: "none", background: "#fff" }}>
+              <canvas ref={canvasRef} style={{ width: "100%", display: "block" }} />
+              {sel && (
+                <div style={{ position: "absolute", left: sel.x, top: sel.y, width: sel.w, height: sel.h, border: "2px solid var(--primario)", background: "rgba(37,99,235,0.14)", borderRadius: 3, pointerEvents: "none" }} />
+              )}
+            </div>
+
+            <button onClick={usarRecorte} disabled={!sel || sel.w < 12 || sel.h < 12}
+              style={{ marginTop: 10, width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: !sel || sel.w < 12 ? "var(--borde)" : "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: !sel || sel.w < 12 ? "default" : "pointer" }}>
+              ✂️ Usar este recorte
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ImagenesChatPanel({ imagenesChat, setImagenesChat, currentUser }) {
+  const [archivo, setArchivo] = useState(null);
+  const [titulo, setTitulo] = useState("");
+  const [clave, setClave] = useState("");
+  const [claveEditada, setClaveEditada] = useState(false);
+  const [descripcion, setDescripcion] = useState("");
+  const [keywords, setKeywords] = useState("");
+  const [fuente, setFuente] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [recortadorOpen, setRecortadorOpen] = useState(false);
+  const [figurasPendientes, setFigurasPendientes] = useState([]);
+  const [figuraObjetivo, setFiguraObjetivo] = useState(null);
+  const [sugiriendo, setSugiriendo] = useState(false);
+  const [preview, setPreview] = useState("");
+  const inputRef = useRef(null);
+
+  // Vista previa de la imagen elegida (también cuando viene del recortador
+  // de PDF, donde el input de archivo no muestra nada).
+  useEffect(() => {
+    if (!archivo) { setPreview(""); return; }
+    const u = URL.createObjectURL(archivo);
+    setPreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [archivo]);
+
+  const slug = (t) => sinTildes(t).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+
+  // Figuras detectadas al subir capítulos, aún sin recortar
+  useEffect(() => {
+    listarFigurasPendientes().then((r) => { if (r.ok) setFigurasPendientes(r.figuras); });
+  }, []);
+
+  // ── Sugerencia con IA: mira la lámina y propone título, descripción y
+  // keywords. Solo rellena el formulario; el admin revisa y corrige. ──
+  const sugerirConIA = async () => {
+    if (!archivo) return setMsg("Primero elige o recorta una imagen.");
+    setSugiriendo(true); setMsg("");
+    try {
+      // Compresión ligera para no inflar la petición
+      const bmp = await createImageBitmap(archivo);
+      const esc = Math.min(1, 900 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(bmp.width * esc); c.height = Math.round(bmp.height * esc);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      const b64 = c.toDataURL("image/jpeg", 0.85).split(",")[1];
+
+      const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 300,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
+              { type: "text", text: 'Esta es una lámina de urología para el catálogo de un asistente clínico. Responde SOLO un JSON válido, sin texto adicional ni backticks, con esta forma exacta: {"titulo":"...","descripcion":"cuándo mostrarla (una frase que empiece con \'al\' o \'para\')","keywords":["...","..."]}. En español, títulos concisos, 4-8 keywords en minúsculas.' },
+            ],
+          }],
+        }),
+      });
+      const data = await res.json();
+      const texto = data.content?.find((b) => b.type === "text")?.text || "";
+      const j = JSON.parse(texto.replace(/```json|```/g, "").trim());
+      if (j.titulo) { setTitulo(j.titulo); if (!claveEditada) setClave(slug(j.titulo)); }
+      if (j.descripcion) setDescripcion(j.descripcion);
+      if (Array.isArray(j.keywords) && j.keywords.length) setKeywords(j.keywords.join(", "));
+      setMsg("✓ Sugerencia lista: revísala y corrige lo que haga falta.");
+    } catch (e) {
+      setMsg("✗ No se pudo sugerir: " + (e?.message || e));
+    }
+    setSugiriendo(false);
+  };
+
+  const guardar = async () => {
+    setMsg("");
+    if (!archivo) return setMsg("Selecciona una imagen.");
+    if (!titulo.trim()) return setMsg("Escribe un título.");
+    const cl = clave.trim() || slug(titulo);
+    if (!/^[a-z0-9_\-]{3,40}$/.test(cl)) return setMsg("La clave debe tener 3-40 caracteres: letras minúsculas, números, guiones.");
+    if (imagenesChat.some((im) => im.clave === cl)) return setMsg("Ya existe una imagen con esa clave.");
+    setGuardando(true);
+    const r = await crearImagenChat(currentUser?.id, {
+      archivo,
+      clave: cl,
+      titulo: titulo.trim(),
+      descripcion: descripcion.trim() || null,
+      keywords: keywords.split(",").map((k) => k.trim().toLowerCase()).filter(Boolean),
+      fuente: fuente.trim(),
+    });
+    setGuardando(false);
+    if (!r.ok) return setMsg("✗ " + r.error);
+    const nueva = { ...r.imagen, url: supabase.storage.from("chat-imagenes").getPublicUrl(r.imagen.path).data.publicUrl };
+    setImagenesChat((prev) => [nueva, ...prev]);
+    setArchivo(null); setTitulo(""); setClave(""); setClaveEditada(false); setDescripcion(""); setKeywords(""); setFuente("");
+    if (inputRef.current) inputRef.current.value = "";
+    if (figuraObjetivo) {
+      marcarFiguraCurada(figuraObjetivo.id).catch(() => {});
+      setFigurasPendientes((prev) => prev.filter((f) => f.id !== figuraObjetivo.id));
+      setFiguraObjetivo(null);
+    }
+    setMsg("✓ Imagen agregada al catálogo. Uros ya puede usarla.");
+  };
+
+  const descartarFigura = async (f) => {
+    const r = await eliminarFiguraCapitulo(f.id);
+    if (r.ok) setFigurasPendientes((prev) => prev.filter((x) => x.id !== f.id));
+  };
+
+  const alRecortar = (file, { pagina, nombrePdf, caption }) => {
+    setArchivo(file);
+    if (inputRef.current) inputRef.current.value = "";
+    if (!fuente.trim()) setFuente(`${nombrePdf} — pág. ${pagina}`);
+    // El pie de figura detectado es el mejor título posible: viene del libro.
+    if (caption && !titulo.trim()) { setTitulo(caption); if (!claveEditada) setClave(slug(caption)); }
+    setRecortadorOpen(false);
+    setMsg("✓ Recorte listo. Completa los datos (o usa ✨ Sugerir) y agrégalo al catálogo.");
+  };
+
+  const eliminar = async (im) => {
+    if (!(await uroConfirm(`¿Eliminar "${im.titulo}" del catálogo?`, { peligro: true, confirmar: "Eliminar" }))) return;
+    const r = await eliminarImagenChat(im);
+    if (!r.ok) return uroToast("Error: " + r.error);
+    setImagenesChat((prev) => prev.filter((x) => x.id !== im.id));
+  };
+
+  return (
+    <div style={{ padding: 16, overflowY: "auto" }}>
+      {recortadorOpen && <RecortadorPDF objetivo={figuraObjetivo} onRecorte={alRecortar} onCerrar={() => { setRecortadorOpen(false); setFiguraObjetivo(null); }} />}
+      <div style={{ maxWidth: 680, margin: "0 auto" }}>
+        <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", marginBottom: 4 }}>🖼 Imágenes del chat</div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", lineHeight: 1.6, marginBottom: 14 }}>
+          Láminas que Uros puede mostrar en sus respuestas cuando son atingentes: clasificaciones (Bosniak, PI-RADS), algoritmos de guías, anatomía, escalas. Uros ve el título y el "cuándo usarla" para decidir; usa solo imágenes de este catálogo y nunca inventa. Sube únicamente material propio o con licencia para compartir.
+        </div>
+
+        <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+            <input ref={inputRef} type="file" accept="image/*" onChange={(e) => setArchivo(e.target.files?.[0] || null)} style={{ fontSize: "var(--fs-1)", color: "var(--texto)", flex: 1, minWidth: 180 }} />
+            <button onClick={() => setRecortadorOpen(true)} style={{ padding: "8px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}>✂️ Desde PDF</button>
+          </div>
+          {preview && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+              <img src={preview} alt="" style={{ maxWidth: 180, maxHeight: 120, borderRadius: 8, border: "0.5px solid var(--borde)", display: "block", background: "#fff" }} />
+              <button onClick={sugerirConIA} disabled={sugiriendo} style={{ padding: "8px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: sugiriendo ? "default" : "pointer", opacity: sugiriendo ? 0.6 : 1 }}>
+                {sugiriendo ? "Mirando la lámina…" : "✨ Sugerir título y keywords"}
+              </button>
+            </div>
+          )}
+          <input value={titulo} onChange={(e) => { setTitulo(e.target.value); if (!claveEditada) setClave(slug(e.target.value)); }} placeholder="Título (ej: Clasificación de Bosniak 2019)" style={{ ...inputStyle }} />
+          <input value={clave} onChange={(e) => { setClave(e.target.value.toLowerCase()); setClaveEditada(true); }} placeholder="Clave única (ej: bosniak_2019)" style={{ ...inputStyle, fontFamily: "monospace" }} />
+          <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Cuándo usarla (ej: al clasificar quistes renales complejos)" style={{ ...inputStyle }} />
+          <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="Palabras clave, separadas por coma (ej: bosniak, quiste renal, tac)" style={{ ...inputStyle }} />
+          <input value={fuente} onChange={(e) => setFuente(e.target.value)} placeholder="Fuente / crédito (ej: elaboración propia según EAU 2025)" style={{ ...inputStyle }} />
+          {msg && <div style={{ ...estiloMsg(msg.startsWith("✓")), marginBottom: 10 }}>{msg}</div>}
+          <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>
+            {guardando ? "Subiendo…" : "➕ Agregar al catálogo"}
+          </button>
+        </div>
+
+        {figurasPendientes.length > 0 && (
+          <div style={{ background: "var(--alerta-bg)", border: "1px solid var(--alerta)", borderRadius: 12, padding: 12, marginBottom: 16 }}>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--alerta)", marginBottom: 4 }}>
+              🖼 {figurasPendientes.length} figura{figurasPendientes.length === 1 ? "" : "s"} detectada{figurasPendientes.length === 1 ? "" : "s"} en tus capítulos, aún sin recortar
+            </div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginBottom: 10, lineHeight: 1.5 }}>
+              Se encontraron en los pies de figura de los PDF que subiste a la base de conocimiento. Toca "Recortar", elige el mismo PDF, y el recortador salta directo a la página con el título ya puesto.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+              {figurasPendientes.map((f) => (
+                <div key={f.id} style={{ display: "flex", gap: 8, alignItems: "center", background: "var(--superficie)", borderRadius: 8, padding: "7px 9px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Fig. {f.ref} — {f.caption}</div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{f.capitulo} · pág. {f.pagina}</div>
+                  </div>
+                  <button onClick={() => { setFiguraObjetivo(f); setRecortadorOpen(true); }} style={{ flexShrink: 0, padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>✂️ Recortar</button>
+                  <button onClick={() => descartarFigura(f)} title="Descartar (no vale la pena curarla)" style={{ flexShrink: 0, background: "none", border: "none", color: "var(--texto-ter)", fontSize: 15, cursor: "pointer", padding: "4px 4px" }}>✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>{imagenesChat.length} imagen{imagenesChat.length === 1 ? "" : "es"} en el catálogo</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {imagenesChat.map((im) => (
+            <div key={im.id} style={{ display: "flex", gap: 10, alignItems: "center", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 8 }}>
+              <a href={im.url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                <img src={im.url} alt="" loading="lazy" style={{ width: 72, height: 54, objectFit: "cover", borderRadius: 6, border: "0.5px solid var(--borde)", display: "block" }} />
+              </a>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{im.titulo}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", fontFamily: "monospace" }}>[IMAGEN:{im.clave}]</div>
+                {im.descripcion && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{im.descripcion}</div>}
+              </div>
+              <button onClick={() => eliminar(im)} title="Eliminar" style={{ flexShrink: 0, background: "none", border: "none", color: "var(--peligro)", fontSize: 16, cursor: "pointer", padding: "4px 6px" }}>🗑</button>
+            </div>
+          ))}
+          {imagenesChat.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 12px", color: "var(--texto-ter)", fontSize: "var(--fs-1)", lineHeight: 1.6 }}>
+              Aún no hay imágenes. Mientras el catálogo esté vacío, el chat funciona igual que siempre (sin imágenes).
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -12221,6 +12746,7 @@ const [loadingPendientes, setLoadingPendientes] = useState(false);
   const [conocimiento, setConocimiento] = useState([]);
   const [chunks, setChunks] = useState([]);
   const [videos, setVideos] = useState([]);
+  const [imagenesChat, setImagenesChat] = useState([]);
   const [misServiciosLista, setMisServiciosLista] = useState([]); // array de {id, nombre, ...}
 const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [equipos, setEquipos] = useState([]);
@@ -12366,6 +12892,7 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
   const [loading, setLoading] = useState(false);
   const [modo, setModo] = useState("precisa");
   const [feedbackDado, setFeedbackDado] = useState({}); // índice de mensaje → "up" | "down"
+  const mapaImagenesChat = useMemo(() => Object.fromEntries(imagenesChat.map((im) => [im.clave, im])), [imagenesChat]);
 
   // Registro de feedback: la materia prima para mejorar al asistente.
   // Con los pulgares abajo se arma la lista de preguntas donde Uros falla,
@@ -12889,6 +13416,12 @@ const videosResult = await listarVideos();
 if (videosResult.ok) {
   setVideos(videosResult.videos);
 }
+
+// Cargar el catálogo de imágenes para el chat (láminas curadas)
+const imgsResult = await listarImagenesChat();
+if (imgsResult.ok) {
+  setImagenesChat(imgsResult.imagenes);
+}
 // (El saludo de Uros ya se fijó al inicio de esta función, antes de las cargas
 // pesadas, para que aparezca de inmediato y no se sobrescriba lo que el usuario
 // haya empezado a escribir.)
@@ -13066,6 +13599,22 @@ if (videosResult.ok) {
   // LÓGICA ORIGINAL DEL CHAT
   // ============================================
   const videosRelevantes = esCharla ? [] : buscarVideosRelevantes(txt);
+
+  // Imágenes candidatas: si el catálogo es chico va entero; si crece, solo las
+  // que calzan por keywords/título con la consulta (ya expandida de siglas).
+  let ctxImagenes = "";
+  if (!esCharla && imagenesChat.length > 0) {
+    const qImg = sinTildes(expandirSiglas(txt));
+    const candidatas = (imagenesChat.length <= 10
+      ? imagenesChat
+      : imagenesChat.filter((im) =>
+          (im.keywords || []).some((k) => qImg.includes(sinTildes(k))) ||
+          sinTildes(im.titulo).split(" ").some((p) => p.length >= 4 && qImg.includes(p)))
+    ).slice(0, 12);
+    if (candidatas.length > 0) {
+      ctxImagenes = `\n\n=== IMÁGENES DISPONIBLES ===\nPuedes ilustrar tu respuesta insertando el marcador [IMAGEN:clave] tal cual, en su propia línea, en el punto exacto donde aporte. Máximo 2 por respuesta. Úsalas SOLO si son directamente atingentes a lo preguntado; ante la duda, no insertes ninguna. Nunca inventes claves que no estén en esta lista.\n${candidatas.map((im) => `- [IMAGEN:${im.clave}] · ${im.titulo}${im.descripcion ? ` — ${im.descripcion}` : ""}`).join("\n")}`;
+    }
+  }
   // Fragmentos de la base (la búsqueda ya venía corriendo en paralelo).
   // Se filtran por relevancia real: si el calce con la consulta es pobre,
   // no se usan ni se citan.
@@ -13203,7 +13752,7 @@ if (videosResult.ok) {
     if (ctxLogbook) ctx += ctxLogbook;
     // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
     const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
-    const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon;
+    const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon + ctxImagenes;
     const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
     // El token ya viene de la sesión que se pidió arriba: evita un segundo
     // getSession() justo antes de disparar la petición.
@@ -13524,6 +14073,7 @@ if (!currentUser) {
         ...(!fnOculta(config, "biblio:medicamentos") ? [["medicamentos", "💊 Medicamentos"]] : []),
         ...(!fnOculta(config, "biblio:scores") ? [["scores", "🧮 Scores"]] : []),
         ...(isAdmin ? [["documentos", "📄 Documentos"]] : []),
+        ...(isAdmin ? [["imagenes", "🖼 Imágenes del chat"]] : []),
       ],
       activo: subTabBiblio,
       elegir: setSubTabBiblio,
@@ -13693,7 +14243,7 @@ if (!currentUser) {
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
       {(tab==="hospital" || promovida?.padre==="hospital") && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={promovida?.padre==="hospital" ? promovida.sub : subTabHospital} setSubTab={promovida?.padre==="hospital" ? (()=>{}) : setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
-      {(tab==="conocimiento" || promovida?.padre==="conocimiento") && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa} subTab={promovida?.padre==="conocimiento" ? promovida.sub : subTabBiblio} setSubTab={promovida?.padre==="conocimiento" ? (()=>{}) : setSubTabBiblio}/>}
+      {(tab==="conocimiento" || promovida?.padre==="conocimiento") && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} imagenesChat={imagenesChat} setImagenesChat={setImagenesChat} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa} subTab={promovida?.padre==="conocimiento" ? promovida.sub : subTabBiblio} setSubTab={promovida?.padre==="conocimiento" ? (()=>{}) : setSubTabBiblio}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
       {tab==="chat" && (
@@ -13769,7 +14319,7 @@ if (!currentUser) {
   const conFeedback = m.role === "assistant" && !m.streaming && i > 0; // el saludo inicial no se evalúa
   return (
     <Fragment key={i}>
-      <ChatBubble msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo}/>
+      <ChatBubble msg={m} userInitials={userInitials} onPlayVideo={setPlayingVideo} imagenes={mapaImagenesChat}/>
       {conFeedback && (
         <div style={{display:"flex",gap:4,margin:"-4px 0 8px 40px",alignItems:"center"}}>
           {feedbackDado[i] ? (
