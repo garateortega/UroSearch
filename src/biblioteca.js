@@ -231,13 +231,13 @@ export async function buscarChunks(consulta, limite = 8) {
 // (Solo si quieres la función de agrupar por libro. Si no la agregas,
 //  todo lo demás funciona igual, solo que la fuente no se guardará.)
 // ════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────
 // PROTOCOLOS (documentos Word/PDF — SOLO el admin sube/edita/elimina)
-// ════════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────
 // Requiere la tabla `protocolos` y el bucket de storage `protocolos`
 // (ver protocolos.sql). Los archivos aceptados son PDF y Word; pueden
 // tener varias páginas sin problema (se guardan como un solo archivo).
-// ────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
 
 const BUCKET_PROTOCOLOS = 'protocolos';
 
@@ -296,4 +296,50 @@ export async function urlProtocolo(archivoPath) {
   const { data, error } = await supabase.storage.from(BUCKET_PROTOCOLOS).createSignedUrl(archivoPath, 3600);
   if (error) return { ok: false, error: error.message };
   return { ok: true, url: data.signedUrl };
+}
+
+// ============================================================
+// FIGURAS DE CAPÍTULOS (pendientes de curar)
+// Al subir un capítulo en PDF se detectan los pies de figura
+// ("Figura 12-4. Algoritmo…"). Quedan aquí como lista de tareas:
+// el admin las recorta desde el mismo PDF en Biblioteca › Imágenes
+// y se marcan como curadas. Se borran en cascada con el capítulo.
+// ============================================================
+
+export async function crearFigurasCapitulo(figuras) {
+  // figuras = [{ documento_id, capitulo, pagina, ref, caption }, ...]
+  if (!figuras || figuras.length === 0) return { ok: true, figuras: [] };
+  const { data, error } = await supabase
+    .from('biblioteca_figuras')
+    .insert(figuras)
+    .select();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, figuras: data || [] };
+}
+
+export async function listarFigurasPendientes() {
+  const { data, error } = await supabase
+    .from('biblioteca_figuras')
+    .select('*')
+    .eq('curada', false)
+    .order('capitulo', { ascending: true })
+    .order('pagina', { ascending: true });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, figuras: data || [] };
+}
+
+export async function marcarFiguraCurada(id) {
+  const { error } = await supabase
+    .from('biblioteca_figuras')
+    .update({ curada: true })
+    .eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// Descartar una figura detectada que no vale la pena curar (logo, foto, etc.)
+export async function eliminarFiguraCapitulo(id) {
+  const { error } = await supabase.from('biblioteca_figuras').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
