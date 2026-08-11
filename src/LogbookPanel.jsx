@@ -912,7 +912,14 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
       // Identificación
       doc.setTextColor(30); doc.setFontSize(10.5);
-      const linea = (rot, val) => { doc.setFont("helvetica", "bold"); doc.text(rot, M, y); doc.setFont("helvetica", "normal"); doc.text(String(val), M + 42, y); y += 6; };
+      const linea = (rot, val) => {
+        doc.setFont("helvetica", "bold"); doc.text(rot, M, y);
+        doc.setFont("helvetica", "normal");
+        // El valor se acota al ancho restante para que nunca cruce el margen.
+        const lineas = doc.splitTextToSize(String(val), W - M - (M + 42));
+        lineas.forEach((l, k) => { doc.text(l, M + 42, y + k * 5); });
+        y += 6 + (lineas.length - 1) * 5;
+      };
       linea("Profesional:", currentUser?.nombre || "—");
       if (currentUser?.especialidad) linea("Especialidad:", currentUser.especialidad);
       linea("Período:", periodoTxt);
@@ -925,10 +932,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(30);
       const resumen = [
         `Total de cirugías registradas: ${enRango.length}`,
-        `Como cirujano principal: ${nCx}   ·   Como ayudante (1º–4º): ${nAy}${nObs ? `   ·   Como observador: ${nObs}` : ""}`,
-        `Complicaciones intraoperatorias: ${nComplIntra}   ·   Post-operatorias: ${nComplPost}   ·   Clavien-Dindo ≥ IIIb: ${nClavAlto}`,
+        `Como cirujano principal: ${nCx}${nAy ? `   ·   Como ayudante (1º–4º): ${nAy}` : ""}${nObs ? `   ·   Como observador: ${nObs}` : ""}`,
+        `Complicaciones intraoperatorias: ${nComplIntra}   ·   Post-operatorias: ${nComplPost}`,
+        `Complicaciones Clavien-Dindo ≥ IIIb: ${nClavAlto}`,
       ];
-      resumen.forEach((t) => { doc.text(t, M, y); y += 5.5; });
+      resumen.forEach((t) => {
+        doc.splitTextToSize(t, W - 2 * M).forEach((l) => { doc.text(l, M, y); y += 5.5; });
+      });
       y += 4;
 
       // Tabla por procedimiento × rol

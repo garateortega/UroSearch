@@ -129,15 +129,71 @@ export async function pushActivo() {
   } catch { return false; }
 }
 
+// ─── Resolución del ícono ───────────────────────────────────────
+// El ícono de la notificación NO puede apuntar a un archivo inexistente: si
+// falla, Windows/Android muestran su campana genérica y no hay aviso de error.
+// Por eso se prueban varios nombres y se usa el primero que exista de verdad.
+// Deben ser los MISMOS candidatos (y en el mismo orden) que en /push/sw.js.
+const CANDIDATOS_ICONO = [
+  "/uros/cabeza-192.png",
+  "/uros/cabeza.png",
+  "/uros/cabeza-192.webp",
+  "/uros/cabeza.webp",
+  "/icons/icon-192.png",
+];
+const CANDIDATOS_BADGE = [
+  "/uros/cabeza-badge-72.png",
+  "/uros/cabeza-72.png",
+  "/uros/cabeza.png",
+  "/icons/badge-72.png",
+];
+
+async function existe(url) {
+  try {
+    const r = await fetch(url, { method: "GET", cache: "no-store" });
+    // Con SPA fallback, un 404 puede devolver el index.html con estado 200:
+    // se exige además que el tipo de contenido sea realmente una imagen.
+    return r.ok && (r.headers.get("content-type") || "").startsWith("image/");
+  } catch { return false; }
+}
+
+async function primeroQueExista(lista) {
+  for (const url of lista) { if (await existe(url)) return url; }
+  return null;
+}
+
+// Diagnóstico: qué archivos de ícono existen realmente en el sitio publicado.
+// Útil para saber por qué una notificación sale con la campana genérica.
+export async function diagnosticoIconos() {
+  const revisar = [...new Set([...CANDIDATOS_ICONO, ...CANDIDATOS_BADGE])];
+  const resultados = [];
+  for (const url of revisar) resultados.push({ url, existe: await existe(url) });
+  const reg = await navigator.serviceWorker.getRegistration("/push/");
+  const sub = await reg?.pushManager.getSubscription();
+  return {
+    iconoElegido: await primeroQueExista(CANDIDATOS_ICONO),
+    badgeElegido: await primeroQueExista(CANDIDATOS_BADGE),
+    archivos: resultados,
+    swRegistrado: !!reg,
+    swScope: reg?.scope || null,
+    suscrito: !!sub,
+  };
+}
+
 // Notificación de prueba (local, sin pasar por el servidor)
 export async function probarPush() {
   const reg = await navigator.serviceWorker.getRegistration("/push/");
   if (!reg) return { ok: false, error: "Primero activa las notificaciones." };
+  const icon = await primeroQueExista(CANDIDATOS_ICONO);
+  const badge = await primeroQueExista(CANDIDATOS_BADGE);
+  if (!icon) {
+    return { ok: false, error: "No se encontró ninguna imagen de la cara de Uros en el sitio (busqué en /uros/). Sube el archivo a public/uros/ para que la notificación no salga con el ícono genérico." };
+  }
   await reg.showNotification("UroSearch", {
     body: "Las notificaciones están funcionando en este dispositivo.",
-    icon: "/uros/cabeza-192.png",       // imagen grande: SOLO la cara de Uros
-    badge: "/uros/cabeza-badge-72.png", // ícono chico monocromo (silueta de la cara)
+    icon,                       // imagen grande: SOLO la cara de Uros
+    badge: badge || undefined,  // ícono chico monocromo (silueta de la cara)
     vibrate: [60, 40, 60],
   });
-  return { ok: true };
+  return { ok: true, icono: icon };
 }

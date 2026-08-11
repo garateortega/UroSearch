@@ -12,13 +12,13 @@
 // exista realmente en el sitio; así el ícono no desaparece si el archivo
 // se llama distinto de lo esperado (esa era la causa de que saliera la
 // campana genérica de Android en vez de la cara de Uros).
-// v2.1.0b — cabeza.webp primero: es el archivo que la app YA usa con éxito
-// dentro del chat (push.js), o sea el único cuya existencia está garantizada.
+// v2.2.0 — mismo orden que en push.js, para que la notificación de prueba y
+// la real usen exactamente el mismo archivo.
 const CANDIDATOS_ICONO = [
-  "/uros/cabeza.webp",
-  "/uros/cabeza.png",
   "/uros/cabeza-192.png",
+  "/uros/cabeza.png",
   "/uros/cabeza-192.webp",
+  "/uros/cabeza.webp",
   "/icons/icon-192.png",
 ];
 const CANDIDATOS_BADGE = [
@@ -34,8 +34,12 @@ let badgeResuelto = null;
 
 async function existe(url) {
   try {
-    const r = await fetch(url, { method: "GET", cache: "force-cache" });
-    return r && r.ok;
+    const r = await fetch(url, { method: "GET", cache: "no-store" });
+    if (!r || !r.ok) return false;
+    // Clave: con el fallback de SPA, un archivo inexistente responde 200 con
+    // el index.html. Solo vale si el contenido es de verdad una imagen.
+    const tipo = r.headers.get("content-type") || "";
+    return tipo.startsWith("image/");
   } catch { return false; }
 }
 
@@ -44,7 +48,7 @@ async function primeroQueExista(lista, cacheado) {
   for (const url of lista) {
     if (await existe(url)) return url;
   }
-  return lista[0]; // si ninguno responde, se intenta igual con el preferido
+  return null; // ninguno existe: mejor omitir el icono que apuntar a un HTML
 }
 
 self.addEventListener("install", () => {
@@ -69,8 +73,8 @@ self.addEventListener("push", (event) => {
 
     const opciones = {
       body: data.body || "",
-      icon: iconoResuelto,   // ← siempre la cara de Uros
-      badge: badgeResuelto,  // ← siempre la silueta de Uros
+      icon: iconoResuelto || undefined,   // ← la cara de Uros (si el archivo existe)
+      badge: badgeResuelto || undefined,  // ← la silueta de Uros
       vibrate: data.vibrate || [60, 40, 60],
       tag: data.tag || undefined,          // agrupa/reemplaza notificaciones del mismo tipo
       renotify: !!data.tag,
