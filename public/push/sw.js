@@ -12,11 +12,13 @@
 // exista realmente en el sitio; así el ícono no desaparece si el archivo
 // se llama distinto de lo esperado (esa era la causa de que saliera la
 // campana genérica de Android en vez de la cara de Uros).
+// v2.1.0b — cabeza.webp primero: es el archivo que la app YA usa con éxito
+// dentro del chat (push.js), o sea el único cuya existencia está garantizada.
 const CANDIDATOS_ICONO = [
-  "/uros/cabeza-192.png",
-  "/uros/cabeza.png",
-  "/uros/cabeza-192.webp",
   "/uros/cabeza.webp",
+  "/uros/cabeza.png",
+  "/uros/cabeza-192.png",
+  "/uros/cabeza-192.webp",
   "/icons/icon-192.png",
 ];
 const CANDIDATOS_BADGE = [

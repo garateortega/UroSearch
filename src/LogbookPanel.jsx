@@ -39,6 +39,7 @@ const FILTROS_ROL = [
   ["cuarto_ayudante", "4to ayudante"],
   ["observador", "Observador"],
 ];
+const ES_FILTRO_AYUDANTE = ["ayudante", "primer_ayudante", "segundo_ayudante", "tercer_ayudante", "cuarto_ayudante"];
 const cumpleRol = (r, filtro) =>
   filtro === "todos" ? true
   : filtro === "ayudante" ? ROLES_AYUDANTE.includes(r.rol)
@@ -329,7 +330,7 @@ function ultimosMeses(n) {
 
 // ─── Gráfico de barras mensual (SVG, sin librerías) ───
 function BarrasMensuales({ datos, onMes, alto = 170, resaltado = null }) {
-  const W = 620, H = alto, padL = 26, padB = 26, padT = 12;
+  const W = 620, H = alto, padL = 34, padB = 30, padT = 14;
   const max = Math.max(1, ...datos.map((d) => d.total));
   const bw = (W - padL - 8) / datos.length;
   return (
@@ -339,7 +340,7 @@ function BarrasMensuales({ datos, onMes, alto = 170, resaltado = null }) {
         return (
           <Fragment key={f}>
             <line x1={padL} y1={y} x2={W - 4} y2={y} stroke="var(--borde)" strokeWidth="0.5" />
-            <text x={padL - 5} y={y + 3} fontSize="9" fill="var(--texto-ter)" textAnchor="end">{Math.round(max * f)}</text>
+            <text x={padL - 6} y={y + 4} fontSize="11" fill="var(--texto-ter)" textAnchor="end">{Math.round(max * f)}</text>
           </Fragment>
         );
       })}
@@ -354,8 +355,8 @@ function BarrasMensuales({ datos, onMes, alto = 170, resaltado = null }) {
             <rect x={x} y={H - padB - hCx} width={ancho} height={hCx} rx="3" fill="var(--primario)" />
             {resaltado === d.mes && <rect x={x - 2} y={padT} width={ancho + 4} height={H - padT - padB} rx="4" fill="none" stroke="var(--primario)" strokeWidth="1.5" strokeDasharray="3 2" />}
             {onMes && <rect x={x - bw * 0.15} y={padT} width={bw} height={H - padT - padB + 16} fill="transparent" style={{ cursor: "pointer" }} onClick={() => onMes(d.mes)} />}
-            {d.total > 0 && <text x={x + ancho / 2} y={H - padB - hTot - 3} fontSize="9" fill="var(--texto-sec)" textAnchor="middle">{d.total}</text>}
-            <text x={x + ancho / 2} y={H - padB + 12} fontSize="8.5" fill="var(--texto-ter)" textAnchor="middle">{mesLabel(d.mes)}</text>
+            {d.total > 0 && <text x={x + ancho / 2} y={H - padB - hTot - 4} fontSize="11" fontWeight="600" fill="var(--texto-sec)" textAnchor="middle">{d.total}</text>}
+            <text x={x + ancho / 2} y={H - padB + 14} fontSize="11" fill="var(--texto-ter)" textAnchor="middle">{mesLabel(d.mes)}</text>
           </Fragment>
         );
       })}
@@ -364,12 +365,39 @@ function BarrasMensuales({ datos, onMes, alto = 170, resaltado = null }) {
 }
 
 // ─── Barras horizontales (top procedimientos / categorías) ───
-function BarrasHorizontales({ items, color = "var(--primario)" }) {
+// Unir grupos bajo un nombre escrito por el usuario (ámbitos propios,
+// p. ej. juntar toda la cirugía de litiasis en "Litiasis").
+function NombreNuevoGrupo({ onUnir }) {
+  const [nombre, setNombre] = useState("");
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="…o escribe un nombre nuevo para el grupo" style={{ flex: 1, minWidth: 0, padding: "8px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8 }} />
+      <button onClick={() => onUnir(nombre)} disabled={!nombre.trim()} style={{ flexShrink: 0, padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 700, background: nombre.trim() ? "var(--primario)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: nombre.trim() ? "pointer" : "default" }}>Unir</button>
+    </div>
+  );
+}
+
+// Renombrar un solo grupo (cambia cómo se muestra, no toca los registros).
+function RenombrarGrupo({ origen, onRenombrar, onCancelar }) {
+  const [nombre, setNombre] = useState(origen);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, background: "var(--fondo-suave)", border: "1px solid var(--primario)", borderRadius: 10, marginBottom: 12 }}>
+      <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)" }}>Renombrar "{origen}"</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={{ flex: 1, minWidth: 0, padding: "8px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8 }} />
+        <button onClick={() => onRenombrar(nombre)} style={{ flexShrink: 0, padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar</button>
+      </div>
+      <button onClick={onCancelar} style={{ padding: 4, fontSize: "var(--fs-0)", background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Cancelar</button>
+    </div>
+  );
+}
+
+function BarrasHorizontales({ items, color = "var(--primario)", onItem }) {
   const max = Math.max(1, ...items.map((i) => i.n));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       {items.map((it) => (
-        <div key={it.label}>
+        <div key={it.label} onClick={onItem ? () => onItem(it) : undefined} style={onItem ? { cursor: "pointer" } : undefined} title={onItem ? "Ver estas cirugías" : undefined}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-1)", marginBottom: 2 }}>
             <span style={{ color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{it.label}</span>
             <span style={{ color: "var(--texto-sec)", fontWeight: 600, flexShrink: 0 }}>{it.n}{it.extra ? ` · ${it.extra}` : ""}</span>
@@ -398,7 +426,7 @@ function esOncologica(r) {
 // sangrado, etc. de un procedimiento y detectar la curva de aprendizaje.
 function Dispersion({ puntos, unidad = "min", color = "var(--primario)", mediana = null }) {
   if (!puntos || puntos.length === 0) return <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>Sin datos numéricos.</div>;
-  const W = 300, H = 120, padL = 30, padR = 8, padT = 10, padB = 18;
+  const W = 300, H = 120, padL = 34, padR = 10, padT = 12, padB = 20;
   const vals = puntos.map((p) => p.val);
   const maxV = Math.max(...vals), minV = Math.min(...vals);
   const rango = maxV - minV || 1;
@@ -412,13 +440,13 @@ function Dispersion({ puntos, unidad = "min", color = "var(--primario)", mediana
       <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="var(--borde)" strokeWidth="0.5" />
       <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--borde)" strokeWidth="0.5" />
       {/* etiquetas min/max */}
-      <text x={padL - 3} y={padT + 3} textAnchor="end" fontSize="8" fill="var(--texto-ter)">{Math.round(maxV)}</text>
-      <text x={padL - 3} y={H - padB} textAnchor="end" fontSize="8" fill="var(--texto-ter)">{Math.round(minV)}</text>
+      <text x={padL - 4} y={padT + 4} textAnchor="end" fontSize="9.5" fill="var(--texto-ter)">{Math.round(maxV)}</text>
+      <text x={padL - 4} y={H - padB} textAnchor="end" fontSize="9.5" fill="var(--texto-ter)">{Math.round(minV)}</text>
       {/* línea de mediana */}
       {medY != null && (
         <>
           <line x1={padL} y1={medY} x2={W - padR} y2={medY} stroke={color} strokeWidth="0.8" strokeDasharray="3 2" opacity="0.6" />
-          <text x={W - padR} y={medY - 2} textAnchor="end" fontSize="8" fill={color}>mediana {mediana} {unidad}</text>
+          <text x={W - padR} y={medY - 3} textAnchor="end" fontSize="9.5" fontWeight="600" fill={color}>mediana {mediana} {unidad}</text>
         </>
       )}
       {/* línea que une los puntos (tendencia / curva de aprendizaje) */}
@@ -515,10 +543,15 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [mesAbierto, setMesAbierto] = useState(null);       // mes seleccionado dentro del gráfico ampliado
   const [duplicadosOpen, setDuplicadosOpen] = useState(false); // revisor de posibles duplicados
   const [desdeTabla, setDesdeTabla] = useState(false);         // el formulario viene precargado desde una cirugía
+  const [sugerirIngreso, setSugerirIngreso] = useState(false); // el paciente del protocolo no está hospitalizado
   const [certOpen, setCertOpen] = useState(false);             // modal del certificado de casuística
   const [certDesde, setCertDesde] = useState("");
   const [certHasta, setCertHasta] = useState("");
   const [certGenerando, setCertGenerando] = useState(false);
+  const [listaAbierta, setListaAbierta] = useState(null);      // {titulo, ids} visor genérico de cirugías
+  const [dupIgnorados, setDupIgnorados] = useState(() => {     // grupos de duplicados marcados como "no son duplicados"
+    try { return JSON.parse(localStorage.getItem("uro_logbook_dup_ign") || "[]"); } catch { return []; }
+  });
   const [resumenIA, setResumenIA] = useState("");           // resumen escrito por la IA
   const [resumenCargando, setResumenCargando] = useState(false);
   const [resumenError, setResumenError] = useState("");
@@ -967,6 +1000,21 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const paginas = doc.getNumberOfPages();
       for (let p = 1; p <= paginas; p++) {
         doc.setPage(p);
+        // Marca de agua diagonal (con opacidad real si la versión de jsPDF
+        // lo permite; si no, gris muy claro) + sello en la esquina superior.
+        try {
+          doc.saveGraphicsState();
+          doc.setGState(new doc.GState({ opacity: 0.06 }));
+          doc.setFont("helvetica", "bold"); doc.setFontSize(64); doc.setTextColor(26, 58, 92);
+          doc.text("UroSearch", W / 2, 185, { align: "center", angle: 32 });
+          doc.restoreGraphicsState();
+        } catch {
+          doc.setFont("helvetica", "bold"); doc.setFontSize(64); doc.setTextColor(238, 241, 246);
+          doc.text("UroSearch", W / 2, 185, { align: "center", angle: 32 });
+        }
+        doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(26, 58, 92);
+        doc.text("UroSearch", W - M, 11, { align: "right" });
+        doc.setFont("helvetica", "normal");
         doc.setFontSize(7); doc.setTextColor(150);
         doc.text("Generado por UroSearch · datos autorreportados por el profesional · verificar contra protocolos operatorios", M, 290);
         doc.text(`${p} / ${paginas}`, W - M, 290, { align: "right" });
@@ -979,6 +1027,28 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     }
     setCertGenerando(false);
   };
+
+  // Tras leer un protocolo, se verifica si el paciente ya figura en los
+  // hospitalizados o en la tabla quirúrgica; si no, se ofrece ingresarlo.
+  useEffect(() => {
+    if (!extraidoOk || editId || desdeTabla) { setSugerirIngreso(false); return; }
+    const ident = [];
+    if (reg.rut?.trim()) ident.push(`rut.eq.${reg.rut.trim()}`);
+    if (reg.ficha_clinica?.trim()) ident.push(`ficha_clinica.eq.${reg.ficha_clinica.trim()}`);
+    if (!ident.length && reg.iniciales?.trim()) ident.push(`iniciales.eq.${reg.iniciales.trim().toUpperCase()}`);
+    if (!ident.length) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const [pac, cir] = await Promise.all([
+          supabase.from("pacientes").select("id").or(ident.join(",")).neq("estado", "alta").limit(1),
+          supabase.from("cirugias").select("id").or(ident.filter((c) => !c.startsWith("iniciales")).join(",") || ident.join(",")).limit(1),
+        ]);
+        if (vivo && !(pac.data?.length) && !(cir.data?.length)) setSugerirIngreso(true);
+      } catch {}
+    })();
+    return () => { vivo = false; };
+  }, [extraidoOk]);
 
   const empezarEdicion = (r) => {
     setEditId(r.id);
@@ -1049,11 +1119,38 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (!grupos.has(clave)) grupos.set(clave, []);
       grupos.get(clave).push(r);
     });
-    return Array.from(grupos.values())
-      .filter((g) => g.length > 1)
-      .sort((a, b) => (b[0].fecha || "").localeCompare(a[0].fecha || ""));
-  }, [registros, grupoProc]);
-  const nDuplicados = gruposDuplicados.reduce((acc, g) => acc + (g.length - 1), 0);
+    return Array.from(grupos.entries())
+      .filter(([, g]) => g.length > 1)
+      .map(([clave, g]) => ({ clave, items: g }))
+      .filter((g) => !dupIgnorados.includes(g.clave))
+      .sort((a, b) => (b.items[0].fecha || "").localeCompare(a.items[0].fecha || ""));
+  }, [registros, grupoProc, dupIgnorados]);
+  const nDuplicados = gruposDuplicados.reduce((acc, g) => acc + (g.items.length - 1), 0);
+  // Visor genérico: abre la lista de cirugías que cumplen el filtro actual de
+  // métricas más la condición extra (procedimiento, ayudantía, complicación…).
+  const abrirLista = (titulo, condicion, esComplicaciones = false) => {
+    const base = registros
+      .filter((r) => (criterioMet === "onco" ? esOncologica(r) : criterioMet === "noonco" ? !esOncologica(r) : true))
+      .filter((r) => cumpleRol(r, filtroRolMet))
+      .filter(condicion)
+      .sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""));
+    setListaAbierta({ titulo, ids: base.map((r) => r.id), esComplicaciones });
+  };
+
+  // Corrige un falso positivo: la extracción automática marcó complicación
+  // donde no la hubo. Limpia complicación, Clavien, momento y detalle.
+  const quitarComplicacion = async (r) => {
+    if (!(await uroConfirm(`¿Marcar "${r.procedimiento}" del ${r.fecha} como SIN complicación?`))) return;
+    const result = await actualizarRegistroLogbook(r.id, { complicacion: false, clavien: null, momento_complicacion: null, detalles_complicacion: null });
+    if (!result.ok) return uroToast("Error: " + result.error);
+    setRegistros((prev) => prev.map((x) => (x.id === r.id ? result.registro : x)));
+  };
+
+  const ignorarDuplicado = (clave) => {
+    const nuevo = [...dupIgnorados, clave];
+    setDupIgnorados(nuevo);
+    try { localStorage.setItem("uro_logbook_dup_ign", JSON.stringify(nuevo)); } catch {}
+  };
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -1362,6 +1459,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             </div>
           )}
 
+          {sugerirIngreso && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", background: "var(--alerta-bg)", border: "1px solid var(--alerta)", borderRadius: 10 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.45 }}>
+                🏥 <b>{reg.iniciales}</b> no aparece en tus pacientes hospitalizados. ¿Quieres ingresarlo?
+              </div>
+              <button onClick={() => { window.dispatchEvent(new CustomEvent("uro-ingreso-prefill", { detail: { nombre: reg.iniciales || "", rut: reg.rut || "", ficha: reg.ficha_clinica || "", edad: reg.edad || "", sexo: reg.sexo || "", hipotesis: reg.diagnostico_pre || reg.procedimiento || "" } })); setSugerirIngreso(false); }} style={{ flexShrink: 0, padding: "7px 12px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Ingresar</button>
+              <button onClick={() => setSugerirIngreso(false)} style={{ flexShrink: 0, background: "none", border: "none", color: "var(--texto-ter)", fontSize: 15, cursor: "pointer" }}>✕</button>
+            </div>
+          )}
+
           {extraidoOk && (
             <div style={{ padding: "9px 12px", fontSize: "var(--fs-2)", background: "var(--exito-bg)", border: "1px solid var(--exito)", borderRadius: 8, color: "var(--exito)" }}>
               ✓ Datos extraídos del protocolo. Revísalos y corrige lo que falte antes de guardar.
@@ -1623,45 +1730,33 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             })}
           </div>
 
-          {/* Filtro por rol: ver la casuística solo como cirujano o como ayudante de cierto orden */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginRight: 2 }}>Rol:</span>
-            {FILTROS_ROL.map(([id, label]) => {
-              const on = filtroRolMet === id;
-              return (
-                <button key={id} onClick={() => { setFiltroRolMet(id); setProcAbierto(null); setResumenIA(""); }} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: on ? 700 : 500, borderRadius: 20, cursor: "pointer", border: on ? "none" : "0.5px solid var(--borde)", background: on ? "var(--primario)" : "var(--superficie)", color: on ? "var(--texto-inv)" : "var(--texto-sec)" }}>
-                  {label}
-                </button>
-              );
-            })}
-            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <button onClick={() => { setSeleccionGrupos([]); setAgruparOpen(true); }} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: 600, borderRadius: 20, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--primario)" }}>
-                🧩 Agrupar{Object.keys(aliasProc).length > 0 ? ` (${Object.keys(aliasProc).length})` : ""}
-              </button>
-              <button onClick={() => setCertOpen(true)} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: 700, borderRadius: 20, cursor: "pointer", border: "none", background: "var(--primario)", color: "var(--texto-inv)" }}>
-                📜 Certificado
-              </button>
-            </div>
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <button onClick={() => { setSeleccionGrupos([]); setAgruparOpen(true); }} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: 600, borderRadius: 20, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--primario)" }}>
+              🧩 Agrupar{Object.keys(aliasProc).length > 0 ? ` (${Object.keys(aliasProc).length})` : ""}
+            </button>
+            <button onClick={() => setCertOpen(true)} style={{ padding: "5px 11px", fontSize: "var(--fs-0)", fontWeight: 700, borderRadius: 20, cursor: "pointer", border: "none", background: "var(--primario)", color: "var(--texto-inv)" }}>
+              📜 Certificado
+            </button>
           </div>
 
           {filtroRolMet !== "todos" && (
-            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: -4 }}>
-              Mostrando solo: {(FILTROS_ROL.find(([id]) => id === filtroRolMet) || [, filtroRolMet])[1]}
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--primario)", fontWeight: 700, marginTop: -4 }}>
+              Filtrando: {(FILTROS_ROL.find(([id]) => id === filtroRolMet) || [, filtroRolMet])[1]} — toca la tarjeta otra vez para quitar el filtro
             </div>
           )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={kpi}>
+            <div onClick={() => { setFiltroRolMet("todos"); setProcAbierto(null); }} style={{ ...kpi, cursor: "pointer", border: filtroRolMet === "todos" ? "1.5px solid var(--primario)" : "0.5px solid var(--borde)" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.total}</div>
               <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Cirugías registradas</div>
             </div>
-            <div style={kpi}>
+            <div onClick={() => { setFiltroRolMet(filtroRolMet === "cirujano" ? "todos" : "cirujano"); setProcAbierto(null); }} style={{ ...kpi, cursor: "pointer", border: filtroRolMet === "cirujano" ? "1.5px solid var(--exito)" : "0.5px solid var(--borde)" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--exito)" }}>{met.comoCirujano}</div>
               <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como cirujano principal{met.total > 0 ? ` (${Math.round((met.comoCirujano / met.total) * 100)}%)` : ""}</div>
             </div>
-            <div style={kpi}>
+            <div onClick={() => { setFiltroRolMet(ES_FILTRO_AYUDANTE.includes(filtroRolMet) ? "todos" : "ayudante"); setProcAbierto(null); }} style={{ ...kpi, cursor: "pointer", border: ES_FILTRO_AYUDANTE.includes(filtroRolMet) ? "1.5px solid var(--primario)" : "0.5px solid var(--borde)" }}>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--primario)" }}>{met.comoAyudante}</div>
-              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""}</div>
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Como ayudante{met.total > 0 ? ` (${Math.round((met.comoAyudante / met.total) * 100)}%)` : ""} · toca para desglosar</div>
             </div>
             <div style={{ ...kpi, minWidth: 180 }}>
               <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--primario)", lineHeight: 1.25 }}>{met.masFrecuente ? met.masFrecuente.label : "—"}</div>
@@ -1669,15 +1764,31 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             </div>
           </div>
 
+          {ES_FILTRO_AYUDANTE.includes(filtroRolMet) && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {["primer_ayudante", "segundo_ayudante", "tercer_ayudante", "cuarto_ayudante"].map((rid) => {
+                const n = registros.filter((r) => (criterioMet === "onco" ? esOncologica(r) : criterioMet === "noonco" ? !esOncologica(r) : true) && r.rol === rid).length;
+                const on = filtroRolMet === rid;
+                const label = (ROLES.find(([id]) => id === rid) || [, rid])[1];
+                return (
+                  <div key={rid} onClick={() => { setFiltroRolMet(on ? "ayudante" : rid); setProcAbierto(null); }} style={{ flex: "1 1 110px", cursor: "pointer", textAlign: "center", padding: "9px 8px", background: on ? "var(--fondo-suave)" : "var(--superficie)", border: on ? "1.5px solid var(--primario)" : "0.5px solid var(--borde)", borderRadius: 10 }}>
+                    <div style={{ fontSize: 19, fontWeight: 700, color: "var(--primario)" }}>{n}</div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>{label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {(met.complIntra > 0 || met.complPost > 0) && (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ ...kpi, minWidth: 150 }}>
+              <div onClick={() => abrirLista("⚠ Complicaciones intraoperatorias", (r) => esIntra(r), true)} style={{ ...kpi, minWidth: 150, cursor: "pointer" }}>
                 <div style={{ fontSize: 24, fontWeight: 700, color: "var(--peligro)" }}>{met.complIntra}</div>
-                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones intraoperatorias{met.total > 0 ? ` (${Math.round((met.complIntra / met.total) * 100)}%)` : ""}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones intraoperatorias{met.total > 0 ? ` (${Math.round((met.complIntra / met.total) * 100)}%)` : ""} · toca para revisar</div>
               </div>
-              <div style={{ ...kpi, minWidth: 150 }}>
+              <div onClick={() => abrirLista("⚠ Complicaciones post-operatorias", (r) => esPost(r), true)} style={{ ...kpi, minWidth: 150, cursor: "pointer" }}>
                 <div style={{ fontSize: 24, fontWeight: 700, color: "var(--alerta)" }}>{met.complPost}</div>
-                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones post-operatorias{met.total > 0 ? ` (${Math.round((met.complPost / met.total) * 100)}%)` : ""}</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones post-operatorias{met.total > 0 ? ` (${Math.round((met.complPost / met.total) * 100)}%)` : ""} · toca para revisar</div>
               </div>
             </div>
           )}
@@ -1696,20 +1807,20 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
             <div style={card}>
-              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes</div>
-              <BarrasHorizontales items={met.topProc} />
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Procedimientos más frecuentes <span style={{fontSize:"var(--fs-0)",fontWeight:400,color:"var(--texto-ter)"}}>· toca para abrir</span></div>
+              <BarrasHorizontales items={met.topProc} onItem={(it) => abrirLista(it.label, (r) => grupoProc(r.procedimiento) === it.label)} />
             </div>
             <div style={card}>
-              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento</div>
-              <BarrasHorizontales items={met.ayudantiasPorProc} color="var(--alerta)" />
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Ayudantías por procedimiento <span style={{fontSize:"var(--fs-0)",fontWeight:400,color:"var(--texto-ter)"}}>· toca para abrir</span></div>
+              <BarrasHorizontales items={met.ayudantiasPorProc} color="var(--alerta)" onItem={(it) => abrirLista(`Ayudantías · ${it.label}`, (r) => grupoProc(r.procedimiento) === it.label && ROLES_AYUDANTE.includes(r.rol))} />
             </div>
             <div style={card}>
-              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría</div>
-              <BarrasHorizontales items={met.cats} color="var(--exito)" />
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por categoría <span style={{fontSize:"var(--fs-0)",fontWeight:400,color:"var(--texto-ter)"}}>· toca para abrir</span></div>
+              <BarrasHorizontales items={met.cats} color="var(--exito)" onItem={(it) => abrirLista(`Categoría · ${it.label}`, (r) => (r.categoria || "Sin categoría") === it.label)} />
             </div>
             <div style={card}>
-              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por rol asumido</div>
-              <BarrasHorizontales items={met.porRol} color="var(--primario)" />
+              <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginBottom: 10 }}>Por rol asumido <span style={{fontSize:"var(--fs-0)",fontWeight:400,color:"var(--texto-ter)"}}>· toca para abrir</span></div>
+              <BarrasHorizontales items={met.porRol} color="var(--primario)" onItem={(it) => { const rid = (ROLES.find(([, l]) => l === it.label) || [])[0]; if (rid) abrirLista(`Rol · ${it.label}`, (r) => r.rol === rid); }} />
             </div>
           </div>
 
@@ -1734,6 +1845,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                         </button>
                         {abierto && (
                           <div style={{ padding: "0 12px 12px" }}>
+                            <button onClick={() => abrirLista(d.label, (r) => grupoProc(r.procedimiento) === d.label)} style={{ marginBottom: 10, padding: "7px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📋 Ver las {d.n} cirugías</button>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                               <Chip label="Cirujano" val={d.cx} />
                               {d.ayud > 0 && <Chip label="Ayudante" val={d.ayud} />}
@@ -1797,6 +1909,46 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           <img src={fotoUrl} alt="Protocolo operatorio" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
         </div>
       )}
+
+      {/* ─── Modal: visor genérico de cirugías (con protocolo y edición) ─── */}
+      {listaAbierta && (() => {
+        const regs = listaAbierta.ids.map((id) => registros.find((r) => r.id === id)).filter(Boolean);
+        return (
+          <div onClick={() => setListaAbierta(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 14, width: "100%", maxWidth: 640, maxHeight: "90dvh", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>{listaAbierta.titulo} <span style={{ color: "var(--texto-ter)", fontWeight: 400 }}>({regs.length})</span></div>
+                <button onClick={() => setListaAbierta(null)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                {regs.length === 0 && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center", padding: 14 }}>Sin cirugías con el filtro actual.</div>}
+                {regs.map((r) => (
+                  <div key={r.id} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 9, padding: "9px 11px" }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--primario)" }}>{(r.fecha || "").split("-").reverse().join("/")}</span>
+                      <span style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", flex: 1, minWidth: 120 }}>{r.procedimiento || "—"}{r.lateralidad ? ` (${r.lateralidad})` : ""}</span>
+                    </div>
+                    <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span>{(ROLES.find(([id]) => id === r.rol) || [, r.rol])[1]}</span>
+                      {r.iniciales && <span>· {r.iniciales}</span>}
+                      {r.duracion_min > 0 && <span>· {r.duracion_min} min</span>}
+                      {r.complicacion && <span style={{ color: "var(--peligro)", fontWeight: 700 }}>· ⚠ {LABEL_MOMENTO[r.momento_complicacion || "intraoperatoria"]}{r.clavien ? ` (CD ${r.clavien})` : ""}</span>}
+                    </div>
+                    {r.detalles_complicacion && <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)", marginTop: 3 }}>{r.detalles_complicacion}</div>}
+                    <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
+                      {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>🖼 Ver protocolo</button>}
+                      <button onClick={() => { setListaAbierta(null); empezarEdicion(r); }} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>✏️ Editar</button>
+                      {listaAbierta.esComplicaciones && r.complicacion && (
+                        <button onClick={() => quitarComplicacion(r)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--superficie)", color: "var(--exito)", border: "1px solid var(--exito)", borderRadius: 8, cursor: "pointer" }}>✓ No fue complicación</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── Modal: gráfico mensual ampliado + cirugías del mes ─── */}
       {graficoOpen && (
@@ -1918,6 +2070,21 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 UroSearch junta solo las variantes de escritura que reconoce. Si dos grupos son en realidad la misma cirugía, márcalos y únelos: las métricas los contarán juntos. Esto no modifica ningún registro, solo cómo se agrupan.
               </div>
 
+              {seleccionGrupos.length === 1 && (
+                <RenombrarGrupo
+                  origen={seleccionGrupos[0]}
+                  onRenombrar={(nuevoNombre) => {
+                    const limpio = nuevoNombre.trim();
+                    if (!limpio || limpio === seleccionGrupos[0]) return;
+                    const nuevo = { ...aliasProc, [seleccionGrupos[0]]: limpio };
+                    Object.keys(nuevo).forEach((k) => { if (nuevo[k] === seleccionGrupos[0]) nuevo[k] = limpio; });
+                    guardarAlias(nuevo);
+                    setSeleccionGrupos([]);
+                  }}
+                  onCancelar={() => setSeleccionGrupos([])}
+                />
+              )}
+
               {seleccionGrupos.length >= 2 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, background: "var(--fondo-suave)", border: "1px solid var(--primario)", borderRadius: 10, marginBottom: 12 }}>
                   <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)" }}>Unir {seleccionGrupos.length} grupos bajo el nombre:</div>
@@ -1934,6 +2101,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                       → {g}
                     </button>
                   ))}
+                  <NombreNuevoGrupo onUnir={(nombre) => {
+                    const limpio = nombre.trim();
+                    if (!limpio) return;
+                    const nuevo = { ...aliasProc };
+                    seleccionGrupos.forEach((origen) => { if (origen !== limpio) nuevo[origen] = limpio; });
+                    Object.keys(nuevo).forEach((k) => { if (seleccionGrupos.includes(nuevo[k]) && nuevo[k] !== limpio) nuevo[k] = limpio; });
+                    delete nuevo[limpio];
+                    guardarAlias(nuevo);
+                    setSeleccionGrupos([]);
+                  }} />
                   <button onClick={() => setSeleccionGrupos([])} style={{ padding: "6px", fontSize: "var(--fs-0)", background: "none", border: "none", color: "var(--texto-ter)", cursor: "pointer" }}>Cancelar selección</button>
                 </div>
               )}
@@ -1990,13 +2167,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {gruposDuplicados.map((g, gi) => (
-                <div key={gi} style={{ border: "1px solid var(--alerta)", borderRadius: 10, padding: 10, background: "var(--superficie)" }}>
-                  <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--alerta)", marginBottom: 6 }}>
-                    {(g[0].fecha || "").split("-").reverse().join("/")} · {familiaProc(g[0].procedimiento)} · {g[0].iniciales || g[0].ficha_clinica || g[0].rut || ""} — {g.length} registros
+              {gruposDuplicados.map((g) => (
+                <div key={g.clave} style={{ border: "1px solid var(--alerta)", borderRadius: 10, padding: 10, background: "var(--superficie)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--alerta)" }}>
+                      {(g.items[0].fecha || "").split("-").reverse().join("/")} · {familiaProc(g.items[0].procedimiento)} · {g.items[0].iniciales || g.items[0].ficha_clinica || g.items[0].rut || ""} — {g.items.length} registros
+                    </div>
+                    <button onClick={() => ignorarDuplicado(g.clave)} title="Son procedimientos distintos del mismo día: dejar de sugerir" style={{ flexShrink: 0, padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--superficie)", color: "var(--exito)", border: "1px solid var(--exito)", borderRadius: 8, cursor: "pointer" }}>✓ No son duplicados</button>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {g.map((r) => (
+                    {g.items.map((r) => (
                       <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 9px", background: "var(--fondo-suave)", borderRadius: 8 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{r.procedimiento || "—"}</div>

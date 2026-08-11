@@ -753,7 +753,7 @@ function aplicarOrdenNombres(nombres, orden) {
 const FUNCIONES_CONFIGURABLES = [
   { grupo: "Pestañas principales", items: [
     ["tab:logbook", "🔪 Logbook"],
-    ["tab:hospital", "🏥 Hospital"],
+    ["tab:hospital", "🏥 Servicio"],
     ["tab:conocimiento", "📖 Biblioteca"],
   ]},
   { grupo: "Hospital", items: [
@@ -1830,7 +1830,13 @@ const SCORES = [
   },
   {
     id: "imdc", nombre: "IMDC", desc: "Pronóstico CCR metastásico",
-    tipo: "checks",
+    tipo: "checks", extras: "renal_met",
+    notas: [
+      "Ver tabla de referencia más abajo", "",
+      "Habitualmente ~120 g/L (mujeres) o ~135 g/L (hombres)",
+      "Habitualmente ~8,5–10,2 mg/dL · calculadora más abajo",
+      "Habitualmente ~2,0–7,0 ×10⁹/L", "Habitualmente ~150.000–400.000 /µL",
+    ],
     factores: [
       "Karnofsky < 80 %", "< 1 año desde diagnóstico a tratamiento sistémico",
       "Hemoglobina < límite inferior normal", "Calcio corregido > límite superior normal",
@@ -1859,7 +1865,7 @@ const SCORES = [
   },
   {
     id: "mskcc", nombre: "MSKCC (Motzer)", desc: "Pronóstico en cáncer renal metastásico",
-    tipo: "checks",
+    tipo: "checks", extras: "renal_met",
     factores: [
       "Karnofsky < 80 %",
       "LDH > 1,5× el límite superior normal",
@@ -1885,7 +1891,73 @@ const SCORES = [
     id: "clavien", nombre: "Clavien-Dindo", desc: "Clasificación de complicaciones quirúrgicas",
     tipo: "custom",
   },
+  {
+    id: "tnm_prostata", nombre: "TNM Próstata", desc: "Etapificación AJCC 8ª ed.", tipo: "tnm",
+    tnm: {
+      T: [["T1", "No palpable ni visible: T1a ≤5% del tejido resecado · T1b >5% · T1c por biopsia (PSA elevado)"], ["T2", "Confinado a la próstata: T2a ≤½ de un lóbulo · T2b >½ de un lóbulo · T2c ambos lóbulos"], ["T3", "Extensión extraprostática: T3a extracapsular / cuello vesical · T3b invade vesículas seminales"], ["T4", "Invade estructuras adyacentes: esfínter externo, recto, elevador del ano o pared pélvica"]],
+      N: [["N0", "Sin ganglios regionales"], ["N1", "Ganglios regionales (pélvicos) comprometidos"]],
+      M: [["M0", "Sin metástasis"], ["M1", "M1a ganglios no regionales · M1b hueso · M1c otros sitios"]],
+      estadios: [["I", "cT1–2a · ISUP 1 · PSA < 10"], ["IIA", "cT1–2b · ISUP 1 · PSA 10–20 (o T2b–c ISUP 1 PSA <20)"], ["IIB", "T1–2 · ISUP 2 · PSA < 20"], ["IIC", "T1–2 · ISUP 3–4 · PSA < 20"], ["IIIA", "T1–2 · PSA ≥ 20"], ["IIIB", "T3–4 · cualquier PSA"], ["IIIC", "Cualquier T · ISUP 5"], ["IVA", "N1"], ["IVB", "M1"]],
+      nota: "Grupos pronósticos combinan T, ISUP y PSA. ISUP: 1 = Gleason ≤6 · 2 = 3+4 · 3 = 4+3 · 4 = Gleason 8 · 5 = Gleason 9–10.",
+    },
+  },
+  {
+    id: "tnm_vejiga", nombre: "TNM Vejiga", desc: "Etapificación AJCC 8ª ed.", tipo: "tnm",
+    tnm: {
+      T: [["Ta", "Carcinoma papilar no invasor"], ["Tis", "Carcinoma in situ (plano)"], ["T1", "Invade lámina propia (tejido conectivo subepitelial)"], ["T2", "Invade muscular propia: T2a mitad interna · T2b mitad externa"], ["T3", "Invade grasa perivesical: T3a microscópica · T3b macroscópica"], ["T4", "T4a invade próstata/útero/vagina · T4b pared pélvica o abdominal"]],
+      N: [["N0", "Sin ganglios"], ["N1", "1 ganglio pélvico (hipogástrico, obturador, ilíaco ext., presacro)"], ["N2", "≥2 ganglios pélvicos"], ["N3", "Ganglios ilíacos comunes"]],
+      M: [["M0", "Sin metástasis"], ["M1", "M1a ganglios más allá de ilíacos comunes · M1b otras metástasis"]],
+      estadios: [["0a / 0is", "Ta / Tis · N0 M0"], ["I", "T1 N0 M0"], ["II", "T2a–b N0 M0"], ["IIIA", "T3a–T4a N0 · o T1–4a N1"], ["IIIB", "T1–4a N2–3"], ["IVA", "T4b · o M1a"], ["IVB", "M1b"]],
+      nota: "Ta/Tis/T1 = no músculo-invasor (TVNM); ≥T2 = músculo-invasor (TVMI).",
+    },
+  },
+  {
+    id: "tnm_testiculo", nombre: "TNM Testículo", desc: "Etapificación AJCC 8ª ed. (incluye marcadores S)", tipo: "tnm",
+    tnm: {
+      T: [["pT1", "Limitado a testículo/epidídimo sin ILV (seminoma: pT1a <3 cm · pT1b ≥3 cm)"], ["pT2", "Limitado a testículo/epidídimo con ILV, o invade hilio/epidídimo/túnica vaginal"], ["pT3", "Invade cordón espermático"], ["pT4", "Invade escroto"]],
+      N: [["N0", "Sin ganglios"], ["N1", "Ganglio(s) ≤2 cm (patológico: ≤5 ganglios, ninguno >2 cm)"], ["N2", "Ganglio(s) >2–5 cm (o >5 ganglios, o extensión extranodal)"], ["N3", "Ganglio(s) >5 cm"]],
+      M: [["M0", "Sin metástasis"], ["M1", "M1a ganglios no retroperitoneales o pulmón · M1b otros sitios"]],
+      S: [["S0", "Marcadores normales"], ["S1", "LDH <1,5×N · β-hCG <5.000 · AFP <1.000"], ["S2", "LDH 1,5–10×N · β-hCG 5.000–50.000 · AFP 1.000–10.000"], ["S3", "LDH >10×N · β-hCG >50.000 · AFP >10.000"]],
+      estadios: [["I", "pT1–4 N0 M0 (IA: pT1 S0 · IB: pT2–4 S0 · IS: marcadores elevados post-orquiectomía)"], ["II", "N1–3 M0 S0–1 (IIA: N1 · IIB: N2 · IIC: N3)"], ["III", "M1 o S2–3 (IIIA: M1a S0–1 · IIIB: S2 · IIIC: S3 o M1b)"]],
+      nota: "Los marcadores (S) se miden POST-orquiectomía y definen etapa junto a TNM.",
+    },
+  },
+  {
+    id: "tnm_rinon", nombre: "TNM Riñón", desc: "Etapificación AJCC 8ª ed.", tipo: "tnm",
+    tnm: {
+      T: [["T1", "≤7 cm, limitado al riñón: T1a ≤4 cm · T1b >4–7 cm"], ["T2", ">7 cm, limitado al riñón: T2a >7–10 cm · T2b >10 cm"], ["T3", "T3a vena renal/grasa perirrenal o del seno, o sistema pielocalicial · T3b cava infradiafragmática · T3c cava supradiafragmática o pared de la cava"], ["T4", "Más allá de la fascia de Gerota (incluye extensión por contigüidad a suprarrenal ipsilateral)"]],
+      N: [["N0", "Sin ganglios regionales"], ["N1", "Ganglio(s) regional(es) comprometido(s)"]],
+      M: [["M0", "Sin metástasis"], ["M1", "Metástasis a distancia"]],
+      estadios: [["I", "T1 N0 M0"], ["II", "T2 N0 M0"], ["III", "T3 N0–1 · o T1–2 N1"], ["IV", "T4 · o M1"]],
+      nota: "La invasión de la suprarrenal ipsilateral por contigüidad es T4; una metástasis suprarrenal separada es M1.",
+    },
+  },
 ];
+
+// Visor genérico de etapificación TNM: pestañas T / N / M (/S) / Estadios.
+function TnmViewer({ score }) {
+  const secciones = [["T", score.tnm.T], ["N", score.tnm.N], ["M", score.tnm.M], ...(score.tnm.S ? [["S", score.tnm.S]] : []), ["Estadios", score.tnm.estadios]];
+  const [sec, setSec] = useState("T");
+  const filas = (secciones.find(([id]) => id === sec) || [])[1] || [];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {secciones.map(([id]) => (
+          <button key={id} onClick={() => setSec(id)} style={{ padding: "6px 14px", fontSize: "var(--fs-1)", fontWeight: sec === id ? 700 : 500, borderRadius: 18, cursor: "pointer", border: sec === id ? "none" : "0.5px solid var(--borde)", background: sec === id ? "var(--primario)" : "var(--superficie)", color: sec === id ? "var(--texto-inv)" : "var(--texto-sec)" }}>{id}</button>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {filas.map(([code, desc]) => (
+          <div key={code} style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 9, padding: "9px 11px" }}>
+            <span style={{ flexShrink: 0, minWidth: 42, fontWeight: 700, color: "var(--primario)", fontSize: "var(--fs-2)" }}>{code}</span>
+            <span style={{ fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.5 }}>{desc}</span>
+          </div>
+        ))}
+      </div>
+      {score.tnm.nota && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.5, background: "var(--fondo-suave)", borderRadius: 8, padding: "8px 10px" }}>ℹ️ {score.tnm.nota}</div>}
+    </div>
+  );
+}
 
 // ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
 function ProtocolosPanel({ currentUser, isAdmin }) {
@@ -1994,6 +2066,7 @@ function ScoresPanel() {
         <div style={{ fontSize: "var(--fs-2)", color: "var(--texto-sec)", marginBottom: 14 }}>{score.desc}</div>
         {score.tipo === "suma" && <ScoreSuma score={score} />}
         {score.tipo === "checks" && <ScoreChecks score={score} />}
+        {score.tipo === "tnm" && <TnmViewer score={score} />}
         {score.id === "damico" && <ScoreDAmico />}
         {score.id === "renal" && <ScoreRENAL />}
         {score.id === "padua" && <ScorePADUA />}
@@ -2057,12 +2130,63 @@ function ScoreChecks({ score }) {
       {score.factores.map((f, i) => (
         <div key={i} onClick={() => { const v = [...on]; v[i] = !v[i]; setOn(v); }} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 11px", borderRadius: 8, cursor: "pointer", background: on[i] ? "var(--exito-bg)" : "var(--superficie)", border: "0.5px solid " + (on[i] ? "var(--exito-borde)" : "var(--borde)") }}>
           <span style={{ width: 17, height: 17, borderRadius: 4, flexShrink: 0, border: "1px solid " + (on[i] ? "var(--exito)" : "var(--borde)"), background: on[i] ? "var(--exito)" : "transparent", color: "var(--texto-inv)", fontSize: "var(--fs-1)", display: "flex", alignItems: "center", justifyContent: "center" }}>{on[i] ? "✓" : ""}</span>
-          <span style={{ fontSize: "var(--fs-2)", color: "var(--texto)" }}>{f}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: "var(--fs-2)", color: "var(--texto)" }}>{f}</span>
+            {score.notas?.[i] ? <span style={{ display: "block", fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 1 }}>{score.notas[i]}</span> : null}
+          </span>
         </div>
       ))}
       <div style={scoreBox}>
         <div style={{ fontSize: 28, fontWeight: 700, color: "var(--exito)" }}>{total}<span style={{ fontSize: 16, color: "var(--texto-sec)" }}> factores</span></div>
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", marginTop: 2 }}>{score.interpretar(total)}</div>
+      </div>
+      {score.extras === "renal_met" && <ExtrasRenalMet />}
+    </div>
+  );
+}
+
+// Apoyos para IMDC/MSKCC: referencia de Karnofsky y calcio corregido in situ.
+function ExtrasRenalMet() {
+  const [ca, setCa] = useState("");
+  const [alb, setAlb] = useState("");
+  const corr = ca && alb ? (parseFloat(ca) + 0.8 * (4 - parseFloat(alb))) : null;
+  const KARNOFSKY = [
+    ["100", "Normal, sin molestias ni evidencia de enfermedad"],
+    ["90", "Actividad normal; signos o síntomas menores"],
+    ["80", "Actividad normal con esfuerzo; algunos síntomas"],
+    ["70", "Se cuida solo; incapaz de actividad normal o trabajo"],
+    ["60", "Requiere asistencia ocasional para sus necesidades"],
+    ["50", "Requiere asistencia considerable y cuidados frecuentes"],
+    ["40", "Incapacitado; requiere cuidados especiales"],
+    ["30", "Gravemente incapacitado; hospitalización indicada"],
+    ["20", "Muy enfermo; requiere soporte activo"],
+    ["10", "Moribundo"],
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+      <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 12 }}>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🧮 Calcio corregido por albúmina</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input type="number" inputMode="decimal" step="0.1" value={ca} onChange={e => setCa(e.target.value)} placeholder="Ca total (mg/dL)" style={{ ...inputStyle, marginBottom: 0, flex: 1, minWidth: 120 }} />
+          <input type="number" inputMode="decimal" step="0.1" value={alb} onChange={e => setAlb(e.target.value)} placeholder="Albúmina (g/dL)" style={{ ...inputStyle, marginBottom: 0, flex: 1, minWidth: 120 }} />
+        </div>
+        {corr !== null && !isNaN(corr) && (
+          <div style={{ marginTop: 8, fontSize: "var(--fs-2)", color: "var(--texto)" }}>
+            Calcio corregido: <b style={{ color: corr > 10.2 ? "var(--peligro)" : "var(--exito)" }}>{corr.toFixed(1)} mg/dL</b>
+            <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}> · fórmula: Ca + 0,8 × (4 − albúmina) · normal ~8,5–10,2</span>
+          </div>
+        )}
+      </div>
+      <div style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: 12 }}>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>📋 Karnofsky Performance Status</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {KARNOFSKY.map(([v, d]) => (
+            <div key={v} style={{ display: "flex", gap: 8, fontSize: "var(--fs-0)", lineHeight: 1.45 }}>
+              <span style={{ flexShrink: 0, width: 30, fontWeight: 700, color: Number(v) < 80 ? "var(--peligro)" : "var(--exito)" }}>{v}</span>
+              <span style={{ color: "var(--texto-sec)" }}>{d}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -2373,7 +2497,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.1.0";
+const VERSION = "v2.2.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -2383,10 +2507,10 @@ const ROLES_ASIGNABLES = [["urologo","Urólogo/a"],["residente","Residente"],["i
 const ROL_LABEL = { admin:"Administrador", urologo:"Urólogo/a", residente:"Residente", interno:"Interno/a", enfermeria:"Enfermería" };
 function tabsPorRol(rol, pendientesCount = 0) {
   const chat = ["chat","Chat"];
-  const hospital = ["hospital","Hospital"];
+  const hospital = ["hospital","Servicio"];
   const biblio = ["conocimiento","Biblioteca"];
   const logbook = ["logbook","Logbook"];
-  if (rol === "admin") return [["admin",`Cuentas${pendientesCount>0?` (${pendientesCount})`:""}`], chat, hospital, logbook, biblio];
+  if (rol === "admin") return [["admin",`🛡️ Administración${pendientesCount>0?` (${pendientesCount})`:""}`]];
   if (rol === "enfermeria") return [chat, hospital];              // sin Biblioteca ni Logbook
   return [chat, hospital, logbook, biblio];                       // urologo, residente, interno
 }
@@ -2615,6 +2739,16 @@ function ChipsSugeridas({ onPick, disabled }) {
 
 // Banco de preguntas predeterminadas de la portada: se muestran 3 al azar y
 // van rotando solas. Tocar una la envía directo al chat.
+// Preguntas "de servicio": se responden con la organización del propio
+// servicio (pacientes, tabla, pendientes), sin buscar en la biblioteca.
+const PREGUNTAS_SERVICIO = [
+  "¿Qué pacientes tengo hospitalizados hoy?",
+  "¿Cómo van mis pacientes?",
+  "Hazme un resumen de mis pacientes para la visita",
+  "¿Qué se opera mañana?",
+  "¿Qué cirugías tengo esta semana?",
+  "¿Qué pendientes tengo con mis pacientes?",
+];
 const PREGUNTAS_UROS = [
   "¿Cómo se maneja un cólico renal en urgencias?",
   "Indicaciones de nefrectomía parcial vs radical",
@@ -2622,8 +2756,6 @@ const PREGUNTAS_UROS = [
   "Manejo de la hematuria macroscópica",
   "Clasificación de Bosniak en quistes renales",
   "Tratamiento de la ITU complicada",
-  "¿Qué pacientes tengo hospitalizados hoy?",
-  "¿Qué cirugías tengo esta semana?",
   "Seguimiento del cáncer de próstata post prostatectomía",
   "Manejo de litiasis ureteral según tamaño",
   "Indicaciones de RTU de próstata",
@@ -2636,11 +2768,19 @@ const PREGUNTAS_UROS = [
   "BCG en cáncer vesical no músculo-invasor",
 ];
 function elegirPreguntas(n = 3, evitar = []) {
-  const pool = PREGUNTAS_UROS.filter(p => !evitar.includes(p));
+  // Siempre 3 en total: al menos 1 de servicio (responde con la organización
+  // del servicio, sin búsqueda) y el resto clínicas de la base/protocolos.
+  const azar = (lista) => {
+    const pool = lista.filter(p => !evitar.includes(p));
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+  };
   const out = [];
-  const copia = [...pool];
+  const serv = azar(PREGUNTAS_SERVICIO);
+  if (serv) out.push(serv);
+  const copia = PREGUNTAS_UROS.filter(p => !evitar.includes(p) && !out.includes(p));
   while (out.length < n && copia.length) out.push(copia.splice(Math.floor(Math.random() * copia.length), 1)[0]);
-  return out;
+  // Mezclar el orden para que la de servicio no salga siempre primera
+  return out.sort(() => Math.random() - 0.5);
 }
 
 function PortadaChat({ nombre, onPregunta }) {
@@ -2768,7 +2908,7 @@ function PortadaChat({ nombre, onPregunta }) {
 // ============================================================
 // TUTORIAL / ONBOARDING (modal de bienvenida + tips sobre botones reales)
 // ============================================================
-const TUTORIAL_VERSION = "1"; // súbelo si quieres re-mostrarlo a todos en una versión futura
+const TUTORIAL_VERSION = "2"; // súbelo si quieres re-mostrarlo a todos en una versión futura
 
 // Pasos del tour. target = data-tour del elemento a resaltar (si falta, se muestra centrado).
 // tab = pestaña que debe estar activa para que el elemento exista.
@@ -2780,28 +2920,35 @@ function pasosTutorial(rol, movil = false) {
     { uros: "pabellon_serio", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
 
     // ─── CHAT ───
-    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas." },
+    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas. La respuesta se va escribiendo en vivo, y cuando ayuda incluyo láminas (clasificaciones, algoritmos, esquemas)." },
+    { tab: "chat", uros: "point", titulo: "Preguntas para empezar", texto: "En la portada rotan tres preguntas: siempre hay alguna sobre la organización de tu servicio («¿Qué se opera mañana?», «Resumen de mis pacientes para la visita») junto a consultas clínicas. Tócalas y se envían." },
+    { tab: "chat", uros: "pulgar", titulo: "👍 👎 Ayúdame a mejorar", texto: "Bajo cada respuesta hay dos pulgares. Si algo sale mal, marca 👎: esas evaluaciones son las que indican qué corregir y qué material agregar a la biblioteca." },
 
     // ─── HOSPITAL ───
-    { target: "tab-hospital", tab: "hospital", uros: "checklist", titulo: "Hospital", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
-    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Hospital", texto: "Toca de nuevo la pestaña Hospital y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
+    { target: "tab-hospital", tab: "hospital", uros: "checklist", titulo: "Servicio", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
+    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Servicio", texto: "Toca de nuevo la pestaña Servicio y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
 
     // ─── SEGUIMIENTO ───
     { tab: "hospital", subtab: "seguimiento", uros: "camara", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
     { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
     { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "trocar", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
     { target: "selector-contexto", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Personal ↔ Equipo", texto: "Este botón cambia entre 👤 «Mis Pacientes» y 👥 un equipo. Pacientes, tabla y notas se muestran según el contexto elegido aquí." },
+    { tab: "hospital", subtab: "pacientes", uros: "checklist_sentado", titulo: "Altas y reingresos", texto: "Al dar de alta tienes unos segundos para deshacerlo. Los dados de alta quedan en su propia lista con buscador, y si el paciente vuelve, su ficha trae el botón 🏥 Re-hospitalizar: conservas toda su historia." },
 
     // ─── BIBLIOTECA ───
     { target: "tab-conocimiento", tab: "conocimiento", uros: "lectura", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
+    { tab: "conocimiento", uros: "pizarra", titulo: "Scores y etapificación", texto: "En «Scores» tienes IPSS, D'Amico, RENAL, PADUA, IMDC y MSKCC (con tabla de Karnofsky y calculadora de calcio corregido incluidas), Clavien-Dindo y la etapificación TNM de próstata, vejiga, testículo y riñón." },
 
     // ─── LOGBOOK ───
     { target: "tab-logbook", tab: "logbook", uros: "pabellon_serio", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
-    { tab: "logbook", uros: "ok", titulo: "Tus métricas", texto: "En «Métricas» ves, por procedimiento: cuántas hiciste como cirujano o ayudante, duración, sangrado, tamaños y stone free. Exportable a CSV para tu trabajo de congreso." },
+    { tab: "logbook", uros: "camara", titulo: "Registrar es sacar una foto", texto: "Fotografía el protocolo operatorio y extraigo procedimiento, paciente, duración, hallazgos y complicaciones. Si el paciente no está en tus hospitalizados, te ofrezco ingresarlo ahí mismo. Y desde la tabla quirúrgica, «Agregar a mi logbook» trae la cirugía ya completada." },
+    { tab: "logbook", uros: "ok", titulo: "Tus métricas, tocando", texto: "Las tarjetas son los filtros: toca «como cirujano principal» y todo se filtra; toca «como ayudante» y se despliegan 1º, 2º, 3º y 4º. Los gráficos también se abren: tocas una barra y aparecen esas cirugías, con su protocolo y opción de editar." },
+    { tab: "logbook", uros: "explicando", titulo: "Ordena tu casuística", texto: "Con 🧩 Agrupar unes las cirugías escritas de distinta forma bajo un nombre que tú elijas («Litiasis»), y puedes renombrar grupos. Si aparecen posibles duplicados, confirmas o los descartas con «No son duplicados»." },
+    { tab: "logbook", uros: "bienhecho", titulo: "📜 Tu certificado", texto: "El botón «Certificado» genera un PDF con tu casuística por procedimiento y rol en el rango de fechas que elijas, con complicaciones y líneas de firma para ti y tu tutor. Lo que antes armabas a mano en Excel." },
 
     { uros: "pulgar", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
 
-    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha." },
+    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha. Ahí mismo están los Términos y la Política de Privacidad: UroSearch™ es una herramienta de apoyo, no un dispositivo médico." },
   ];
   // Enfermería no ve Biblioteca ni Logbook; internos sí. Filtramos pasos cuyo tab no aplica.
   const tabsFuera = rol === "enfermeria" ? ["conocimiento", "logbook"] : [];
@@ -3578,7 +3725,7 @@ function abrirExterno(url) {
 // ── Términos y Condiciones / Política de Privacidad ──
 const RESPONSABLE = "Dr. Sebastián Gárate Ortega";
 const CONTACTO_DATOS = "garateortega@gmail.com";
-const ULTIMA_ACTUALIZACION = "30 de julio de 2026";
+const ULTIMA_ACTUALIZACION = "11 de agosto de 2026";
 
 function TerminosModal({ onClose }) {
   return (
@@ -3591,14 +3738,15 @@ function TerminosModal({ onClose }) {
         <div style={{flex:1,overflowY:"auto",padding:"16px 18px",fontSize:"var(--fs-2)",lineHeight:1.7,color:"var(--texto)"}}>
           <p><strong>Última actualización:</strong> {ULTIMA_ACTUALIZACION}</p>
           <p>UroSearch es una herramienta clínica de apoyo desarrollada por <strong>{RESPONSABLE}</strong>, diseñada para uso exclusivo por profesionales de la salud del equipo de urología autorizados.</p>
-          <p><strong>1. Naturaleza del servicio.</strong> UroSearch es un asistente clínico informático. No reemplaza el juicio clínico profesional. Las sugerencias, datos extraídos y contenidos generados por inteligencia artificial son orientativos y deben ser verificados por el profesional tratante antes de cualquier decisión clínica.</p>
+          <p><strong>1. Naturaleza del servicio.</strong> UroSearch™ es un asistente clínico informático de apoyo a la organización asistencial, al registro personal de actividad quirúrgica y a la consulta de material bibliográfico. <strong>No constituye un dispositivo médico</strong>: no emite diagnósticos, no indica tratamientos, no procesa señales fisiológicas ni genera alertas clínicas automáticas. No reemplaza el juicio clínico profesional. Las sugerencias, datos extraídos y contenidos generados por inteligencia artificial son orientativos y deben ser verificados por el profesional tratante antes de cualquier decisión clínica.</p>
           <p><strong>2. Acceso y cuentas.</strong> El acceso requiere una cuenta aprobada por el administrador. El usuario es responsable de la confidencialidad de sus credenciales y de toda actividad realizada con su cuenta. Está prohibido compartir credenciales o permitir el acceso a personas no autorizadas.</p>
           <p><strong>3. Datos clínicos.</strong> Los datos de pacientes ingresados en UroSearch son responsabilidad del profesional que los registra. El usuario se compromete a ingresar datos conforme a la normativa vigente (Ley 20.584, Ley 19.628 y Ley 21.719) y a las políticas del establecimiento de salud.</p>
           <p><strong>4. Uso de inteligencia artificial.</strong> UroSearch utiliza servicios de IA de terceros (Anthropic) para procesar imágenes de documentos clínicos (protocolos, ingresos, exámenes) y para el asistente de chat. Cuando se envían imágenes o texto al servicio de IA, los datos de los pacientes contenidos en ellos son transmitidos al proveedor bajo sus políticas de no retención. UroSearch anonimiza los datos identificables en la medida técnicamente posible antes de la transmisión. El proveedor no utiliza los datos enviados vía API para entrenar sus modelos.</p>
           <p><strong>5. Disponibilidad.</strong> UroSearch se ofrece "tal cual", sin garantía de disponibilidad continua ni ininterrumpida. El servicio puede experimentar interrupciones por mantenimiento, actualizaciones o causas de fuerza mayor.</p>
-          <p><strong>6. Propiedad intelectual.</strong> El software, diseño, mascota "Uros" y contenidos propios de UroSearch son propiedad de {RESPONSABLE}. Los contenidos clínicos subidos por los usuarios son propiedad de sus autores o del establecimiento según corresponda.</p>
-          <p><strong>7. Limitación de responsabilidad.</strong> {RESPONSABLE} no será responsable por decisiones clínicas basadas en la información proporcionada por UroSearch, por pérdida de datos derivada de fallas técnicas, ni por el uso inadecuado de la plataforma.</p>
-          <p><strong>8. Modificaciones.</strong> Estos términos pueden actualizarse. Los cambios serán comunicados a través de la plataforma y entrarán en vigor desde su publicación.</p>
+          <p><strong>6. Propiedad intelectual y marca.</strong> El software, su código fuente, diseño, interfaz, la mascota "Uros" y los contenidos propios de UroSearch™ son propiedad de {RESPONSABLE}, y se encuentran protegidos por la Ley 17.336 sobre Propiedad Intelectual, con inscripción en el Departamento de Derechos Intelectuales (DDI) de Chile. La denominación <strong>UroSearch</strong> y su logotipo (marca mixta: elemento denominativo y figurativo) se encuentran <strong>en trámite de registro ante el Instituto Nacional de Propiedad Industrial (INAPI) de Chile</strong>; mientras dure la tramitación se emplea el símbolo ™. Queda prohibida la reproducción, distribución, modificación, descompilación o uso comercial del software, así como el uso de la marca o del logotipo, sin autorización escrita del titular. Los contenidos clínicos subidos por los usuarios son propiedad de sus autores o del establecimiento según corresponda; el usuario declara contar con los derechos necesarios sobre el material bibliográfico que incorpore a la plataforma.</p>
+          <p><strong>7. Acceso de soporte técnico.</strong> Con el fin de brindar soporte, resolver incidencias y verificar la integridad de los datos, el administrador de la plataforma puede acceder en <strong>modalidad de solo lectura</strong> a la información de los equipos o centros usuarios. Todo acceso de esta naturaleza queda registrado automáticamente en una bitácora de auditoría (fecha, hora, administrador y equipo consultado), disponible para su revisión. Este acceso no permite modificar ni eliminar información clínica.</p>
+          <p><strong>8. Limitación de responsabilidad.</strong> {RESPONSABLE} no será responsable por decisiones clínicas basadas en la información proporcionada por UroSearch, por pérdida de datos derivada de fallas técnicas, ni por el uso inadecuado de la plataforma.</p>
+          <p><strong>9. Modificaciones.</strong> Estos términos pueden actualizarse. Los cambios serán comunicados a través de la plataforma y entrarán en vigor desde su publicación.</p>
           <p><strong>Contacto:</strong> {CONTACTO_DATOS}</p>
         </div>
       </div>
@@ -3626,6 +3774,7 @@ function PrivacidadModal({ onClose }) {
           <p><strong>4. Compartición con terceros.</strong></p>
           <p>• <em>Proveedor de inteligencia artificial (Anthropic, Inc.):</em> cuando el profesional utiliza funciones de extracción automática (lectura de protocolos, ingresos o exámenes desde foto) o el asistente de chat con contexto clínico, los datos contenidos en esas imágenes o textos son transmitidos al proveedor de IA para su procesamiento. UroSearch anonimiza los datos identificables (nombres, RUT, fichas) en la medida técnicamente posible antes de la transmisión. El proveedor no utiliza datos enviados vía API para entrenar sus modelos y opera bajo su propia política de privacidad. <strong>Importante:</strong> las imágenes de documentos clínicos contienen datos visualmente identificables que no pueden ser anonimizados previamente sin perder su utilidad.</p>
           <p>• <em>Supabase (infraestructura):</em> los datos se almacenan en servidores de Supabase con cifrado en tránsito (TLS) y en reposo. Las políticas de acceso a nivel de fila (RLS) aseguran que cada usuario solo accede a sus propios datos o a los de su equipo autorizado.</p>
+          <p>• <em>Acceso de soporte:</em> el administrador de la plataforma puede consultar, en modalidad de solo lectura y con fines de soporte técnico, la información de los equipos usuarios. Cada acceso queda registrado en una bitácora de auditoría consultable.</p>
           <p>• No se comparten datos con terceros adicionales, anunciantes ni se comercializan.</p>
           <p><strong>5. Conservación.</strong> Los datos se conservan mientras la cuenta del usuario esté activa. Al solicitar la eliminación de la cuenta, los datos personales y clínicos asociados se eliminan de la base de datos en un plazo razonable, salvo aquellos que deban conservarse por obligación legal.</p>
           <p><strong>6. Derechos del usuario.</strong> Conforme a la Ley 19.628 y la Ley 21.719, usted tiene derecho a acceder, rectificar, cancelar y oponerse al tratamiento de sus datos personales. Para ejercer estos derechos, contacte a {CONTACTO_DATOS}.</p>
@@ -3804,7 +3953,7 @@ function AuthScreen({ onLogin }) {
     return (
       <div style={{padding:"40px 32px", textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:18}}><LogoUroSearch size={78}/></div>
-        <div style={{fontSize:32, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch</div>
+        <div style={{fontSize:32, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch<sup style={{fontSize:13,fontStyle:"normal",fontWeight:500,verticalAlign:"super",marginLeft:2,opacity:0.7}}>™</sup></div>
         <div style={{fontSize:"var(--fs-3)", color:"var(--texto-sec)", marginBottom:34, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
           <button onClick={()=>{setView("login"); setError(""); setInfo("");}} style={{...btnPrimary, padding:"14px", fontSize:16}}>Iniciar sesión</button>
@@ -4377,6 +4526,7 @@ function FeedbackAdmin() {
 }
 
 function AdminPanel() {
+  const [seccionAdmin, setSeccionAdmin] = useState("cuentas");
   const [perfiles, setPerfiles] = useState([]);
   const [filtro, setFiltro] = useState("pendiente");
   const [loading, setLoading] = useState(true);
@@ -4449,6 +4599,22 @@ function AdminPanel() {
 
   return (
     <div style={{padding:"16px",flex:1,overflowY:"auto"}}>
+      <div style={{fontSize:"var(--fs-3)",fontWeight:700,color:"var(--texto)",marginBottom:10}}>🛡️ Administración</div>
+
+      {/* Secciones desplegables: solo una abierta a la vez */}
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+        {[["cuentas","👥 Panel de administración","Cuentas del equipo clínico" + (counts.pendiente>0?` · ${counts.pendiente} pendiente${counts.pendiente===1?"":"s"}`:"")],["centros","🏥 Centros","Equipos y acceso de soporte"],["boletines","📢 Boletines","Comunicados a los usuarios"],["sugerencias","📬 Buzón de sugerencias","Feedback y evaluaciones del chat"]].map(([id,label,desc]) => (
+          <button key={id} onClick={()=>setSeccionAdmin(prev => prev===id ? null : id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",background:seccionAdmin===id?"var(--fondo-suave)":"var(--superficie)",border:"0.5px solid "+(seccionAdmin===id?"var(--primario)":"var(--borde)"),borderRadius:10,cursor:"pointer"}}>
+            <span style={{flex:1,minWidth:0}}>
+              <span style={{display:"block",fontSize:"var(--fs-2)",fontWeight:700,color:seccionAdmin===id?"var(--primario)":"var(--texto)"}}>{label}</span>
+              <span style={{display:"block",fontSize:"var(--fs-0)",color:"var(--texto-ter)"}}>{desc}</span>
+            </span>
+            <span style={{flexShrink:0,color:"var(--texto-ter)",fontSize:"var(--fs-1)",transform:seccionAdmin===id?"rotate(180deg)":"none",transition:"transform .18s"}}>▾</span>
+          </button>
+        ))}
+      </div>
+
+      {seccionAdmin === "cuentas" && (<>
       <div style={{marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10}}>
         <div>
           <div style={{fontSize:"var(--fs-3)",fontWeight:600,color:"var(--texto)",marginBottom:4}}>Panel de administración</div>
@@ -4507,9 +4673,11 @@ function AdminPanel() {
         </div>
       )}
 
-      <CentrosAdmin />
-      <BoletinesAdmin />
-      <FeedbackAdmin />
+      </>)}
+
+      {seccionAdmin === "centros" && <CentrosAdmin />}
+      {seccionAdmin === "boletines" && <BoletinesAdmin />}
+      {seccionAdmin === "sugerencias" && <FeedbackAdmin />}
     </div>
   );
 }
@@ -4579,7 +4747,7 @@ function CentrosAdmin({ currentUser }) {
   ];
 
   return (
-    <div style={{ marginTop: 24, paddingTop: 18, borderTop: "0.5px solid var(--borde)" }}>
+    <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", flex: 1 }}>🏥 Centros (equipos)</div>
         <button onClick={verBitacora} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 600, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>
@@ -6754,7 +6922,7 @@ function SelectorContexto({ contexto, setContexto, equipos, currentUser, onAbrir
   );
 }
 
-function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto }) {
+function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, setTablaCirugias, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, loadingCirugias, setLoadingCirugias, loadingPendientes, setLoadingPendientes, pendientes, setPendientes, equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, users, subTab, setSubTab, contexto, setContexto, ingresoPrefill, setIngresoPrefill }) {
   const [mostrarEquipos, setMostrarEquipos] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false); // herramientas de la sección (desde el submenú)
   const config = useConfig();
@@ -6794,7 +6962,7 @@ function HospitalPanel({ pacientes, setPacientes, currentUser, tablaCirugias, se
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
+      {subTab === "pacientes" && <PacientesPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} contexto={contexto} equipos={equipos} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} pendientes={pendientes} setPendientes={setPendientes} toolsOpen={toolsOpen} soloLectura={soloLectura} ingresoPrefill={ingresoPrefill} setIngresoPrefill={setIngresoPrefill}/>}
       {subTab === "tabla" && <TablaQuirurgicaPanel tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} currentUser={currentUser} contexto={contexto} equipos={equipos} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} setPacientes={setPacientes} toolsOpen={toolsOpen} soloLectura={soloLectura}/>}
       {subTab === "notas" && <NotasPanel currentUser={currentUser} contexto={contexto} equipos={equipos}/>}
       {subTab === "prescripciones" && esUrologo && <PrescripcionesPanel currentUser={currentUser}/>}
@@ -9821,7 +9989,7 @@ function useSugRx(uid) {
   return v;
 }
 
-function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura }) {
+function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura, ingresoPrefill, setIngresoPrefill }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
   useBackClose(vista !== "lista", () => { setVista("lista"); setSeleccionado(null); });
@@ -10768,10 +10936,21 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       const g = JSON.parse(localStorage.getItem(claveVistaPac) || "null");
       if (g?.vista === "ficha" && g.id) {
         const p = pacientes.find(x => x.id === g.id);
-        if (p) abrirFicha(p);
+        if (p) { abrirFicha(p); return; }
       }
+      // Sin ficha que restaurar: se recupera el punto de scroll de la lista.
+      const y = Number(localStorage.getItem(`uro_pac_scroll:${contexto || "personal"}`) || 0);
+      if (y > 0) requestAnimationFrame(() => { if (listaScrollElRef.current) listaScrollElRef.current.scrollTop = y; });
     } catch {}
   }, [pacientes]);
+
+  // El scroll se guarda al ocultar/cerrar la app (no en cada movimiento).
+  useEffect(() => {
+    const guardar = () => { try { localStorage.setItem(`uro_pac_scroll:${contexto || "personal"}`, String(listaScrollPosRef.current || 0)); } catch {} };
+    document.addEventListener("visibilitychange", guardar);
+    window.addEventListener("pagehide", guardar);
+    return () => { guardar(); document.removeEventListener("visibilitychange", guardar); window.removeEventListener("pagehide", guardar); };
+  }, [contexto]);
 
   const imprimirNota = async (ev) => {
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
@@ -11420,6 +11599,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     return (
       <div style={{padding:"16px", paddingBottom:"calc(110px + env(safe-area-inset-bottom, 0px))", overflowY:"auto",display:"flex",flexDirection:"column"}}>
         {toastEstadoEl}
+        {seleccionado.estado === "alta" && !soloLectura && (
+          <button onClick={() => cambiarEstado(seleccionado, "activo")} style={{marginBottom:12,width:"100%",padding:"11px",fontSize:"var(--fs-2)",fontWeight:700,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:9,cursor:"pointer"}}>
+            🏥 Re-hospitalizar a {seleccionado.iniciales}
+          </button>
+        )}
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
         {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
         {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setPlantillasAbierto(false)} />}
@@ -12387,6 +12571,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       })()}
 
       {ingresoAbierto && <IngresoModal currentUser={currentUser} contexto={contexto} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoAbierto(false)} />}
+      {ingresoPrefill && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={{ datos: { nombre: ingresoPrefill.nombre || "", ficha: ingresoPrefill.ficha || "", rut: ingresoPrefill.rut || "", edad: ingresoPrefill.edad || "", sexo: ingresoPrefill.sexo || "", hipotesis: ingresoPrefill.hipotesis || "" } }} onCreado={(p)=>setPacientes(prev=>[p,...prev])} onClose={()=>setIngresoPrefill(null)} />}
       {dragPos && dragPacRef.current && <div style={{position:"fixed",left:dragPos.x+12,top:dragPos.y-14,zIndex:200,pointerEvents:"none",background:"var(--superficie)",border:"1px solid var(--primario)",borderRadius:8,padding:"6px 10px",fontSize:"var(--fs-1)",fontWeight:700,color:"var(--texto)",boxShadow:"0 8px 20px rgba(0,0,0,0.3)"}}>{dragPacRef.current.iniciales}</div>}
       <input ref={inputFotoMenuRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoMenuIngreso}/>
       {fotoMenuCargando && (
@@ -13103,6 +13288,21 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
     const h = (e) => { if (typeof e.detail === "string") setTab(e.detail); };
     window.addEventListener("uro-ir-a-tab", h);
     return () => window.removeEventListener("uro-ir-a-tab", h);
+  }, []);
+
+  // Al escanear un protocolo en el Logbook de un paciente que NO está en tus
+  // hospitalizados, el Logbook ofrece ingresarlo: llega este evento con los
+  // datos ya extraídos y se abre el formulario de ingreso prellenado.
+  const [ingresoPrefill, setIngresoPrefill] = useState(null);
+  useEffect(() => {
+    const h = (e) => {
+      if (!e.detail) return;
+      setTab("hospital");
+      setSubTabHospital("pacientes");
+      setIngresoPrefill(e.detail);
+    };
+    window.addEventListener("uro-ingreso-prefill", h);
+    return () => window.removeEventListener("uro-ingreso-prefill", h);
   }, []);
   // Detección estable: hay que acumular movimiento sostenido en una dirección para
   // cambiar de estado (evita el parpadeo por el "salto" del contenido al colapsar).
@@ -14286,7 +14486,7 @@ if (!currentUser) {
               // En celular: título y subtítulo apilados, cada uno en una línea, compactos
               <div style={{minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:18,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</span>
+                  <span style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:18,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch<sup style={{fontSize:9,fontStyle:"normal",fontWeight:500,verticalAlign:"super",marginLeft:1,opacity:0.75}}>™</sup></span>
                   {isAdmin && <span style={{fontSize:9,fontWeight:600,padding:"1px 5px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4,flexShrink:0}}>ADMIN</span>}
                 </div>
                 <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>Asistente Clínico de Urología</div>
@@ -14294,7 +14494,7 @@ if (!currentUser) {
             ) : (
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:21,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch</div>
+                  <div style={{fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",fontSize:21,color:"var(--texto)",letterSpacing:"-0.3px"}}>UroSearch<sup style={{fontSize:10,fontStyle:"normal",fontWeight:500,verticalAlign:"super",marginLeft:1,opacity:0.75}}>™</sup></div>
                   {isAdmin && <span style={{fontSize:"var(--fs-xs)",fontWeight:600,padding:"2px 6px",background:"var(--primario)",color:"var(--texto-inv)",borderRadius:4}}>ADMIN</span>}
                 </div>
                 <div style={{fontSize:"var(--fs-2)",color:"var(--texto-sec)"}}>Asistente Clínico de Urología</div>
@@ -14318,6 +14518,15 @@ if (!currentUser) {
               <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)"}}>{currentUser.correo}</div>
               <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>{currentUser.especialidad}{isAdmin?" · Administrador":""}</div>
             </div>
+            {isAdmin && (
+              <div style={{borderBottom:"0.5px solid var(--fondo)",paddingBottom:4,marginBottom:4}}>
+                {[["chat","💬 Chat"],["hospital","🏥 Servicio"],["logbook","📓 Logbook"],["biblioteca","📚 Biblioteca"],["admin","🛡️ Administración"]].map(([id,label]) => (
+                  <button key={id} onClick={()=>{ setMenuOpen(false); setTab(id); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:tab===id?"var(--fondo-suave)":"none",border:"none",color:tab===id?"var(--primario)":"var(--texto)",fontWeight:tab===id?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
             </button>
@@ -14411,7 +14620,7 @@ if (!currentUser) {
       <ErrorBoundary compacto seccion={tab} onVolver={() => setTab("chat")}>
       {tab==="admin" && isAdmin && <AdminPanel/>}
       {tab==="logbook" && <LogbookPanel currentUser={currentUser} equipos={equipos} vista={subTabLogbook} setVista={setSubTabLogbook}/>}
-      {(tab==="hospital" || promovida?.padre==="hospital") && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={promovida?.padre==="hospital" ? promovida.sub : subTabHospital} setSubTab={promovida?.padre==="hospital" ? (()=>{}) : setSubTabHospital} contexto={contexto} setContexto={setContexto}/>}
+      {(tab==="hospital" || promovida?.padre==="hospital") && <HospitalPanel pacientes={pacientes} setPacientes={setPacientes} currentUser={currentUser} tablaCirugias={tablaCirugias} setTablaCirugias={setTablaCirugias} misServiciosLista={misServiciosLista} setMisServiciosLista={setMisServiciosLista} loadingPacientes={loadingPacientes} setLoadingPacientes={setLoadingPacientes} loadingCirugias={loadingCirugias} setLoadingCirugias={setLoadingCirugias} loadingPendientes={loadingPendientes} setLoadingPendientes={setLoadingPendientes} pendientes={pendientes} setPendientes={setPendientes} equipos={equipos} setEquipos={setEquipos} invitacionesPendientes={invitacionesPendientes} setInvitacionesPendientes={setInvitacionesPendientes} users={users} subTab={promovida?.padre==="hospital" ? promovida.sub : subTabHospital} setSubTab={promovida?.padre==="hospital" ? (()=>{}) : setSubTabHospital} contexto={contexto} setContexto={setContexto} ingresoPrefill={ingresoPrefill} setIngresoPrefill={setIngresoPrefill}/>}
       {(tab==="conocimiento" || promovida?.padre==="conocimiento") && <ConocimientoHub conocimiento={conocimiento} setConocimiento={setConocimiento} isAdmin={isAdmin} currentUser={currentUser} videos={videos} setVideos={setVideos} setPlayingVideo={setPlayingVideo} imagenesChat={imagenesChat} setImagenesChat={setImagenesChat} mapaTema={mapaTema} setMapaTema={setMapaTema} mapaActual={mapaActual} setMapaActual={setMapaActual} mapaLoading={mapaLoading} generarMapa={generarMapa} topicOpen={topicOpen} setTopicOpen={setTopicOpen} mapasGuardados={mapasGuardados} onGuardarMapa={handleGuardarMapa} onEliminarMapa={handleEliminarMapa} onCargarMapaGuardado={cargarMapaGuardado} guardandoMapa={guardandoMapa} subTab={promovida?.padre==="conocimiento" ? promovida.sub : subTabBiblio} setSubTab={promovida?.padre==="conocimiento" ? (()=>{}) : setSubTabBiblio}/>}
       {tab==="videos" && <VideoLibrary videos={videos} setVideos={setVideos} isAdmin={isAdmin} setPlayingVideo={setPlayingVideo}/>}
 
@@ -14517,7 +14726,7 @@ if (!currentUser) {
           <div style={{padding:"8px 12px 12px",borderTop:"0.5px solid var(--borde)"}}>
             <div data-tour="modo-respuesta" style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
               {[["precisa","⚡ Precisa"],["explicativa","📖 Explicativa"]].map(([id,label])=><button key={id} onClick={()=>setModo(id)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",fontWeight:modo===id?500:400,borderRadius:8,cursor:"pointer",border:modo===id?"none":"0.5px solid var(--borde)",background:modo===id?"var(--primario)":"var(--superficie)",color:modo===id?"var(--texto-inv)":"var(--texto-sec)"}}>{label}</button>)}
-              <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginLeft:4}}>{modo==="precisa" ? "Definición breve" : "Explicación completa"}</span>
+
             </div>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
               <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
