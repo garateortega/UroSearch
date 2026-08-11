@@ -2718,16 +2718,18 @@ function UrosAvatar({ size = 30 }) {
 // ─── Preguntas sugeridas del chat ───
 // Atajos de un toque en la portada; cada una dispara los contextos reales
 // del chat (pacientes, tabla quirúrgica, seguimiento, logbook).
-const PREGUNTAS_SUGERIDAS = [
-  "¿Cómo van mis pacientes?",
-  "¿Qué se opera mañana?",
-  "Quiero un resumen de la visita médica",
-  "¿Cómo va mi logbook?",
-];
+// Chips sugeridos: 3 preguntas al azar del MISMO banco que la portada
+// (siempre al menos una de organización del servicio). Se usa en la vista de
+// admin, donde no se muestra PortadaChat.
 function ChipsSugeridas({ onPick, disabled }) {
+  const [preguntas, setPreguntas] = useState(() => elegirPreguntas(3));
+  useEffect(() => {
+    const t = setInterval(() => setPreguntas(prev => elegirPreguntas(3, prev)), 12000);
+    return () => clearInterval(t);
+  }, []);
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", padding: "2px 14px 18px" }}>
-      {PREGUNTAS_SUGERIDAS.map(q => (
+      {preguntas.map(q => (
         <button key={q} onClick={() => onPick(q)} disabled={disabled}
           style={{ padding: "8px 13px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "1px solid var(--primario)", borderRadius: 20, cursor: "pointer", opacity: disabled ? 0.5 : 1 }}>
           {q}
@@ -2744,10 +2746,12 @@ function ChipsSugeridas({ onPick, disabled }) {
 const PREGUNTAS_SERVICIO = [
   "¿Qué pacientes tengo hospitalizados hoy?",
   "¿Cómo van mis pacientes?",
-  "Hazme un resumen de mis pacientes para la visita",
+  "Quiero un resumen de la visita médica",
   "¿Qué se opera mañana?",
   "¿Qué cirugías tengo esta semana?",
   "¿Qué pendientes tengo con mis pacientes?",
+  "¿Cómo va mi logbook?",
+  "¿Quién está en el equipo de pabellón mañana?",
 ];
 const PREGUNTAS_UROS = [
   "¿Cómo se maneja un cólico renal en urgencias?",
@@ -14684,10 +14688,7 @@ if (!currentUser) {
 {!loadingConversaciones && messages.length === 0 && isAdmin && <div style={{textAlign:"center",padding:"32px 16px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}><Uros expresion="hola" size={96} style={{margin:"0 auto 12px"}}/>Como admin puedes usar el chat. Escribe una consulta.<ChipsSugeridas onPick={(q) => sendMsg(q)} disabled={loading} /></div>}
 
 {!loadingConversaciones && messages.length === 1 && messages[0].role === "assistant" && !isAdmin && (
-  <>
-    <PortadaChat nombre={currentUser?.nombre} onPregunta={(q)=>sendMsg(q)} />
-    <ChipsSugeridas onPick={(q) => sendMsg(q)} disabled={loading} />
-  </>
+  <PortadaChat nombre={currentUser?.nombre} onPregunta={(q)=>sendMsg(q)} />
 )}
 
 {!loadingConversaciones && messages.map((m,i) => {
