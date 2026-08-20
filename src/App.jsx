@@ -302,6 +302,30 @@ async function comprimirImagenPac(file, maxDim = 1568, calidad = 0.85) {
   return dataUrl.split(",")[1];
 }
 
+// Convierte lo que el usuario suba —foto o PDF— en JPEG base64 CRUDO (sin el
+// prefijo "data:"), que es lo único que acepta el bloque de imagen de la API.
+// Un PDF se rasteriza página por página con pdf.js: mandarlo como si fuera un
+// JPEG hacía que la API recibiera bytes de PDF etiquetados image/jpeg y no
+// devolviera nada.
+async function archivoAImagenesB64(file, maxPaginas = 5) {
+  const esPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+  if (!esPdf) return [await comprimirImagenPac(file)];
+  const lib = await cargarPdfJs();
+  const buf = await file.arrayBuffer();
+  const pdf = await lib.getDocument({ data: buf }).promise;
+  const salida = [];
+  for (let n = 1; n <= Math.min(pdf.numPages, maxPaginas); n++) {
+    const page = await pdf.getPage(n);
+    // Escala 2 para que el texto de un informe de laboratorio quede legible.
+    const vp = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+    salida.push(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
+  }
+  return salida;
+}
+
 // ─── Extracción de datos de ingreso de un paciente desde foto(s) (visión IA) ───
 // Reutiliza la misma edge function del chat. Devuelve un objeto con los campos.
 async function extraerIngresoPaciente(imagenesBase64) {
@@ -683,6 +707,51 @@ const _emojiLider = (s) => { const m = (s || "").match(/^(\p{Extended_Pictograph
 const _icoDeLabel = (s) => { const e = _emojiLider(s); return e ? ICONO_POR_EMOJI[e] || null : null; };
 
 // Sirve para que un panel vuelva a donde estabas si sales y regresas a la app.
+// Punteo automático en los campos de indicaciones: Enter cierra la línea actual
+// y abre la siguiente ya con viñeta; si la línea quedó vacía, Enter la limpia y
+// sale de la lista (igual que en un editor de texto). Backspace al inicio de una
+// viñeta la quita sin borrar el texto.
+const VINETA = "• ";
+function onKeyDownPunteo(aplicar) {
+  return (e) => {
+    const ta = e.target;
+    const { selectionStart: a, selectionEnd: b, value } = ta;
+    const reponerCursor = (pos) => requestAnimationFrame(() => { try { ta.selectionStart = ta.selectionEnd = pos; } catch {} });
+    if (e.key === "Enter" && !e.shiftKey && a === b) {
+      const ini = value.lastIndexOf("\n", a - 1) + 1;
+      const linea = value.slice(ini, a);
+      if (linea.trimStart().startsWith(VINETA.trim())) {
+        // Línea con viñeta pero sin contenido: se sale de la lista.
+        if (!linea.replace(VINETA, "").trim()) {
+          e.preventDefault();
+          const nuevo = value.slice(0, ini) + value.slice(a);
+          aplicar(nuevo); reponerCursor(ini);
+          return;
+        }
+        e.preventDefault();
+        const nuevo = value.slice(0, a) + "\n" + VINETA + value.slice(b);
+        aplicar(nuevo); reponerCursor(a + 1 + VINETA.length);
+        return;
+      }
+      // Primera línea escrita sin viñeta: al saltar se conviert en lista.
+      if (linea.trim()) {
+        e.preventDefault();
+        const nuevo = value.slice(0, ini) + VINETA + linea + "\n" + VINETA + value.slice(b);
+        aplicar(nuevo); reponerCursor(a + VINETA.length * 2 + 1);
+        return;
+      }
+    }
+    if (e.key === "Backspace" && a === b) {
+      const ini = value.lastIndexOf("\n", a - 1) + 1;
+      if (a === ini + VINETA.length && value.slice(ini, a) === VINETA) {
+        e.preventDefault();
+        const nuevo = value.slice(0, ini) + value.slice(a);
+        aplicar(nuevo); reponerCursor(ini);
+      }
+    }
+  };
+}
+
 function usePersistedState(clave, inicial) {
   const [val, setVal] = useState(() => {
     try { const raw = localStorage.getItem(clave); return raw != null ? JSON.parse(raw) : inicial; } catch { return inicial; }
@@ -8547,10 +8616,19 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
   const inputRef = useRef(null);
 
   const onFiles = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 5 - fotos.length);
+    const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    setError("");
     const nuevas = [];
-    for (const f of files) { try { nuevas.push(await comprimirImagenPac(f)); } catch {} }
+    for (const f of files) {
+      if (nuevas.length + fotos.length >= 5) break;
+      try {
+        const paginas = await archivoAImagenesB64(f, 5 - fotos.length - nuevas.length);
+        nuevas.push(...paginas.filter(Boolean));
+      } catch (err) {
+        setError("No se pudo leer " + (f.name || "el archivo") + ". " + (err?.message || ""));
+      }
+    }
     setFotos(prev => [...prev, ...nuevas].slice(0, 5));
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -8559,8 +8637,10 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
     if (!fotos.length) return;
     setFase("extrayendo"); setError("");
     try {
-      const b64s = fotos.map(d => d.split(",")[1]);
-      const arr = await extraerExamenes(b64s);
+      // `fotos` ya guarda base64 crudo. Antes acá se hacía split(",")[1] sobre
+      // un valor sin coma, así que se enviaba `undefined` como imagen y la IA
+      // no recibía nada: de ahí el "no se detectaron exámenes" con cualquier foto.
+      const arr = await extraerExamenes(fotos);
       if (!arr.length) { setError("No se detectaron exámenes. Prueba con una foto más nítida."); setFase("capturar"); return; }
       const hoy = hoyLocalISO();
       setExtraidos(arr.map(ex => ({ ...ex, fecha_examen: ex.fecha_examen || hoy, incluir: true })));
@@ -8623,12 +8703,12 @@ function FotoExamenesModal({ paciente, currentUser, onGuardado, onClose }) {
 
         {fase === "capturar" && (
           <>
-            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 10 }}>Toma o sube hasta 5 fotos de los resultados. Revisa antes de extraer.</div>
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 10 }}>Toma o sube hasta 5 fotos, o un PDF (se procesan sus primeras páginas). Revisa antes de extraer.</div>
             {fotos.length > 0 && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                 {fotos.map((d, i) => (
                   <div key={i} style={{ position: "relative" }}>
-                    <img src={d} alt={`foto ${i + 1}`} style={{ height: 76, borderRadius: 6, border: "0.5px solid var(--borde)" }} />
+                    <img src={`data:image/jpeg;base64,${d}`} alt={`foto ${i + 1}`} style={{ height: 76, borderRadius: 6, border: "0.5px solid var(--borde)" }} />
                     <button onClick={() => setFotos(fotos.filter((_, j) => j !== i))} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 9, background: "var(--peligro)", color: "#fff", border: "none", fontSize: "var(--fs-0)", cursor: "pointer", lineHeight: 1 }}>✕</button>
                   </div>
                 ))}
@@ -10570,16 +10650,55 @@ const cargarMiembrosEquipo = async () => {
     const bloquear = (ev) => ev.preventDefault();
     document.addEventListener("touchmove", bloquear, { passive: false });
 
+    // Auto-scroll al llegar al borde: sin esto no se puede llevar un servicio
+    // más allá de lo que cabe en pantalla, que es justo cuando hace falta
+    // moverlo. El eje sigue al del arrastre (horizontal en el kanban ancho,
+    // vertical cuando las columnas van apiladas en el teléfono).
+    let rafCol = null, ultXY = { x: 0, y: 0 };
+    const contScroll = () => (d0.vertical ? scrollParent(cont || document.body) : cont);
+    const d0 = dragColInfo.current;
+    const autoScrollCol = () => {
+      const d = dragColInfo.current;
+      if (d) {
+        const el = contScroll();
+        const ZONA = 70, MAXV = 18;
+        if (el) {
+          if (d.vertical) {
+            const alto = el === document.body || el === document.documentElement ? window.innerHeight : el.clientHeight;
+            const top = el === document.body || el === document.documentElement ? 0 : el.getBoundingClientRect().top;
+            const rel = ultXY.y - top;
+            let v = 0;
+            if (rel < ZONA) v = -Math.min(MAXV, (ZONA - rel) * 0.28);
+            else if (rel > alto - ZONA) v = Math.min(MAXV, (rel - (alto - ZONA)) * 0.28);
+            if (v) { el.scrollBy(0, v); d.y0 -= v; onMove({ clientX: ultXY.x, clientY: ultXY.y }); }
+          } else {
+            const r = el.getBoundingClientRect();
+            const rel = ultXY.x - r.left;
+            let v = 0;
+            if (rel < ZONA) v = -Math.min(MAXV, (ZONA - rel) * 0.28);
+            else if (rel > r.width - ZONA) v = Math.min(MAXV, (rel - (r.width - ZONA)) * 0.28);
+            // Al desplazar el contenedor, el origen del arrastre se corrige en la
+            // misma medida para que la columna no "salte" bajo el dedo.
+            if (v) { const antes = el.scrollLeft; el.scrollBy(v, 0); d.x0 -= (el.scrollLeft - antes); onMove({ clientX: ultXY.x, clientY: ultXY.y }); }
+          }
+        }
+      }
+      rafCol = requestAnimationFrame(autoScrollCol);
+    };
     const onMove = (ev) => {
       const d = dragColInfo.current; if (!d) return;
+      ultXY = { x: ev.clientX, y: ev.clientY };
       const delta = d.vertical ? ev.clientY - d.y0 : ev.clientX - d.x0;
       let destino = d.desdeIdx + Math.round(delta / d.paso);
       destino = Math.max(0, Math.min(nombresServicioOrdenados.length - 1, destino));
       d.aIdx = destino;
       setDragCol({ nombre: d.nombre, d: delta, desdeIdx: d.desdeIdx, aIdx: destino, vertical: d.vertical });
     };
+    ultXY = { x: e.clientX, y: e.clientY };
+    rafCol = requestAnimationFrame(autoScrollCol);
     const onUp = async () => {
       const d = dragColInfo.current; dragColInfo.current = null;
+      if (rafCol) cancelAnimationFrame(rafCol);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
@@ -10928,25 +11047,35 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   const vistaRestauradaRef = useRef(false);
   useEffect(() => { vistaRestauradaRef.current = false; }, [contexto]);
   useEffect(() => {
+    // No escribir hasta haber intentado restaurar. En el montaje `vista` vale
+    // siempre "lista" (es el estado inicial) y este efecto corre ANTES que el
+    // de restauración: sin esta guarda sobrescribía el id guardado con
+    // {vista:"lista"} y la ficha se perdía en cada arranque. Ese era el motivo
+    // de volver siempre al principio de la lista.
+    if (!vistaRestauradaRef.current) return;
     try {
       if (vista === "ficha" && seleccionado?.id) localStorage.setItem(claveVistaPac, JSON.stringify({ vista: "ficha", id: seleccionado.id }));
       else if (vista === "lista") localStorage.setItem(claveVistaPac, JSON.stringify({ vista: "lista" }));
     } catch {}
   }, [vista, seleccionado?.id, claveVistaPac]);
   useEffect(() => {
-    if (vistaRestauradaRef.current || vista !== "lista" || !pacientes.length) return;
+    if (vistaRestauradaRef.current || !pacientes.length) return;
     vistaRestauradaRef.current = true;
     try {
       const g = JSON.parse(localStorage.getItem(claveVistaPac) || "null");
       if (g?.vista === "ficha" && g.id) {
-        const p = pacientes.find(x => x.id === g.id);
+        // Comparación como texto: el id puede volver de la caché como número y
+        // de localStorage como string, y === los daría por distintos.
+        const p = pacientes.find(x => String(x.id) === String(g.id));
         if (p) { abrirFicha(p); return; }
       }
-      // Sin ficha que restaurar: se recupera el punto de scroll de la lista.
+      // Sin ficha que restaurar. Si venía una abierta (cambio de equipo), se
+      // cierra: ese paciente no pertenece a la lista actual.
+      if (vista === "ficha") { setVista("lista"); setSeleccionado(null); }
       const y = Number(localStorage.getItem(`uro_pac_scroll:${contexto || "personal"}`) || 0);
       if (y > 0) requestAnimationFrame(() => { if (listaScrollElRef.current) listaScrollElRef.current.scrollTop = y; });
     } catch {}
-  }, [pacientes]);
+  }, [pacientes, claveVistaPac]);
 
   // El scroll se guarda al ocultar/cerrar la app (no en cada movimiento).
   useEffect(() => {
@@ -10956,40 +11085,57 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     return () => { guardar(); document.removeEventListener("visibilitychange", guardar); window.removeEventListener("pagehide", guardar); };
   }, [contexto]);
 
+  // ─── Impresión de evoluciones ───
+  // Un solo constructor para las tres salidas (una nota, todas las evoluciones,
+  // las del día). Antes cada una traía su propio tipo de letra, márgenes y
+  // tamaños —times/18mm en una, helvetica/16mm en otra— y solo una estampaba el
+  // logo, así que dos impresiones del mismo servicio salían distintas según el
+  // botón usado. El formato ahora vive acá y en un solo lugar.
+  const PDF_FMT = { M: 18, TITULO: 11, DATOS: 10, CABEZA: 9.5, CUERPO: 10.5, INTERLINEA: 5.2, FUENTE: "times", FONDO: 285 };
+  const nuevoDocEvolucion = async (jsPDF) => {
+    const F = PDF_FMT;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = doc.internal.pageSize.getWidth();
+    let y = 18;
+    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - F.M - 18, y - 4, 16, 16); } catch {}
+    doc.setFont(F.FUENTE, "bold"); doc.setFontSize(F.TITULO);
+    doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
+    doc.setFont(F.FUENTE, "normal"); doc.setFontSize(F.DATOS);
+    doc.text(`Nombre: ${seleccionado.iniciales || ""}`, F.M, y);
+    doc.text(`Edad: ${seleccionado.edad || ""}`, W - F.M - 38, y); y += 5;
+    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || ""}    Servicio: ${seleccionado.servicio || ""}    Cama: ${seleccionado.cama || "—"}`, F.M, y); y += 5;
+    doc.setDrawColor(150); doc.line(F.M, y, W - F.M, y); y += 7;
+    return { doc, W, y };
+  };
+  // Escribe una evolución (cabecera + cuerpo) y devuelve la nueva posición.
+  const escribirEvolucion = (doc, W, y, ev) => {
+    const F = PDF_FMT;
+    if (y > F.FONDO - 12) { doc.addPage(); y = 18; }
+    doc.setFont(F.FUENTE, "bold"); doc.setFontSize(F.CABEZA);
+    doc.text(`${ev.fecha_evolucion || ""} ${ev.hora_evolucion || ""}   ·   ${ev.autor?.nombre || ""}${ev.tipo && ev.tipo !== "libre" ? "   [" + ev.tipo + "]" : ""}`, F.M, y); y += 6;
+    doc.setFont(F.FUENTE, "normal"); doc.setFontSize(F.CUERPO);
+    doc.splitTextToSize(ev.texto || "", W - 2 * F.M).forEach((l) => {
+      if (y > F.FONDO) { doc.addPage(); y = 18; }
+      doc.text(l, F.M, y); y += F.INTERLINEA;
+    });
+    return y + 3;
+  };
+  const nombreArchivo = (base, sufijo) => `${base}_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}${sufijo ? "_" + sufijo : ""}.pdf`;
+
   const imprimirNota = async (ev) => {
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
-    const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 18; let y = 18;
-    try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 18, y - 4, 16, 16); } catch {}
-    doc.setFont("times", "bold"); doc.setFontSize(11); doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
-    doc.setFont("times", "normal"); doc.setFontSize(10);
-    doc.text(`Nombre: ${seleccionado.iniciales || ""}`, M, y); doc.text(`Edad: ${seleccionado.edad || ""}`, W - M - 38, y); y += 5;
-    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || ""}    Servicio: ${seleccionado.servicio || ""}    Cama: ${seleccionado.cama || "—"}`, M, y); y += 5;
-    doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 7;
-    doc.setFont("times", "bold"); doc.setFontSize(9.5);
-    doc.text(`${ev.fecha_evolucion || ""} ${ev.hora_evolucion || ""}   ·   ${ev.autor?.nombre || ""}${ev.tipo && ev.tipo !== "libre" ? "   [" + ev.tipo + "]" : ""}`, M, y); y += 6;
-    doc.setFont("times", "normal"); doc.setFontSize(10.5);
-    doc.splitTextToSize(ev.texto || "", W - 2 * M).forEach(l => { if (y > 285) { doc.addPage(); y = 18; } doc.text(l, M, y); y += 5.2; });
-    doc.save(`nota_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}_${(ev.fecha_evolucion || "").replace(/-/g, "")}.pdf`);
+    const { doc, W, y } = await nuevoDocEvolucion(jsPDF);
+    escribirEvolucion(doc, W, y, ev);
+    doc.save(nombreArchivo("nota", (ev.fecha_evolucion || "").replace(/-/g, "")));
   };
   const descargarEvolucionesPDF = async () => {
     if (!evoluciones || evoluciones.length === 0) { uroToast("Este paciente aún no tiene evoluciones para exportar."); return; }
     let jsPDF; try { jsPDF = (await import("jspdf")).jsPDF; } catch { return; }
-    const doc = new jsPDF({ unit: "mm", format: "a4" }); const W = doc.internal.pageSize.getWidth(), M = 16; let y = 16;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("HISTORIA Y EVOLUCIÓN CLÍNICA", W / 2, y, { align: "center" }); y += 8;
-    doc.setFontSize(9); doc.setFont("helvetica", "normal");
-    doc.text(`Nombre: ${seleccionado.iniciales || ""}`, M, y); doc.text(`Edad: ${seleccionado.edad || ""}`, W - M - 38, y); y += 5;
-    doc.text(`Ficha: ${seleccionado.ficha_clinica || seleccionado.rut || ""}    Servicio: ${seleccionado.servicio || ""}    Cama: ${seleccionado.cama || "—"}`, M, y); y += 5;
-    doc.setDrawColor(150); doc.line(M, y, W - M, y); y += 5;
+    const { doc, W, y: y0 } = await nuevoDocEvolucion(jsPDF);
+    let y = y0;
     const evos = [...evoluciones].sort((a, b) => ((a.fecha_evolucion || "") + (a.hora_evolucion || "")).localeCompare((b.fecha_evolucion || "") + (b.hora_evolucion || "")));
-    evos.forEach(e => {
-      if (y > 280) { doc.addPage(); y = 18; }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
-      doc.text(`${e.fecha_evolucion || ""} ${e.hora_evolucion || ""}  ·  ${e.autor?.nombre || ""}${e.tipo && e.tipo !== "libre" ? "  [" + e.tipo + "]" : ""}`, M, y); y += 4.6;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-      doc.splitTextToSize(e.texto || "", W - 2 * M).forEach(p => { if (y > 286) { doc.addPage(); y = 18; } doc.text(p, M, y); y += 4.6; });
-      y += 3;
-    });
-    doc.save(`evoluciones_${(seleccionado.iniciales || "paciente").replace(/\s+/g, "_")}.pdf`);
+    evos.forEach((e) => { y = escribirEvolucion(doc, W, y, e); });
+    doc.save(nombreArchivo("evoluciones", ""));
   };
   // Imprime SOLO las evoluciones de hoy, ordenadas cronológicamente, con el logo de UroSearch en la esquina.
   const imprimirEvolucionesDelDiaPDF = async () => {
@@ -12149,9 +12295,12 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <option value="Clara">Clara</option>
         <option value="Tinte hemático">Tinte hemático</option>
         <option value="Hematúrica">Hematúrica</option>
+        <option value="Hematúrica antigua">Hematúrica antigua</option>
+        <option value="Hematúrica reciente">Hematúrica reciente</option>
         <option value="Clara con irrigación">Clara con irrigación</option>
         <option value="Coágulos">Coágulos</option>
         <option value="Turbia">Turbia</option>
+        <option value="Piúrica">Piúrica</option>
       </select>
     </div>
   </div>
@@ -12222,7 +12371,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
   {/* INDICACIONES */}
   <div>
-    <textarea value={evoEstructurada.indicaciones} onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})} placeholder="P - Plan/indicaciones" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
+    <textarea value={evoEstructurada.indicaciones}
+      onChange={e=>setEvoEstructurada({...evoEstructurada,indicaciones:e.target.value})}
+      onKeyDown={onKeyDownPunteo(v=>setEvoEstructurada(prev=>({...prev,indicaciones:v})))}
+      placeholder={"P - Plan/indicaciones\n(Enter arma la lista con viñetas)"} rows={3} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
     <button onClick={()=>setSeccionAbierta(seccionAbierta==="indicaciones"?null:"indicaciones")} style={{padding:"4px 10px",fontSize:"var(--fs-0)",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto-ter)",borderRadius:8,cursor:"pointer"}}>+ Sugerencias {seccionAbierta==="indicaciones"?"▴":"▾"}</button>
     {seccionAbierta==="indicaciones" && (
       <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>
@@ -14322,6 +14474,14 @@ if (!currentUser) {
     .filter(([id]) => !(id === "hosp:prescripciones" && !(currentUser.rol === "urologo" || currentUser.rol === "residente")))
     .map(([id, d]) => [id, d.label]);
   const tabs = [...tabsBase, ...tabsPromovidas];
+  // El admin solo tiene "Administración" en la barra y navega al resto desde el
+  // menú superior derecho. Sin agregar la pestaña elegida a la barra no hay dónde
+  // tocar dos veces para abrir su submenú, y las secciones de administración de la
+  // Biblioteca (Documentos, Imágenes del chat) quedan inalcanzables.
+  if (isAdmin && tab !== "admin" && !tabs.some(([id]) => id === tab)) {
+    const etiqueta = { chat: "Chat", hospital: "Servicio", logbook: "Logbook", conocimiento: "Biblioteca" }[tab];
+    if (etiqueta) tabs.push([tab, etiqueta]);
+  }
   const promovida = SUBFUNCIONES_PROMOVIBLES[tab] && tabsPromovidas.some(([id]) => id === tab) ? SUBFUNCIONES_PROMOVIBLES[tab] : null;
 
   // ─── Deslizar lateralmente entre pestañas principales (móvil) ───
@@ -14524,7 +14684,7 @@ if (!currentUser) {
             </div>
             {isAdmin && (
               <div style={{borderBottom:"0.5px solid var(--fondo)",paddingBottom:4,marginBottom:4}}>
-                {[["chat","💬 Chat"],["hospital","🏥 Servicio"],["logbook","📓 Logbook"],["biblioteca","📚 Biblioteca"],["admin","🛡️ Administración"]].map(([id,label]) => (
+                {[["chat","💬 Chat"],["hospital","🏥 Servicio"],["logbook","📓 Logbook"],["conocimiento","📚 Biblioteca"],["admin","🛡️ Administración"]].map(([id,label]) => (
                   <button key={id} onClick={()=>{ setMenuOpen(false); setTab(id); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:tab===id?"var(--fondo-suave)":"none",border:"none",color:tab===id?"var(--primario)":"var(--texto)",fontWeight:tab===id?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
                     {label}
                   </button>

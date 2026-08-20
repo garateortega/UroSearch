@@ -150,17 +150,76 @@ function familiaProc(nombre) {
   if (!limpio) return "Sin especificar";
   return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
-const CLAVIEN = ["", "I", "II", "IIIa", "IIIb", "IVa", "IVb", "V"];
-
-// ─── Momento en que ocurrió la complicación ───
-// Distinguir el pabellón del post-operatorio cambia por completo la lectura
-// de la casuística: una lesión vascular intraoperatoria y una fístula al
-// séptimo día no son el mismo evento aunque compartan el Clavien-Dindo.
-const MOMENTOS_COMPLICACION = [
-  ["intraoperatoria", "🔪 Intraoperatoria (en pabellón)"],
-  ["postoperatoria", "🏥 Post-operatoria"],
-  ["ambas", "Ambas"],
+// ─── Clasificación de complicaciones ──────────────────────────────
+// Una sola escala: Clavien-Dindo, aplicada tanto a lo intraoperatorio como a
+// lo post-operatorio. El momento se elige aparte porque cambia la lectura de la
+// casuística (una lesión en pabellón y una fístula al séptimo día no son lo
+// mismo aunque compartan grado), pero la escala es la misma.
+//
+// Aparte queda el incidente sin consecuencia para el paciente (falla de un
+// instrumento, de un insumo): se registra para tenerlo a la vista, pero no es
+// una complicación y no entra en el numerador.
+const GRADOS_CLAVIEN = [
+  { v: "ninguno",   complicacion: false, escala: null,        grado: null,   label: "Sin complicación" },
+  { v: "incidente", complicacion: false, escala: "incidente", grado: null,   label: "Incidente sin consecuencia (equipo, insumo) — no cuenta como complicación" },
+  { v: "I",    complicacion: true, escala: "clavien", grado: "I",    label: "Clavien I — desviación menor, sin tratamiento" },
+  { v: "II",   complicacion: true, escala: "clavien", grado: "II",   label: "Clavien II — tratamiento farmacológico o transfusión" },
+  { v: "IIIa", complicacion: true, escala: "clavien", grado: "IIIa", label: "Clavien IIIa — intervención sin anestesia general" },
+  { v: "IIIb", complicacion: true, escala: "clavien", grado: "IIIb", label: "Clavien IIIb — intervención con anestesia general" },
+  { v: "IVa",  complicacion: true, escala: "clavien", grado: "IVa",  label: "Clavien IVa — disfunción de un órgano (UCI)" },
+  { v: "IVb",  complicacion: true, escala: "clavien", grado: "IVb",  label: "Clavien IVb — disfunción multiorgánica" },
+  { v: "V",    complicacion: true, escala: "clavien", grado: "V",    label: "Clavien V — fallecimiento" },
 ];
+const GRADO_POR_VALOR = Object.fromEntries(GRADOS_CLAVIEN.map((e) => [e.v, e]));
+const MOMENTOS_COMPLICACION = [["intraoperatoria", "🔪 Intraoperatoria"], ["postoperatoria", "🏥 Post-operatoria"]];
+
+function valorEvento(r) {
+  if (r?.escala_complicacion === "incidente") return "incidente";
+  if (!r?.complicacion) return "ninguno";
+  return GRADO_POR_VALOR[String(r.clavien || "")] ? String(r.clavien) : "I";
+}
+
+function etiquetaEvento(r) {
+  if (r?.escala_complicacion === "incidente") return "Incidente · sin consecuencia";
+  if (!r?.complicacion) return "";
+  const m = r.momento_complicacion || "intraoperatoria";
+  const mm = m === "postoperatoria" ? "Post-op" : m === "ambas" ? "Intra+post" : "Intraop";
+  return r.clavien ? `${mm} · CD ${r.clavien}` : mm;
+}
+
+// Complicación MAYOR: Clavien-Dindo ≥ IIIa, es decir, la que requirió alguna
+// intervención. Es la cifra que se reporta; la tasa global mezcla un íleo con
+// una reintervención.
+const esMayor = (r) => !!r?.complicacion && ["IIIa", "IIIb", "IVa", "IVb", "V"].includes(String(r.clavien || ""));
+const esIncidente = (r) => r?.escala_complicacion === "incidente";
+
+// "No aplica" es una respuesta válida al registrar, pero no aporta nada impresa
+// junto al nombre del procedimiento.
+const latTxt = (r) => (r?.lateralidad && r.lateralidad !== "No aplica" ? r.lateralidad : "");
+
+// Campos que van a la base para una opción del selector. Una sola fuente de
+// verdad para el formulario y para el editor rápido del listado.
+function camposEvento(v, detalle, momento) {
+  const e = GRADO_POR_VALOR[v] || GRADO_POR_VALOR.ninguno;
+  const hay = v !== "ninguno";
+  return {
+    complicacion: e.complicacion,
+    clavien: e.grado || null,
+    escala_complicacion: e.escala || null,
+    momento_complicacion: hay ? (momento || "intraoperatoria") : null,
+    detalles_complicacion: hay ? ((detalle || "").trim() || null) : null,
+  };
+}
+
+// Aplica el grado elegido a los campos del formulario en un solo gesto.
+function aplicarEvento(set, v) {
+  const e = GRADO_POR_VALOR[v] || GRADO_POR_VALOR.ninguno;
+  set("complicacion", e.complicacion);
+  set("clavien", e.grado || "");
+  set("escala_complicacion", e.escala || "");
+  if (v === "ninguno") { set("detalles_complicacion", ""); set("momento_complicacion", "intraoperatoria"); }
+}
+
 const LABEL_MOMENTO = { intraoperatoria: "Intraoperatoria", postoperatoria: "Post-operatoria", ambas: "Intra y post-operatoria" };
 const esIntra = (r) => !!r.complicacion && (r.momento_complicacion || "intraoperatoria") !== "postoperatoria";
 const esPost = (r) => !!r.complicacion && ["postoperatoria", "ambas"].includes(r.momento_complicacion || "intraoperatoria");
@@ -172,7 +231,7 @@ const REGISTRO_VACIO = {
   cirujano: "", ayudantes: "", anestesia: "", hora_inicio: "", hora_termino: "",
   duracion_min: "", sangrado_ml: "", tamano_litiasis_mm: "", tamano_prostata_cc: "",
   hallazgos: "", tecnica: "",
-  complicacion: false, clavien: "", momento_complicacion: "intraoperatoria", detalles_complicacion: "", observaciones: "",
+  complicacion: false, clavien: "", escala_complicacion: "", momento_complicacion: "intraoperatoria", detalles_complicacion: "", observaciones: "",
   // Complementos posteriores (biopsia / control imagenológico)
   biopsia_resultado: "", biopsia_isup: "", control_stone_free: "", control_imagen_detalle: "",
   // Control post-operatorio: cómo llegó el paciente al control (comentario + Clavien-Dindo)
@@ -549,6 +608,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [certHasta, setCertHasta] = useState("");
   const [certGenerando, setCertGenerando] = useState(false);
   const [listaAbierta, setListaAbierta] = useState(null);      // {titulo, ids} visor genérico de cirugías
+  const [complDesglose, setComplDesglose] = useState(false);   // desglose intra/post de complicaciones mayores
+  const [complRapida, setComplRapida] = useState(null);        // {reg, valor, detalle} editor rápido por pulsación larga
+  const [complGuardando, setComplGuardando] = useState(false);
+  const pulsacionRef = useRef(null);                           // temporizador de la pulsación larga
   const [dupIgnorados, setDupIgnorados] = useState(() => {     // grupos de duplicados marcados como "no son duplicados"
     try { return JSON.parse(localStorage.getItem("uro_logbook_dup_ign") || "[]"); } catch { return []; }
   });
@@ -755,8 +818,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       tecnica: reg.tecnica.trim() || null,
       complicacion: !!reg.complicacion,
       clavien: reg.complicacion ? (reg.clavien || null) : null,
-      momento_complicacion: reg.complicacion ? (reg.momento_complicacion || "intraoperatoria") : null,
-      detalles_complicacion: reg.complicacion ? (reg.detalles_complicacion.trim() || null) : null,
+      escala_complicacion: reg.escala_complicacion || null,
+      momento_complicacion: (reg.complicacion || esIncidente(reg)) ? (reg.momento_complicacion || "intraoperatoria") : null,
+      detalles_complicacion: (reg.complicacion || esIncidente(reg)) ? (reg.detalles_complicacion.trim() || null) : null,
       observaciones: reg.observaciones.trim() || null,
       extraido_ia: extraidoOk,
     };
@@ -892,7 +956,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const nObs = enRango.filter((r) => r.rol === "observador").length;
       const nComplIntra = enRango.filter(esIntra).length;
       const nComplPost = enRango.filter(esPost).length;
-      const nClavAlto = enRango.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
+      const nMayores = enRango.filter(esMayor).length;
 
       const fmtCL = (iso) => { const [a, m, d] = String(iso || "").split("-"); return d ? `${d}/${m}/${a}` : (iso || ""); };
       const fechas = enRango.map((r) => r.fecha).sort();
@@ -934,7 +998,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         `Total de cirugías registradas: ${enRango.length}`,
         `Como cirujano principal: ${nCx}${nAy ? `   ·   Como ayudante (1º–4º): ${nAy}` : ""}${nObs ? `   ·   Como observador: ${nObs}` : ""}`,
         `Complicaciones intraoperatorias: ${nComplIntra}   ·   Post-operatorias: ${nComplPost}`,
-        `Complicaciones Clavien-Dindo ≥ IIIb: ${nClavAlto}`,
+        `Complicaciones mayores (Clavien-Dindo >= IIIa): ${nMayores}`,
       ];
       resumen.forEach((t) => {
         doc.splitTextToSize(t, W - 2 * M).forEach((l) => { doc.text(l, M, y); y += 5.5; });
@@ -1077,7 +1141,9 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       control_stone_free: r.control_stone_free || "", control_imagen_detalle: r.control_imagen_detalle || "",
       control_fecha: r.control_fecha || "", control_evolucion: r.control_evolucion || "", control_resultado: r.control_resultado || "",
       hallazgos: r.hallazgos || "", tecnica: r.tecnica || "",
-      complicacion: !!r.complicacion, clavien: r.clavien || "", momento_complicacion: r.momento_complicacion || "intraoperatoria", detalles_complicacion: r.detalles_complicacion || "",
+      ...(() => { const e = GRADO_POR_VALOR[valorEvento(r)] || GRADO_POR_VALOR.ninguno;
+        return { complicacion: e.complicacion, clavien: e.grado || "", escala_complicacion: e.escala || "", momento_complicacion: r.momento_complicacion === "postoperatoria" ? "postoperatoria" : "intraoperatoria" }; })(),
+      detalles_complicacion: r.detalles_complicacion || "",
       observaciones: r.observaciones || "",
     });
     setError("");
@@ -1100,7 +1166,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   // ─── Exportar CSV (incluye complicaciones y complementos) ───
   const exportarCSV = () => {
-    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
+    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "escala_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : c === "momento_complicacion" ? (r.complicacion ? (LABEL_MOMENTO[r[c] || "intraoperatoria"]) : "") : c === "control_resultado" ? (LABEL_CONTROL_POSTOP[r[c]] || r[c]) : r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -1151,9 +1217,47 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   // donde no la hubo. Limpia complicación, Clavien, momento y detalle.
   const quitarComplicacion = async (r) => {
     if (!(await uroConfirm(`¿Marcar "${r.procedimiento}" del ${r.fecha} como SIN complicación?`))) return;
-    const result = await actualizarRegistroLogbook(r.id, { complicacion: false, clavien: null, momento_complicacion: null, detalles_complicacion: null });
+    const result = await actualizarRegistroLogbook(r.id, camposEvento("ninguno"));
     if (!result.ok) return uroToast("Error: " + result.error);
     setRegistros((prev) => prev.map((x) => (x.id === r.id ? result.registro : x)));
+  };
+
+  // ─── Editor rápido de complicación (pulsación larga sobre el registro) ───
+  // Lo habitual es enterarse de la complicación días después de haber guardado
+  // el protocolo: abrir el formulario completo para eso es desproporcionado.
+  const abrirComplRapida = (r) => {
+    setComplRapida({ reg: r, valor: valorEvento(r), momento: r.momento_complicacion === "postoperatoria" ? "postoperatoria" : "intraoperatoria", detalle: r.detalles_complicacion || "" });
+  };
+  const guardarComplRapida = async () => {
+    if (!complRapida) return;
+    setComplGuardando(true);
+    const result = await actualizarRegistroLogbook(complRapida.reg.id, camposEvento(complRapida.valor, complRapida.detalle, complRapida.momento));
+    setComplGuardando(false);
+    if (!result.ok) return uroToast("Error: " + result.error);
+    setRegistros((prev) => prev.map((x) => (x.id === complRapida.reg.id ? result.registro : x)));
+    setComplRapida(null);
+    uroToast(complRapida.valor === "ninguno" ? "Registro marcado sin complicación" : "Complicación actualizada");
+  };
+
+  // Gestos: ~550 ms mantenidos abren el editor. La bandera evita que al soltar
+  // se dispare además el onClick que expande la tarjeta.
+  const gestosPulsacion = (r) => ({
+    onTouchStart: () => {
+      pulsacionRef.current = { largo: false };
+      pulsacionRef.current.t = setTimeout(() => {
+        if (pulsacionRef.current) pulsacionRef.current.largo = true;
+        if (navigator.vibrate) { try { navigator.vibrate(12); } catch {} }
+        abrirComplRapida(r);
+      }, 550);
+    },
+    onTouchMove: () => { if (pulsacionRef.current?.t) { clearTimeout(pulsacionRef.current.t); pulsacionRef.current = null; } },
+    onTouchEnd: () => { if (pulsacionRef.current?.t) clearTimeout(pulsacionRef.current.t); },
+    onContextMenu: (e) => { e.preventDefault(); abrirComplRapida(r); }, // escritorio: clic derecho
+  });
+  const consumioPulsacionLarga = () => {
+    const largo = !!pulsacionRef.current?.largo;
+    pulsacionRef.current = null;
+    return largo;
   };
 
   const ignorarDuplicado = (clave) => {
@@ -1199,7 +1303,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     const conComplicacion = base.filter((r) => r.complicacion).length;
     const complIntra = base.filter(esIntra).length;
     const complPost = base.filter(esPost).length;
-    const clavienAlto = base.filter((r) => r.complicacion && ["IIIb", "IVa", "IVb", "V"].includes(r.clavien)).length;
+    // Cifra de cabecera: complicaciones mayores (Clavien-Dindo ≥ IIIa).
+    // La tasa global no discrimina — mezcla un íleo con una reintervención.
+    const complMayores = base.filter(esMayor).length;
+    const mayoresIntra = base.filter((r) => esMayor(r) && esIntra(r)).length;
+    const mayoresPost = base.filter((r) => esMayor(r) && esPost(r)).length;
+    const incidentes = base.filter(esIncidente).length;
     // Nota: no se calcula una "duración promedio global" — mezclar cirugías
     // heterogéneas da un número que no significa nada. La duración va por procedimiento.
     const conDuracion = base.filter((r) => r.duracion_min > 0).length;
@@ -1273,7 +1382,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
     // Procedimiento más frecuente (reemplaza a la duración promedio global)
     const masFrecuente = detalleProc.length ? detalleProc[0] : null;
-    return { total, comoCirujano, comoAyudante, conComplicacion, complIntra, complPost, clavienAlto, conDuracion, masFrecuente, meses, topProc, cats, porRol, detalleProc, ayudantiasPorProc, onco };
+    return { total, comoCirujano, comoAyudante, conComplicacion, complIntra, complPost, complMayores, mayoresIntra, mayoresPost, incidentes, conDuracion, masFrecuente, meses, topProc, cats, porRol, detalleProc, ayudantiasPorProc, onco };
   }, [registros, criterioMet, filtroRolMet, grupoProc]);
 
   // ─── Estilos compartidos ───
@@ -1512,7 +1621,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             ))}
             {campo("Lateralidad", (
               <select style={inp} value={reg.lateralidad} onChange={(e) => set("lateralidad", e.target.value)}>
-                <option value="">—</option><option>Derecha</option><option>Izquierda</option><option>Bilateral</option>
+                <option value="">—</option><option>Derecha</option><option>Izquierda</option><option>Bilateral</option><option>No aplica</option>
               </select>
             ))}
             {campo("Mi rol *", (
@@ -1574,23 +1683,27 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
             {/* Complicación: NO aparece de entrada; se agrega con este botón */}
             <div style={{ gridColumn: "1 / -1" }}>
-              {!reg.complicacion ? (
-                <button type="button" onClick={() => set("complicacion", true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--texto-sec)" }}>
-                  ⚠️ Agregar complicación
+              {valorEvento(reg) === "ninguno" ? (
+                <button type="button" onClick={() => aplicarEvento(set, "intra_1")} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--fondo-suave)", color: "var(--texto-sec)" }}>
+                  ⚠️ Agregar complicación o incidente
                 </button>
               ) : (
-                <div style={{ padding: "10px 12px", border: "0.5px solid var(--peligro)", borderRadius: 10, background: "var(--peligro-bg)", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ padding: "10px 12px", border: "0.5px solid " + (reg.complicacion ? "var(--peligro)" : "var(--borde)"), borderRadius: 10, background: reg.complicacion ? "var(--peligro-bg)" : "var(--fondo-suave)", display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--peligro)" }}>⚠️ Complicación</span>
-                    <select style={{ ...inp, width: "auto" }} value={reg.clavien} onChange={(e) => set("clavien", e.target.value)}>
-                      {CLAVIEN.map((c) => <option key={c} value={c}>{c ? `Clavien-Dindo ${c}` : "Clavien-Dindo…"}</option>)}
-                    </select>
-                    <select style={{ ...inp, width: "auto" }} value={reg.momento_complicacion || "intraoperatoria"} onChange={(e) => set("momento_complicacion", e.target.value)}>
-                      {MOMENTOS_COMPLICACION.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                    <button type="button" onClick={() => { set("complicacion", false); set("clavien", ""); set("momento_complicacion", "intraoperatoria"); set("detalles_complicacion", ""); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)", fontWeight: 600 }}>Quitar</button>
+                    <span style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: reg.complicacion ? "var(--peligro)" : "var(--texto-sec)" }}>{reg.complicacion ? "⚠️ Complicación" : "ℹ️ Incidente"}</span>
+                    <button type="button" onClick={() => aplicarEvento(set, "ninguno")} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--peligro)", cursor: "pointer", fontSize: "var(--fs-1)", fontWeight: 600 }}>Quitar</button>
                   </div>
-                  {campo("Detalle de la complicación", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.detalles_complicacion} onChange={(e) => set("detalles_complicacion", e.target.value)} />)}
+                  <select style={inp} value={valorEvento(reg)} onChange={(e) => aplicarEvento(set, e.target.value)}>
+                    {GRADOS_CLAVIEN.filter((e) => e.v !== "ninguno").map((e) => <option key={e.v} value={e.v}>{e.label}</option>)}
+                  </select>
+                  {reg.complicacion && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {MOMENTOS_COMPLICACION.map(([v, l]) => (
+                        <button key={v} type="button" onClick={() => set("momento_complicacion", v)} style={{ flex: 1, padding: "8px 6px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid " + ((reg.momento_complicacion || "intraoperatoria") === v ? "var(--peligro)" : "var(--borde)"), background: (reg.momento_complicacion || "intraoperatoria") === v ? "var(--peligro)" : "var(--superficie)", color: (reg.momento_complicacion || "intraoperatoria") === v ? "var(--texto-inv)" : "var(--texto-sec)" }}>{l}</button>
+                      ))}
+                    </div>
+                  )}
+                  {campo("Detalle", <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={reg.detalles_complicacion} onChange={(e) => set("detalles_complicacion", e.target.value)} />)}
                 </div>
               )}
             </div>
@@ -1671,11 +1784,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           )}
 
           {filtrados.map((r) => (
-            <div key={r.id} style={{ ...card, cursor: "pointer" }} onClick={() => setAbierto(abierto === r.id ? null : r.id)}>
+            <div key={r.id} {...gestosPulsacion(r)} style={{ ...card, cursor: "pointer", WebkitTouchCallout: "none" }} onClick={() => { if (consumioPulsacionLarga()) return; setAbierto(abierto === r.id ? null : r.id); }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>
-                    {r.procedimiento}{r.lateralidad ? ` (${r.lateralidad.toLowerCase()})` : ""}
+                    {r.procedimiento}{latTxt(r) ? ` (${latTxt(r).toLowerCase()})` : ""}
                   </div>
                   <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span>📅 {r.fecha}</span>
@@ -1690,8 +1803,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     {rolLabel(r.rol)}
                   </span>
                   {r.complicacion && (
-                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "var(--peligro-bg)", color: "var(--peligro)", border: "0.5px solid var(--peligro)" }}>
-                      ⚠ {esPost(r) && !esIntra(r) ? "Post-op" : esIntra(r) && esPost(r) ? "Intra+post" : "Intraop"}{r.clavien ? ` · CD ${r.clavien}` : ""}
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: esMayor(r) ? "var(--peligro)" : "var(--peligro-bg)", color: esMayor(r) ? "var(--texto-inv)" : "var(--peligro)", border: "0.5px solid var(--peligro)" }}>
+                      ⚠ {etiquetaEvento(r)}{esMayor(r) ? " · mayor" : ""}
+                    </span>
+                  )}
+                  {esIncidente(r) && (
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "var(--fondo-suave)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)" }}>
+                      ℹ Incidente
                     </span>
                   )}
                 </div>
@@ -1711,11 +1829,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {(r.control_resultado || r.control_evolucion) && <div><b>Control post-op{r.control_fecha ? ` (${r.control_fecha})` : ""}:</b> {LABEL_CONTROL_POSTOP[r.control_resultado] || ""}{r.control_evolucion ? `${r.control_resultado ? " — " : ""}${r.control_evolucion}` : ""}</div>}
                   {r.hallazgos && <div><b>Hallazgos:</b> {r.hallazgos}</div>}
                   {r.tecnica && <div><b>Técnica:</b> {r.tecnica}</div>}
-                  {r.detalles_complicacion && <div style={{ color: "var(--peligro)" }}><b>Complicación ({LABEL_MOMENTO[r.momento_complicacion || "intraoperatoria"].toLowerCase()}):</b> {r.detalles_complicacion}</div>}
+                  {r.detalles_complicacion && <div style={{ color: esIncidente(r) ? "var(--texto-sec)" : "var(--peligro)" }}><b>{esIncidente(r) ? "Incidente" : `Complicación (${etiquetaEvento(r)})`}:</b> {r.detalles_complicacion}</div>}
                   {r.observaciones && <div><b>Obs:</b> {r.observaciones}</div>}
                   <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                     {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>🖼 Ver protocolo</button>}
                     <button onClick={() => empezarEdicion(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>✏️ Editar</button>
+                    <button onClick={() => abrirComplRapida(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>⚠️ Complicación</button>
                     <button onClick={() => eliminar(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)", color: "var(--peligro)" }}>🗑 Eliminar</button>
                   </div>
                 </div>
@@ -1790,16 +1909,53 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
             </div>
           )}
 
-          {(met.complIntra > 0 || met.complPost > 0) && (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <div onClick={() => abrirLista("⚠ Complicaciones intraoperatorias", (r) => esIntra(r), true)} style={{ ...kpi, minWidth: 150, cursor: "pointer" }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--peligro)" }}>{met.complIntra}</div>
-                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones intraoperatorias{met.total > 0 ? ` (${Math.round((met.complIntra / met.total) * 100)}%)` : ""} · toca para revisar</div>
+          {(met.complIntra > 0 || met.complPost > 0 || met.incidentes > 0) && (
+            <div style={{ ...card, borderLeft: "3px solid var(--peligro)" }}>
+              {/* Una sola cifra: complicaciones mayores. Sin porcentaje — con
+                  denominadores de dos dígitos un "12%" sugiere una precisión
+                  que no existe, y el número absoluto es el que se discute. */}
+              <div onClick={() => setComplDesglose((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                <div style={{ fontSize: 30, fontWeight: 700, color: "var(--peligro)", lineHeight: 1 }}>{met.complMayores}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>
+                    Complicaciones mayores <span style={{ fontWeight: 400, color: "var(--texto-ter)" }}>de {met.total}</span>
+                  </div>
+                  <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 2 }}>
+                    Clavien-Dindo ≥ IIIa · las que requirieron alguna intervención
+                  </div>
+                </div>
+                <span style={{ flexShrink: 0, fontSize: "var(--fs-1)", color: "var(--primario)", fontWeight: 700 }}>{complDesglose ? "▴" : "▾"}</span>
               </div>
-              <div onClick={() => abrirLista("⚠ Complicaciones post-operatorias", (r) => esPost(r), true)} style={{ ...kpi, minWidth: 150, cursor: "pointer" }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--alerta)" }}>{met.complPost}</div>
-                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>Complicaciones post-operatorias{met.total > 0 ? ` (${Math.round((met.complPost / met.total) * 100)}%)` : ""} · toca para revisar</div>
-              </div>
+
+              {complDesglose && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "0.5px solid var(--borde)", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { k: "intra", n: met.mayoresIntra, tot: met.complIntra, label: "Intraoperatorias", sub: "Ocurridas en pabellón", color: "var(--peligro)", cond: (r) => esMayor(r) && esIntra(r), condTot: esIntra },
+                    { k: "post", n: met.mayoresPost, tot: met.complPost, label: "Post-operatorias", sub: "Ocurridas después de la cirugía", color: "var(--alerta)", cond: (r) => esMayor(r) && esPost(r), condTot: esPost },
+                  ].map((f) => (
+                    <div key={f.k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 9 }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: f.color, minWidth: 28, textAlign: "center" }}>{f.n}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{f.label}</div>
+                        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{f.sub}</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        {f.n > 0 && <button onClick={() => abrirLista(`⚠ Mayores · ${f.label.toLowerCase()}`, f.cond, true)} style={{ padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--superficie)", color: "var(--peligro)", border: "0.5px solid var(--peligro)", borderRadius: 8, cursor: "pointer" }}>Ver mayores</button>}
+                        {f.tot > 0 && <button onClick={() => abrirLista(`⚠ Todas · ${f.label.toLowerCase()}`, f.condTot, true)} style={{ padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 600, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>Todas ({f.tot})</button>}
+                      </div>
+                    </div>
+                  ))}
+                  {met.incidentes > 0 && (
+                    <div onClick={() => abrirLista("ℹ Incidentes sin consecuencia", esIncidente, true)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--texto-sec)", minWidth: 28, textAlign: "center" }}>{met.incidentes}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto-sec)" }}>Incidentes sin consecuencia</div>
+                        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Fallas de equipo o insumo · no cuentan como complicación</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1936,18 +2092,21 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   <div key={r.id} style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 9, padding: "9px 11px" }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--primario)" }}>{(r.fecha || "").split("-").reverse().join("/")}</span>
-                      <span style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", flex: 1, minWidth: 120 }}>{r.procedimiento || "—"}{r.lateralidad ? ` (${r.lateralidad})` : ""}</span>
+                      <span style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", flex: 1, minWidth: 120 }}>{r.procedimiento || "—"}{latTxt(r) ? ` (${latTxt(r)})` : ""}</span>
                     </div>
                     <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span>{(ROLES.find(([id]) => id === r.rol) || [, r.rol])[1]}</span>
                       {r.iniciales && <span>· {r.iniciales}</span>}
                       {r.duracion_min > 0 && <span>· {r.duracion_min} min</span>}
-                      {r.complicacion && <span style={{ color: "var(--peligro)", fontWeight: 700 }}>· ⚠ {LABEL_MOMENTO[r.momento_complicacion || "intraoperatoria"]}{r.clavien ? ` (CD ${r.clavien})` : ""}</span>}
+                      {r.complicacion && <span style={{ color: "var(--peligro)", fontWeight: 700 }}>· ⚠ {etiquetaEvento(r)}</span>}
                     </div>
                     {r.detalles_complicacion && <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)", marginTop: 3 }}>{r.detalles_complicacion}</div>}
                     <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
                       {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>🖼 Ver protocolo</button>}
                       <button onClick={() => { setListaAbierta(null); empezarEdicion(r); }} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>✏️ Editar</button>
+                      {listaAbierta.esComplicaciones && (
+                        <button onClick={() => { setListaAbierta(null); abrirComplRapida(r); }} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>⚠️ Cambiar complicación</button>
+                      )}
                       {listaAbierta.esComplicaciones && r.complicacion && (
                         <button onClick={() => quitarComplicacion(r)} style={{ padding: "6px 11px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--superficie)", color: "var(--exito)", border: "1px solid var(--exito)", borderRadius: 8, cursor: "pointer" }}>✓ No fue complicación</button>
                       )}
@@ -1959,6 +2118,50 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           </div>
         );
       })()}
+
+      {/* ─── Modal: editor rápido de complicación (pulsación larga) ─── */}
+      {complRapida && (
+        <div onClick={() => setComplRapida(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 520, maxHeight: "88dvh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>Complicación</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2 }}>
+                  {complRapida.reg.procedimiento || "—"}{latTxt(complRapida.reg) ? ` (${latTxt(complRapida.reg).toLowerCase()})` : ""} · {(complRapida.reg.fecha || "").split("-").reverse().join("/")}
+                  {complRapida.reg.iniciales ? ` · ${complRapida.reg.iniciales}` : ""}
+                </div>
+              </div>
+              <button onClick={() => setComplRapida(null)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <label style={lbl}>¿Qué pasó?</label>
+              <select style={inp} value={complRapida.valor} onChange={(e) => setComplRapida((c) => ({ ...c, valor: e.target.value }))}>
+                {GRADOS_CLAVIEN.map((e) => <option key={e.v} value={e.v}>{e.label}</option>)}
+              </select>
+              {GRADO_POR_VALOR[complRapida.valor]?.complicacion && (
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  {MOMENTOS_COMPLICACION.map(([v, l]) => (
+                    <button key={v} type="button" onClick={() => setComplRapida((c) => ({ ...c, momento: v }))} style={{ flex: 1, padding: "8px 6px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid " + (complRapida.momento === v ? "var(--peligro)" : "var(--borde)"), background: complRapida.momento === v ? "var(--peligro)" : "var(--superficie)", color: complRapida.momento === v ? "var(--texto-inv)" : "var(--texto-sec)" }}>{l}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {complRapida.valor !== "ninguno" && (
+              <div style={{ marginTop: 12 }}>
+                <label style={lbl}>Detalle</label>
+                <textarea rows={3} style={{ ...inp, resize: "vertical" }} value={complRapida.detalle} onChange={(e) => setComplRapida((c) => ({ ...c, detalle: e.target.value }))} placeholder="Ej: perforación vesical pequeña, se dejó Foley 5 días" />
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button onClick={guardarComplRapida} disabled={complGuardando} style={{ ...btnPrim, opacity: complGuardando ? 0.6 : 1 }}>{complGuardando ? "Guardando…" : "Guardar"}</button>
+              <button onClick={() => setComplRapida(null)} style={btnSec}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Modal: gráfico mensual ampliado + cirugías del mes ─── */}
       {graficoOpen && (
@@ -1996,13 +2199,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                       <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 10px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 8 }}>
                         <div style={{ flexShrink: 0, fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--primario)", minWidth: 56 }}>{(r.fecha || "").split("-").reverse().slice(0, 2).join("/")}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{r.procedimiento || "—"}{r.lateralidad ? ` (${r.lateralidad})` : ""}</div>
+                          <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)" }}>{r.procedimiento || "—"}{latTxt(r) ? ` (${latTxt(r)})` : ""}</div>
                           <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <span>{(ROLES.find(([id]) => id === r.rol) || [, r.rol])[1]}</span>
                             {r.categoria && <span>· {r.categoria}</span>}
                             {r.duracion_min > 0 && <span>· {r.duracion_min} min</span>}
                             {r.iniciales && <span>· {r.iniciales}</span>}
-                            {r.complicacion && <span style={{ color: "var(--peligro)", fontWeight: 700 }}>· ⚠ {LABEL_MOMENTO[r.momento_complicacion || "intraoperatoria"]}{r.clavien ? ` (CD ${r.clavien})` : ""}</span>}
+                            {r.complicacion && <span style={{ color: "var(--peligro)", fontWeight: 700 }}>· ⚠ {etiquetaEvento(r)}</span>}
                           </div>
                         </div>
                       </div>
