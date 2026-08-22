@@ -235,6 +235,12 @@ const SIGLAS_URO = {
   de: "disfuncion erectil", epoc: "enfermedad pulmonar obstructiva cronica",
   tuc: "tumor urotelial", gleason: "score de gleason grado isup",
 };
+// Normaliza para comparar: quita tildes y pasa a minúsculas. Se usaba en cinco
+// lugares (expandirSiglas, slug de archivos, búsqueda de figuras del chat) sin
+// estar definida en ninguno, lo que reventaba el envío de mensajes con un
+// ReferenceError dentro de una promesa: el chat quedaba colgado en "Consultando…".
+const sinTildes = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 function expandirSiglas(texto) {
   const base = sinTildes(texto);
   const extras = [];
@@ -2987,41 +2993,24 @@ const TUTORIAL_VERSION = "2"; // súbelo si quieres re-mostrarlo a todos en una 
 // tab = pestaña que debe estar activa para que el elemento exista.
 function pasosTutorial(rol, movil = false) {
   const base = [
-    { uros: "hola", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro las secciones principales en un par de minutos." },
+    { uros: "hola", titulo: "¡Hola! Soy Uros 👋", texto: "Tu asistente clínico de urología. Te muestro lo esencial en un minuto; el resto lo vas descubriendo solo." },
 
-    // ─── RECORDATORIO ───
+    // Descargo de responsabilidad: no se elimina ni se acorta.
     { uros: "pabellon_serio", titulo: "⚠️ Un recordatorio", texto: "Soy apoyo clínico, no reemplazo tu juicio médico ni la evaluación individual de cada paciente. Verifica siempre la información crítica." },
 
-    // ─── CHAT ───
-    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y te respondo con apoyo basado en guías clínicas. La respuesta se va escribiendo en vivo, y cuando ayuda incluyo láminas (clasificaciones, algoritmos, esquemas)." },
-    { tab: "chat", uros: "point", titulo: "Preguntas para empezar", texto: "En la portada rotan tres preguntas: siempre hay alguna sobre la organización de tu servicio («¿Qué se opera mañana?», «Resumen de mis pacientes para la visita») junto a consultas clínicas. Tócalas y se envían." },
-    { tab: "chat", uros: "pulgar", titulo: "👍 👎 Ayúdame a mejorar", texto: "Bajo cada respuesta hay dos pulgares. Si algo sale mal, marca 👎: esas evaluaciones son las que indican qué corregir y qué material agregar a la biblioteca." },
+    { target: "tab-chat", tab: "chat", uros: "hola", titulo: "Chat clínico", texto: "Escribe tu consulta y respondo con apoyo basado en guías, a veces con láminas. Bajo cada respuesta hay 👍 👎: el pulgar abajo es lo que me dice qué corregir." },
 
-    // ─── HOSPITAL ───
-    { target: "tab-hospital", tab: "hospital", uros: "checklist", titulo: "Servicio", texto: "Aquí gestionas tus pacientes, la tabla quirúrgica y las notas. Al entrar quedas en la pestaña «Pacientes»." },
-    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Secciones de Servicio", texto: "Toca de nuevo la pestaña Servicio y se despliega el menú con 👥 Pacientes · 📋 Tabla · 🗒️ Notas · 💊 Recetas · 📄 Interconsultas · 🔄 Seguimiento, y el cambio entre tus pacientes y los del equipo." },
+    { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "checklist", titulo: "Servicio", texto: "Tus pacientes, la tabla quirúrgica y las notas. Tocando de nuevo la pestaña se despliega el menú con Pacientes · Tabla · Notas · Recetas · Interconsultas · Seguimiento, y el cambio entre 👤 tus pacientes y 👥 los del equipo." },
 
-    // ─── SEGUIMIENTO ───
-    { tab: "hospital", subtab: "seguimiento", uros: "camara", titulo: "Registra con una foto", texto: "Igual que en el resto: fotografías el control o el examen y Uros extrae paciente, diagnóstico y hallazgos. Al marcar «Controlado hoy», la fecha del próximo control se calcula sola." },
-    { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), más sus evoluciones SOAP y exámenes:" },
+    { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), con evoluciones SOAP y exámenes:" },
+
     { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "trocar", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
-    { target: "selector-contexto", tab: "hospital", subtab: "pacientes", uros: "hola", titulo: "Personal ↔ Equipo", texto: "Este botón cambia entre 👤 «Mis Pacientes» y 👥 un equipo. Pacientes, tabla y notas se muestran según el contexto elegido aquí." },
-    { tab: "hospital", subtab: "pacientes", uros: "checklist_sentado", titulo: "Altas y reingresos", texto: "Al dar de alta tienes unos segundos para deshacerlo. Los dados de alta quedan en su propia lista con buscador, y si el paciente vuelve, su ficha trae el botón 🏥 Re-hospitalizar: conservas toda su historia." },
 
-    // ─── BIBLIOTECA ───
-    { target: "tab-conocimiento", tab: "conocimiento", uros: "lectura", titulo: "Biblioteca", texto: "Material para estudiar y consultar rápido: protocolos quirúrgicos, videos y preguntas." },
-    { tab: "conocimiento", uros: "pizarra", titulo: "Scores y etapificación", texto: "En «Scores» tienes IPSS, D'Amico, RENAL, PADUA, IMDC y MSKCC (con tabla de Karnofsky y calculadora de calcio corregido incluidas), Clavien-Dindo y la etapificación TNM de próstata, vejiga, testículo y riñón." },
+    { target: "tab-conocimiento", tab: "conocimiento", uros: "lectura", titulo: "Biblioteca", texto: "Protocolos quirúrgicos, videos, preguntas y los scores de uso diario: IPSS, D'Amico, RENAL, PADUA, Clavien-Dindo y etapificación TNM." },
 
-    // ─── LOGBOOK ───
-    { target: "tab-logbook", tab: "logbook", uros: "pabellon_serio", titulo: "📓 Logbook quirúrgico", texto: "Tu registro personal de cirugías, aparte de la tabla del pabellón. Sirve para tu casuística: cada procedimiento con tu rol, hallazgos y complicaciones." },
-    { tab: "logbook", uros: "camara", titulo: "Registrar es sacar una foto", texto: "Fotografía el protocolo operatorio y extraigo procedimiento, paciente, duración, hallazgos y complicaciones. Si el paciente no está en tus hospitalizados, te ofrezco ingresarlo ahí mismo. Y desde la tabla quirúrgica, «Agregar a mi logbook» trae la cirugía ya completada." },
-    { tab: "logbook", uros: "ok", titulo: "Tus métricas, tocando", texto: "Las tarjetas son los filtros: toca «como cirujano principal» y todo se filtra; toca «como ayudante» y se despliegan 1º, 2º, 3º y 4º. Los gráficos también se abren: tocas una barra y aparecen esas cirugías, con su protocolo y opción de editar." },
-    { tab: "logbook", uros: "explicando", titulo: "Ordena tu casuística", texto: "Con 🧩 Agrupar unes las cirugías escritas de distinta forma bajo un nombre que tú elijas («Litiasis»), y puedes renombrar grupos. Si aparecen posibles duplicados, confirmas o los descartas con «No son duplicados»." },
-    { tab: "logbook", uros: "bienhecho", titulo: "📜 Tu certificado", texto: "El botón «Certificado» genera un PDF con tu casuística por procedimiento y rol en el rango de fechas que elijas, con complicaciones y líneas de firma para ti y tu tutor. Lo que antes armabas a mano en Excel." },
+    { target: "tab-logbook", tab: "logbook", uros: "camara", titulo: "📓 Logbook quirúrgico", texto: "Tu casuística personal. Fotografías el protocolo operatorio y extraigo procedimiento, paciente, duración y hallazgos. Las tarjetas y los gráficos son filtros: tócalos. El botón «Certificado» arma el PDF que antes hacías a mano en Excel." },
 
-    { uros: "pulgar", titulo: "🤝 Equipos", texto: "El trabajo en equipo se maneja desde tu menú, arriba a la derecha: ahí creas equipos, invitas gente y aceptas invitaciones. Lo que registres en un equipo lo ven todos sus miembros." },
-
-    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Puedes volver a ver este tutorial cuando quieras desde tu menú, arriba a la derecha. Ahí mismo están los Términos y la Política de Privacidad: UroSearch™ es una herramienta de apoyo, no un dispositivo médico." },
+    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Los equipos y este mismo tutorial están en tu menú, arriba a la derecha, junto a los Términos y la Política de Privacidad. UroSearch™ es una herramienta de apoyo, no un dispositivo médico." },
   ];
   // Enfermería no ve Biblioteca ni Logbook; internos sí. Filtramos pasos cuyo tab no aplica.
   const tabsFuera = rol === "enfermeria" ? ["conocimiento", "logbook"] : [];
