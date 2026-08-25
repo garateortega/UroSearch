@@ -2921,7 +2921,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.3.2";
+const VERSION = "v2.3.3";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -11166,7 +11166,12 @@ const cargarMiembrosEquipo = async () => {
     // Guardado inmediato, sin esperar el debounce: si el sistema mata la app
     // durante esos 250 ms, la última posición se perdía y al volver arrancaba
     // desde la de antes (o desde cero).
-    const guardarYa = () => {
+    const guardarYa = (ev) => {
+      // Solo al ocultarse o descargarse. El mismo listener disparaba también al
+      // VOLVER visible, y en ese instante —con la lista recién colapsada— pisaba
+      // la posición buena guardada con un 0. Eso es lo que muestra el registro
+      // "guardado v=0" segundos después de un "guardado v=1282" correcto.
+      if (ev?.type === "visibilitychange" && document.visibilityState !== "hidden") return;
       clearTimeout(t);
       try {
         if (!kanbanRef.current) { logDiag("scroll pacientes: guardarYa sin contenedor (lista no montada)"); return; }
@@ -13568,11 +13573,18 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
       )}
 
-      {loadingPacientes && (
+      {/* CAUSA RAÍZ del "vuelve al primer paciente": mientras loading era true
+          la lista completa se DESMONTABA y un spinner ocupaba su lugar. La
+          altura del contenedor colapsaba, el navegador recortaba el scroll a 0,
+          y al remontarse la lista quedaba arriba — sin recargar la página.
+          Cualquier recarga de datos al volver del segundo plano lo gatillaba.
+          Regla nueva: si hay pacientes que mostrar, la lista NUNCA se desmonta;
+          el spinner queda solo para la primera carga, cuando no hay nada. */}
+      {loadingPacientes && pacientes.length === 0 && (
         <div style={{textAlign:"center",padding:"30px",color:"var(--texto-ter)",fontSize:"var(--fs-2)"}}>Cargando pacientes...</div>
       )}
 
-      {!loadingPacientes && filtroEstado !== "alta" && pacientesFiltrados.length === 0 && (
+      {(!loadingPacientes || pacientes.length > 0) && filtroEstado !== "alta" && pacientesFiltrados.length === 0 && !loadingPacientes && (
         <div style={{textAlign:"center",padding:"40px 20px",color:"var(--texto-ter)",fontSize:"var(--fs-2)",lineHeight:1.6}}>
           No hay pacientes en este contexto.<br/>
           {soloLectura ? "" : (esEquipo ? "Toca de nuevo la pestaña para agregar con + Nuevo" : "Toca de nuevo la pestaña y crea tu primer paciente con + Nuevo")}
@@ -13580,7 +13592,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       )}
 
       {/* Vista simple de dados de alta: listado ordenado por fecha de alta + buscador */}
-      {!loadingPacientes && filtroEstado === "alta" && (
+      {(!loadingPacientes || pacientes.length > 0) && filtroEstado === "alta" && (
         <div style={{maxWidth:720, margin:"0 auto", width:"100%"}}>
           <input
             value={busquedaAlta}
@@ -13620,7 +13632,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       )}
 
       {/* Vista kanban por servicio: se reordena dejando presionado el título y arrastrando */}
-      {!loadingPacientes && filtroEstado !== "alta" && pacientesFiltrados.length > 0 && (
+      {(!loadingPacientes || pacientes.length > 0) && filtroEstado !== "alta" && pacientesFiltrados.length > 0 && (
         <>
           <div ref={kanbanRef} style={orientacionPac==="horizontal"
             ? {display:"flex",flexDirection:"row",flexWrap:"nowrap",gap:12,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:8,position:"relative",touchAction:dragCol?"none":"auto"}
