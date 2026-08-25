@@ -371,6 +371,16 @@ function useDictado(onTexto) {
 
   const detener = () => { try { ref.current?.recorder?.stop(); } catch {} };
 
+  // Cancelar: descarta el audio sin transcribir. Se marca ANTES de parar para
+  // que onstop lo vea y no gaste una llamada a la API con algo que el usuario
+  // ya decidió botar.
+  const cancelar = () => {
+    if (ref.current) ref.current.cancelado = true;
+    try { ref.current?.recorder?.stop(); } catch {}
+    setEstado("inactivo");
+    setError("");
+  };
+
   const iniciar = async () => {
     setError("");
     if (!grabacionDisponible()) { setError("Este navegador no permite grabar audio."); return; }
@@ -387,7 +397,9 @@ function useDictado(onTexto) {
       // El micrófono se apaga antes de transcribir: el indicador del navegador
       // debe desaparecer al soltar, no al terminar.
       stream.getTracks().forEach((t) => t.stop());
+      const seCancelo = !!ref.current?.cancelado;
       ref.current = null;
+      if (seCancelo) { setEstado("inactivo"); return; }
       const tipo = recorder.mimeType || mime || "audio/webm";
       const blob = new Blob(trozos, { type: tipo });
       if (blob.size < 2000) { setEstado("inactivo"); setError("La grabación fue demasiado corta."); return; }
@@ -411,7 +423,56 @@ function useDictado(onTexto) {
     try { ref.current?.recorder?.stop(); ref.current?.stream?.getTracks().forEach((t) => t.stop()); } catch {}
   }, []);
 
-  return { estado, error, iniciar, detener, setError };
+  return { estado, error, iniciar, detener, cancelar, setError };
+}
+
+// Control de dictado reutilizable. `compacto` lo reduce a un botón redondo
+// (para barras de entrada); en modo normal muestra la fila con ayuda y cancelar.
+function ControlDictado({ dictado, etiqueta = "Dictar", ayuda, compacto = false }) {
+  if (!grabacionDisponible()) return null;
+  const { estado, error, iniciar, detener, cancelar } = dictado;
+
+  if (compacto) {
+    return (
+      <button
+        onClick={() => (estado === "grabando" ? detener() : iniciar())}
+        disabled={estado === "procesando"}
+        title={estado === "grabando" ? "Detener y transcribir" : etiqueta}
+        aria-label={estado === "grabando" ? "Detener y transcribir" : etiqueta}
+        style={{ flexShrink: 0, width: 38, height: 38, borderRadius: "50%", cursor: estado === "procesando" ? "default" : "pointer", border: estado === "grabando" ? "none" : "0.5px solid var(--borde)", background: estado === "grabando" ? "var(--peligro)" : "var(--superficie)", color: estado === "grabando" ? "var(--texto-inv)" : "var(--primario)", fontSize: 15, opacity: estado === "procesando" ? 0.55 : 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {estado === "grabando" ? "■" : estado === "procesando" ? "…" : "🎤"}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", borderRadius: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {estado === "grabando" ? (
+          <>
+            <button onClick={detener} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 700, borderRadius: 20, cursor: "pointer", border: "none", background: "var(--peligro)", color: "var(--texto-inv)" }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: "currentColor", animation: "uroLatido 1s ease-in-out infinite" }} />
+              Detener y transcribir
+            </button>
+            {/* Cancelar descarta el audio sin mandarlo a transcribir. */}
+            <button onClick={cancelar} style={{ padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 20, cursor: "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--texto-sec)" }}>
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <button onClick={iniciar} disabled={estado === "procesando"} style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 700, borderRadius: 20, cursor: estado === "procesando" ? "default" : "pointer", border: "0.5px solid var(--borde)", background: "var(--superficie)", color: "var(--primario)", opacity: estado === "procesando" ? 0.6 : 1 }}>
+            🎤 {estado === "procesando" ? "Transcribiendo…" : etiqueta}
+          </button>
+        )}
+        <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", flex: 1, minWidth: 150, lineHeight: 1.35 }}>
+          {estado === "grabando" ? "Grabando… habla con normalidad."
+            : estado === "procesando" ? "El audio se descarta al terminar; solo queda el texto."
+            : ayuda || "Revisa siempre cifras y dosis antes de guardar."}
+        </span>
+      </div>
+      {error && <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)", fontWeight: 600 }}>{error}</div>}
+    </div>
+  );
 }
 
 async function transcribirAudio(blob, extension) {
@@ -429,6 +490,41 @@ async function transcribirAudio(blob, extension) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || "No se pudo transcribir el audio");
   return data.texto || "";
+}
+
+// Ordena un dictado en párrafos con encabezado, sin repartirlo en campos.
+// Se usa donde hay un solo cuadro de texto (evolución libre, anamnesis).
+async function ordenarDictadoEnParrafos(texto) {
+  const instrucciones = `Ordena este dictado clínico de urología en párrafos con encabezado.
+
+Usa solo los encabezados que correspondan, de esta lista y en este orden:
+ANAMNESIS, EXAMEN FÍSICO, EXÁMENES, EVOLUCIÓN, PLAN.
+
+Reglas estrictas:
+- Usa EXCLUSIVAMENTE lo dictado. No completes, no infieras, no agregues hallazgos habituales.
+- Copia las cifras EXACTAMENTE como fueron dictadas. Si un número o una dosis suena ambiguo, escríbelo tal cual y agrega " (?)" justo después.
+- Corrige solo errores evidentes de transcripción de términos urológicos.
+- Omite por completo los encabezados sin contenido.
+- En PLAN, una indicación por línea precedida de "• ".
+- Responde SOLO con el texto final, sin markdown, sin comentarios.
+
+Dictado:
+"""${texto}"""`;
+  try {
+    const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await tokenFuncionIA()}` },
+      body: JSON.stringify({
+        model: "claude-sonnet-5",
+        max_tokens: 1500,
+        system: "Ordenas dictados clínicos en párrafos. Nunca inventas datos ni modificas cifras. No retienes los datos personales que aparezcan.",
+        messages: [{ role: "user", content: [{ type: "text", text: instrucciones }] }],
+      }),
+    });
+    const data = await res.json();
+    const t = (data.content?.find((b) => b.type === "text")?.text || "").trim();
+    return t || texto; // si la IA no responde, no se pierde el dictado
+  } catch { return texto; }
 }
 
 // Reparte el dictado en los campos del SOAP. Devuelve null si la IA no entrega
@@ -894,6 +990,37 @@ function onKeyDownPunteo(aplicar) {
       }
     }
   };
+}
+
+// ─── Detección de versión nueva desplegada ────────────────────────
+// La app NO tiene un service worker que cachee (el de /push/ solo maneja
+// notificaciones y no intercepta fetch). Lo que queda pegado es el index.html
+// en la caché del navegador, sobre todo en la PWA instalada: sigue apuntando
+// al bundle viejo, cuyo nombre lleva hash y por eso nunca se invalida solo.
+//
+// En vez de inventar un archivo de versión que haya que mantener a mano, se
+// relee el index.html sin caché y se compara el nombre del bundle: cambia en
+// cada build, sin configuración extra.
+function bundleActual() {
+  try {
+    const el = document.querySelector('script[type="module"][src]');
+    return el ? new URL(el.src, location.origin).pathname : null;
+  } catch { return null; }
+}
+async function hayVersionNueva() {
+  const actual = bundleActual();
+  if (!actual) return false;
+  try {
+    const r = await fetch("/index.html", { cache: "no-store" });
+    if (!r.ok) return false;
+    const html = await r.text();
+    const m = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/i);
+    if (!m) return false;
+    const remoto = new URL(m[1], location.origin).pathname;
+    // En desarrollo el src es /src/main.jsx y nunca cambia: no aplica.
+    if (!/-[A-Za-z0-9_]{6,}\.js$/.test(remoto)) return false;
+    return remoto !== actual;
+  } catch { return false; }
 }
 
 function usePersistedState(clave, inicial) {
@@ -9038,6 +9165,13 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   const campo = (l, k, ml = false) => (<div><label style={lbl}>{l}</label>{ml ? <textarea rows={2} value={f[k]} onChange={e => set(k, e.target.value)} style={{ ...inp, resize: "vertical" }} /> : <input value={f[k]} onChange={e => set(k, e.target.value)} style={inp} />}</div>);
 
+  // Dictado del ingreso: la anamnesis es el campo largo y el que más se dicta.
+  // Se ordena en párrafos y se anexa; nunca reemplaza lo ya escrito.
+  const dictadoIngreso = useDictado(async (texto) => {
+    const ordenado = await ordenarDictadoEnParrafos(texto);
+    set("anamnesis", (f.anamnesis || "").trim() ? f.anamnesis.trim() + "\n" + ordenado : ordenado);
+  });
+
   const historiaTexto = () => {
     const L = [];
     L.push(`INGRESO AL SERVICIO DE UROLOGÍA — ${f.fingreso}`);
@@ -9470,7 +9604,12 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
           <div style={{ gridColumn: "1 / -1" }}>{campo("Domicilio", "domicilio")}</div>
           {campo("Fecha ingreso", "fingreso")}
         </div>
-        <div style={{ gridColumn: "1 / -1" }}>{campo("Anamnesis próxima", "anamnesis", true)}</div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          {campo("Anamnesis próxima", "anamnesis", true)}
+          <div style={{ marginTop: 6 }}>
+            <ControlDictado dictado={dictadoIngreso} etiqueta="Dictar anamnesis" ayuda="Se ordena en párrafos y se agrega a lo ya escrito. Revisa cifras y dosis." />
+          </div>
+        </div>
         <div style={{ gridColumn: "1 / -1" }}><label style={lbl}>Plan (ingresa para…)</label><input value={f.plan} onChange={e => set("plan", e.target.value)} placeholder="Ej: resección transuretral de próstata" style={inp} /></div>
         <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)", margin: "4px 0 6px" }}>Anamnesis remota</div>
         {campo("Antecedentes mórbidos", "morbidos", true)}
@@ -10315,67 +10454,27 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     try { setEvoLibre(localStorage.getItem("uro_evo_draft_" + seleccionado.id) || ""); } catch { setEvoLibre(""); }
   }, [seleccionado?.id]);
   const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
-  // Dictado de voz: "inactivo" | "grabando" | "procesando"
-  const [dictado, setDictado] = useState("inactivo");
-  const [dictadoError, setDictadoError] = useState("");
-  const grabRef = useRef(null);
-
-  const detenerDictado = () => { try { grabRef.current?.recorder?.stop(); } catch {} };
-
-  const iniciarDictado = async () => {
-    setDictadoError("");
-    if (!grabacionDisponible()) { setDictadoError("Este navegador no permite grabar audio."); return; }
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    } catch {
-      setDictadoError("No se pudo acceder al micrófono. Revisa los permisos del sitio.");
+  // Dictado de la evolución. En modo estructurado reparte en los campos SOAP;
+  // en modo libre ordena el texto en párrafos con encabezado.
+  const tipoEvoRef = useRef("estructurada");
+  const dictadoEvo = useDictado(async (texto) => {
+    const unir = (a, b) => (b ? (a ? a + "\n" + b : b) : a);
+    if (tipoEvoRef.current === "libre") {
+      const ordenado = await ordenarDictadoEnParrafos(texto);
+      setEvoLibre((prev) => unir(prev, ordenado));
       return;
     }
-    const mime = tipoAudioSoportado();
-    let recorder;
-    try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
-    catch { recorder = new MediaRecorder(stream); }
-    const trozos = [];
-    recorder.ondataavailable = (e) => { if (e.data?.size) trozos.push(e.data); };
-    recorder.onstop = async () => {
-      // Se apaga el micrófono de inmediato: el indicador del navegador debe
-      // desaparecer apenas se suelta el botón, no al terminar de transcribir.
-      stream.getTracks().forEach((t) => t.stop());
-      grabRef.current = null;
-      const tipo = recorder.mimeType || mime || "audio/webm";
-      const blob = new Blob(trozos, { type: tipo });
-      if (blob.size < 2000) { setDictado("inactivo"); setDictadoError("La grabación fue demasiado corta."); return; }
-      setDictado("procesando");
-      try {
-        const ext = tipo.includes("mp4") ? "m4a" : tipo.includes("mpeg") ? "mp3" : tipo.includes("ogg") ? "ogg" : "webm";
-        const texto = await transcribirAudio(blob, ext);
-        const soap = await estructurarDictadoSOAP(texto);
-        setEvoEstructurada((prev) => {
-          const unir = (a, b) => (b ? (a ? a + "\n" + b : b) : a);
-          if (!soap) return { ...prev, subjetivo: unir(prev.subjetivo, texto) }; // sin JSON: no se pierde el dictado
-          return {
-            subjetivo: unir(prev.subjetivo, soap.subjetivo || ""),
-            objetivo: unir(prev.objetivo, soap.objetivo || ""),
-            examen: unir(prev.examen, soap.examen || ""),
-            indicaciones: unir(prev.indicaciones, soap.indicaciones || ""),
-          };
-        });
-        setDictado("inactivo");
-      } catch (err) {
-        setDictado("inactivo");
-        setDictadoError(err?.message || "No se pudo transcribir.");
-      }
-    };
-    grabRef.current = { recorder, stream };
-    recorder.start();
-    setDictado("grabando");
-  };
-
-  // Si se cierra la evolución con el micrófono abierto, se corta igual.
-  useEffect(() => () => {
-    try { grabRef.current?.recorder?.stop(); grabRef.current?.stream?.getTracks().forEach((t) => t.stop()); } catch {}
-  }, []);
+    const soap = await estructurarDictadoSOAP(texto);
+    setEvoEstructurada((prev) => {
+      if (!soap) return { ...prev, subjetivo: unir(prev.subjetivo, texto) }; // sin JSON: no se pierde el dictado
+      return {
+        subjetivo: unir(prev.subjetivo, soap.subjetivo || ""),
+        objetivo: unir(prev.objetivo, soap.objetivo || ""),
+        examen: unir(prev.examen, soap.examen || ""),
+        indicaciones: unir(prev.indicaciones, soap.indicaciones || ""),
+      };
+    });
+  });
   const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
   const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
@@ -10383,8 +10482,15 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   const [tipoEvo, setTipoEvo] = useState("estructurada");
 
   // Form de exámenes
+  // El callback del dictado se crea una sola vez; el ref le da el modo vigente.
+  useEffect(() => { tipoEvoRef.current = tipoEvo; }, [tipoEvo]);
   const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
   const [paramsLab, setParamsLab] = useState({}); // valores de los parámetros numéricos del lab seleccionado
+  // Dictado del resultado de un examen: se anexa tal cual, sin reestructurar —
+  // un informe de imagen dictado no gana nada con que la IA lo reordene.
+  const dictadoExamen = useDictado((texto) => {
+    setNuevoEx((prev) => ({ ...prev, resultado: prev.resultado.trim() ? prev.resultado.trim() + " " + texto : texto }));
+  });
   const [litiasis, setLitiasis] = useState([]); // lista de litiasis agregadas
   const [formLitiasis, setFormLitiasis] = useState({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
   const [tumores, setTumores] = useState([]); // lista de tumores agregados
@@ -12554,29 +12660,14 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     )}
   </div>
 
-  {/* DICTADO POR VOZ */}
-  {grabacionDisponible() && (
-    <div style={{display:"flex",flexDirection:"column",gap:6,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        {dictado==="grabando" ? (
-          <button onClick={detenerDictado} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",fontSize:"var(--fs-1)",fontWeight:700,borderRadius:20,cursor:"pointer",border:"none",background:"var(--peligro)",color:"var(--texto-inv)"}}>
-            <span style={{width:9,height:9,borderRadius:"50%",background:"currentColor",animation:"uroLatido 1s ease-in-out infinite"}}/>
-            Detener y transcribir
-          </button>
-        ) : (
-          <button onClick={iniciarDictado} disabled={dictado==="procesando"} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",fontSize:"var(--fs-1)",fontWeight:700,borderRadius:20,cursor:dictado==="procesando"?"default":"pointer",border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--primario)",opacity:dictado==="procesando"?0.6:1}}>
-            🎤 {dictado==="procesando" ? "Transcribiendo…" : "Dictar evolución"}
-          </button>
-        )}
-        <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",flex:1,minWidth:160,lineHeight:1.35}}>
-          {dictado==="grabando" ? "Grabando… habla con normalidad y detén al terminar."
-            : dictado==="procesando" ? "El audio se descarta al terminar; solo queda el texto."
-            : "Se reparte en los campos de abajo. Revisa siempre cifras y dosis antes de guardar."}
-        </span>
-      </div>
-      {dictadoError && <div style={{fontSize:"var(--fs-0)",color:"var(--peligro)",fontWeight:600}}>{dictadoError}</div>}
-    </div>
-  )}
+  {/* DICTADO POR VOZ — reparte en SOAP o arma párrafos según el modo activo */}
+  <ControlDictado
+    dictado={dictadoEvo}
+    etiqueta={tipoEvo === "libre" ? "Dictar nota" : "Dictar evolución"}
+    ayuda={tipoEvo === "libre"
+      ? "Se ordena en párrafos (anamnesis, examen físico, exámenes, plan). Revisa cifras y dosis."
+      : "Se reparte en los campos de abajo. Revisa siempre cifras y dosis antes de guardar."}
+  />
 
   {/* SUBJETIVO */}
   <div>
@@ -12952,7 +13043,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             </div>
           )}
 
-          <textarea value={nuevoEx.resultado} onChange={e=>setNuevoEx({...nuevoEx,resultado:e.target.value})} placeholder="Resultado (opcional)" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+          <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+            <textarea value={nuevoEx.resultado} onChange={e=>setNuevoEx({...nuevoEx,resultado:e.target.value})} placeholder={dictadoExamen.estado==="grabando"?"Grabando…":dictadoExamen.estado==="procesando"?"Transcribiendo…":"Resultado (opcional)"} rows={2} style={{...inputStyle,resize:"vertical",flex:1,minWidth:0}}/>
+            <ControlDictado dictado={dictadoExamen} etiqueta="Dictar resultado" compacto />
+          </div>
+          {dictadoExamen.error && <div style={{fontSize:"var(--fs-0)",color:"var(--peligro)",fontWeight:600,marginTop:4}}>{dictadoExamen.error}</div>}
           <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0}}>+ Guardar examen</button>
           </>)}
         </div>
@@ -14025,6 +14120,24 @@ useEffect(() => {
   }, [messages, loading]);
 
   const isAdmin = currentUser?.rol === "admin";
+
+  // Aviso de versión nueva. Se revisa al volver del segundo plano y cada 30 min.
+  // NO se recarga sola: recargar mientras alguien escribe una evolución le
+  // borraría el trabajo. El usuario decide cuándo.
+  const [versionNueva, setVersionNueva] = useState(false);
+  useEffect(() => {
+    if (!currentUser) return;
+    let vivo = true;
+    const revisar = async () => {
+      if (document.visibilityState !== "visible" || !vivo) return;
+      if (await hayVersionNueva()) { if (vivo) setVersionNueva(true); }
+    };
+    const alVolver = () => { if (document.visibilityState === "visible") revisar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    const t = setInterval(revisar, 30 * 60 * 1000);
+    revisar();
+    return () => { vivo = false; document.removeEventListener("visibilitychange", alVolver); clearInterval(t); };
+  }, [currentUser]);
   const [pendientesCount, setPendientesCount] = useState(0);
   useEffect(() => {
     if (!isAdmin) { setPendientesCount(0); return; }
@@ -14971,6 +15084,13 @@ if (!currentUser) {
       <OfflineBanner/>
       {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
       {!bloqueado && <BoletinModal currentUser={currentUser} />}
+      {!bloqueado && versionNueva && (
+        <div style={{ position: "fixed", left: 12, right: 12, bottom: "calc(76px + env(safe-area-inset-bottom, 0px))", zIndex: 950, maxWidth: 420, margin: "0 auto", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "var(--primario)", color: "var(--texto-inv)", borderRadius: 12, boxShadow: "0 6px 20px rgba(0,0,0,0.28)" }}>
+          <span style={{ flex: 1, fontSize: "var(--fs-1)", fontWeight: 600, lineHeight: 1.35 }}>Hay una versión nueva de UroSearch.</span>
+          <button onClick={() => { try { window.location.reload(true); } catch { window.location.reload(); } }} style={{ flexShrink: 0, padding: "7px 14px", fontSize: "var(--fs-1)", fontWeight: 700, borderRadius: 8, border: "none", background: "var(--superficie)", color: "var(--primario)", cursor: "pointer" }}>Actualizar</button>
+          <button onClick={() => setVersionNueva(false)} aria-label="Ahora no" style={{ flexShrink: 0, background: "none", border: "none", color: "var(--texto-inv)", fontSize: 18, cursor: "pointer", lineHeight: 1, opacity: 0.8 }}>✕</button>
+        </div>
+      )}
       {!bloqueado && <BotonFeedback currentUser={currentUser} tabActual={tab}/>}
       <UroDialogHost/>
       {recuperandoPassword && <NuevaPasswordModal onClose={()=>setRecuperandoPassword(false)}/>}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "//": "Los bundles de Vite llevan hash en el nombre: si cambia el contenido cambia el archivo, así que cachearlos para siempre es seguro y es lo que hace rápida la carga.",
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "//": "index.html NO se puede cachear: es el único archivo con nombre fijo y el que apunta al bundle nuevo. Si queda pegado, la PWA instalada sigue cargando la versión anterior indefinidamente. Esta era la causa de que costara actualizar en los dispositivos.",
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "//": "El manifest y el service worker de push tampoco deben quedar congelados.",
+      "source": "/manifest.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/push/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    }
+  ]
+}
