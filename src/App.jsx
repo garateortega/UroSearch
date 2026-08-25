@@ -10592,16 +10592,47 @@ const cargarMiembrosEquipo = async () => {
     try {
       const sv = parseInt(localStorage.getItem("uro_pac_scroll_v") || "0", 10);
       const sh = parseInt(localStorage.getItem("uro_pac_scroll_h") || "0", 10);
-      requestAnimationFrame(() => {
+      if (sv <= 0 && sh <= 0) return;
+      // Un solo requestAnimationFrame no basta: en el arranque en frío las
+      // tarjetas todavía no tienen alto (fuentes, avatares, tarjetas que crecen
+      // al montarse), así que el contenedor mide menos que `sv` y el navegador
+      // recorta el scrollTop a lo que cabe — silenciosamente. El resultado era
+      // volver siempre al principio de la lista.
+      // Se reintenta durante ~1,5 s hasta que la posición pedida sea alcanzable,
+      // y se corta apenas el usuario toca la pantalla para no pelearle el scroll.
+      let intentos = 0;
+      let cancelado = false;
+      const abortar = () => { cancelado = true; };
+      ["pointerdown", "touchstart", "wheel", "keydown"].forEach((ev) =>
+        window.addEventListener(ev, abortar, { once: true, passive: true }));
+
+      const intentar = () => {
+        if (cancelado || intentos++ > 90) {
+          ["pointerdown", "touchstart", "wheel", "keydown"].forEach((ev) =>
+            window.removeEventListener(ev, abortar));
+          return;
+        }
         try {
           const scEl = scrollParent(kanbanRef.current || document.body);
+          const enVentana = scEl === document.body || scEl === document.documentElement;
+          const maximo = enVentana
+            ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+            : Math.max(0, scEl.scrollHeight - scEl.clientHeight);
           if (sv > 0) {
-            if (scEl === document.body || scEl === document.documentElement) window.scrollTo(0, sv);
-            else scEl.scrollTop = sv;
+            if (enVentana) window.scrollTo(0, Math.min(sv, maximo));
+            else scEl.scrollTop = Math.min(sv, maximo);
           }
-          if (sh > 0 && orientacionPac === "horizontal" && kanbanRef.current) kanbanRef.current.scrollLeft = sh;
+          if (sh > 0 && orientacionPac === "horizontal" && kanbanRef.current) {
+            kanbanRef.current.scrollLeft = sh;
+          }
+          const actual = enVentana ? (window.scrollY || 0) : (scEl.scrollTop || 0);
+          // Todavía no se alcanzó la posición porque falta contenido: reintentar.
+          if (sv > 0 && actual < sv - 2 && maximo < sv) return requestAnimationFrame(intentar);
         } catch {}
-      });
+        ["pointerdown", "touchstart", "wheel", "keydown"].forEach((ev) =>
+          window.removeEventListener(ev, abortar));
+      };
+      requestAnimationFrame(intentar);
     } catch {}
   }, [pacientes, orientacionPac]);
   useEffect(() => {
@@ -10618,9 +10649,29 @@ const cargarMiembrosEquipo = async () => {
         } catch {}
       }, 250);
     };
+    // Guardado inmediato, sin esperar el debounce: si el sistema mata la app
+    // durante esos 250 ms, la última posición se perdía y al volver arrancaba
+    // desde la de antes (o desde cero).
+    const guardarYa = () => {
+      clearTimeout(t);
+      try {
+        if (!kanbanRef.current) return;
+        const scEl = scrollParent(kanbanRef.current || document.body);
+        const top = (scEl === document.body || scEl === document.documentElement) ? (window.scrollY || 0) : (scEl.scrollTop || 0);
+        localStorage.setItem("uro_pac_scroll_v", String(Math.round(top)));
+        localStorage.setItem("uro_pac_scroll_h", String(Math.round(kanbanRef.current.scrollLeft || 0)));
+      } catch {}
+    };
     // capture:true también captura el scroll de contenedores internos (la fila horizontal)
     window.addEventListener("scroll", guardarPos, { passive: true, capture: true });
-    return () => { clearTimeout(t); window.removeEventListener("scroll", guardarPos, { capture: true }); };
+    document.addEventListener("visibilitychange", guardarYa);
+    window.addEventListener("pagehide", guardarYa);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("scroll", guardarPos, { capture: true });
+      document.removeEventListener("visibilitychange", guardarYa);
+      window.removeEventListener("pagehide", guardarYa);
+    };
   }, []);
   const [distDoctor, setDistDoctor] = useState(null);
   const [ingresoAbierto, setIngresoAbierto] = useState(false); // modal de ingreso
