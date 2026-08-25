@@ -332,6 +332,89 @@ async function archivoAImagenesB64(file, maxPaginas = 5) {
   return salida;
 }
 
+// ─── Dictado de voz ───────────────────────────────────────────────
+// El audio se graba, se manda a transcribir y se descarta. Nunca se guarda en
+// Storage ni en la base: lo único que persiste es el texto que el usuario
+// revisó y aceptó. Esto es dictado del profesional, no grabación de consulta.
+
+// Safari/iOS no soporta webm: entrega audio/mp4. Elegir el contenedor a ciegas
+// deja la grabación vacía en la mitad de los dispositivos.
+function tipoAudioSoportado() {
+  const candidatos = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg;codecs=opus"];
+  for (const t of candidatos) {
+    try { if (window.MediaRecorder?.isTypeSupported?.(t)) return t; } catch {}
+  }
+  return ""; // el navegador elige; MediaRecorder acepta options vacío
+}
+const grabacionDisponible = () => !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+
+// Vocabulario del dominio. Sin esto "RTU-V" se transcribe como "erre te u ve"
+// y los nombres de fármacos se deforman. `keywords` es lo que consume
+// gpt-transcribe; `pista` es el contexto en prosa que usa whisper-1 si se cae
+// al respaldo.
+function clavesVocabulario() {
+  return Object.keys(SIGLAS_URO).map((s) => s.toUpperCase()).join(",");
+}
+function pistaVocabulario() {
+  return `Dictado clínico de urología en español de Chile. Siglas frecuentes: ${clavesVocabulario().replace(/,/g, ", ")}. Escribe las siglas en mayúsculas y los números como cifras.`;
+}
+
+async function transcribirAudio(blob, extension) {
+  const url = import.meta.env.VITE_TRANSCRIBE_FUNCTION_URL;
+  if (!url) throw new Error("Falta configurar VITE_TRANSCRIBE_FUNCTION_URL");
+  const fd = new FormData();
+  fd.append("audio", blob, `dictado.${extension || "webm"}`);
+  fd.append("pista", pistaVocabulario());
+  fd.append("keywords", clavesVocabulario());
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await tokenFuncionIA()}` },
+    body: fd,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || "No se pudo transcribir el audio");
+  return data.texto || "";
+}
+
+// Reparte el dictado en los campos del SOAP. Devuelve null si la IA no entrega
+// JSON usable, para caer al texto crudo en vez de perder lo dictado.
+async function estructurarDictadoSOAP(texto) {
+  const instrucciones = `Reordena este dictado clínico de urología en los campos de una evolución SOAP.
+Responde SOLO con JSON válido, sin markdown ni backticks.
+
+{
+  "subjetivo": "lo que refiere el paciente, o null",
+  "objetivo": "signos vitales, diuresis, drenajes, laboratorio mencionado, o null",
+  "examen": "hallazgos del examen físico, o null",
+  "indicaciones": "plan e indicaciones, una por línea precedida de '• ', o null"
+}
+
+Reglas estrictas:
+- Usa EXCLUSIVAMENTE lo que aparece en el dictado. No completes, no infieras, no agregues hallazgos habituales.
+- Copia las cifras EXACTAMENTE como fueron dictadas. Si un número o una dosis suena ambiguo, escríbelo tal cual y agrega " (?)" justo después.
+- Corrige solo errores evidentes de transcripción de términos urológicos.
+- Si algo no encaja en ningún campo, ponlo en "subjetivo".
+
+Dictado:
+"""${texto}"""`;
+
+  try {
+    const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${await tokenFuncionIA()}` },
+      body: JSON.stringify({
+        model: "claude-sonnet-5",
+        max_tokens: 1500,
+        system: "Estructuras dictados clínicos en SOAP. Respondes exclusivamente con JSON válido. Nunca inventas datos clínicos ni modificas cifras. No retienes los datos personales que aparezcan.",
+        messages: [{ role: "user", content: [{ type: "text", text: instrucciones }] }],
+      }),
+    });
+    const data = await res.json();
+    const txt = data.content?.find((b) => b.type === "text")?.text || "";
+    return JSON.parse(txt.replace(/```json|```/g, "").trim());
+  } catch { return null; }
+}
+
 // ─── Extracción de datos de ingreso de un paciente desde foto(s) (visión IA) ───
 // Reutiliza la misma edge function del chat. Devuelve un objeto con los campos.
 async function extraerIngresoPaciente(imagenesBase64) {
@@ -847,11 +930,45 @@ const FUNCIONES_CONFIGURABLES = [
   ]},
 ];
 
+// ─── Flags "una sola vez por usuario" ─────────────────────────────
+// El tutorial, el boletín de novedades y el ofrecimiento de notificaciones
+// vivían en localStorage, que es por dispositivo: quien entraba desde el
+// computador de pabellón y desde su teléfono se comía los tres modales dos
+// veces. Ahora se guardan en perfiles.onboarding_visto (jsonb), y localStorage
+// queda solo como espejo para que no parpadeen mientras carga el perfil.
+async function leerFlagsVistos(userId) {
+  try {
+    const { data, error } = await supabase.from("perfiles").select("onboarding_visto").eq("id", userId).single();
+    if (error) throw error;
+    return data?.onboarding_visto || {};
+  } catch {
+    // Sin red o sin la columna todavía: se cae al espejo local para no
+    // bloquear al usuario ni mostrarle el tutorial en un loop.
+    try { return JSON.parse(localStorage.getItem(`uro_vistos_${userId}`) || "{}"); } catch { return {}; }
+  }
+}
+async function marcarFlagVisto(userId, clave, valor = true) {
+  if (!userId) return;
+  let local = {};
+  try { local = JSON.parse(localStorage.getItem(`uro_vistos_${userId}`) || "{}"); } catch {}
+  local[clave] = valor;
+  try { localStorage.setItem(`uro_vistos_${userId}`, JSON.stringify(local)); } catch {}
+  try {
+    // Merge en el servidor: se relee para no pisar flags escritos por otro
+    // dispositivo entre la lectura inicial y este guardado.
+    const previos = await leerFlagsVistos(userId);
+    await supabase.from("perfiles").update({ onboarding_visto: { ...previos, ...local, [clave]: valor } }).eq("id", userId);
+  } catch {}
+}
+
 // ─── Onboarding de notificaciones: se ofrece UNA vez al abrir la app ───
 function OnboardingPushModal({ currentUser, onClose }) {
   const [cargando, setCargando] = useState(false);
   const [msg, setMsg] = useState("");
-  const marcar = () => { try { localStorage.setItem("uro_push_onboarding", "1"); } catch {} };
+  const marcar = () => {
+    try { localStorage.setItem("uro_push_onboarding", "1"); } catch {}
+    if (currentUser?.id) marcarFlagVisto(currentUser.id, "push", true);
+  };
   const activar = async () => {
     setCargando(true); setMsg("");
     const conTope = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r({ ok: false, error: "La operación tardó demasiado. Revisa la conexión." }), 15000))]);
@@ -4147,9 +4264,11 @@ function BoletinModal({ currentUser }) {
           .limit(1);
         if (error || !data || data.length === 0) return;
         const ultimo = data[0];
-        let visto = null;
-        try { visto = localStorage.getItem("uro_boletin_visto"); } catch {}
-        if (vivo && String(ultimo.id) !== visto) setBoletin(ultimo);
+        const vistos = await leerFlagsVistos(currentUser.id);
+        let legado = null;
+        try { legado = localStorage.getItem("uro_boletin_visto"); } catch {}
+        const yaVisto = String(vistos.boletin || "") === String(ultimo.id) || String(legado || "") === String(ultimo.id);
+        if (vivo && !yaVisto) setBoletin(ultimo);
       } catch {}
     })();
     return () => { vivo = false; };
@@ -4157,6 +4276,7 @@ function BoletinModal({ currentUser }) {
   if (!boletin) return null;
   const cerrar = () => {
     try { localStorage.setItem("uro_boletin_visto", String(boletin.id)); } catch {}
+    if (currentUser?.id) marcarFlagVisto(currentUser.id, "boletin", String(boletin.id));
     setBoletin(null);
   };
   return (
@@ -10113,6 +10233,67 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     try { setEvoLibre(localStorage.getItem("uro_evo_draft_" + seleccionado.id) || ""); } catch { setEvoLibre(""); }
   }, [seleccionado?.id]);
   const [evoEstructurada, setEvoEstructurada] = useState({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
+  // Dictado de voz: "inactivo" | "grabando" | "procesando"
+  const [dictado, setDictado] = useState("inactivo");
+  const [dictadoError, setDictadoError] = useState("");
+  const grabRef = useRef(null);
+
+  const detenerDictado = () => { try { grabRef.current?.recorder?.stop(); } catch {} };
+
+  const iniciarDictado = async () => {
+    setDictadoError("");
+    if (!grabacionDisponible()) { setDictadoError("Este navegador no permite grabar audio."); return; }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch {
+      setDictadoError("No se pudo acceder al micrófono. Revisa los permisos del sitio.");
+      return;
+    }
+    const mime = tipoAudioSoportado();
+    let recorder;
+    try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+    catch { recorder = new MediaRecorder(stream); }
+    const trozos = [];
+    recorder.ondataavailable = (e) => { if (e.data?.size) trozos.push(e.data); };
+    recorder.onstop = async () => {
+      // Se apaga el micrófono de inmediato: el indicador del navegador debe
+      // desaparecer apenas se suelta el botón, no al terminar de transcribir.
+      stream.getTracks().forEach((t) => t.stop());
+      grabRef.current = null;
+      const tipo = recorder.mimeType || mime || "audio/webm";
+      const blob = new Blob(trozos, { type: tipo });
+      if (blob.size < 2000) { setDictado("inactivo"); setDictadoError("La grabación fue demasiado corta."); return; }
+      setDictado("procesando");
+      try {
+        const ext = tipo.includes("mp4") ? "m4a" : tipo.includes("mpeg") ? "mp3" : tipo.includes("ogg") ? "ogg" : "webm";
+        const texto = await transcribirAudio(blob, ext);
+        const soap = await estructurarDictadoSOAP(texto);
+        setEvoEstructurada((prev) => {
+          const unir = (a, b) => (b ? (a ? a + "\n" + b : b) : a);
+          if (!soap) return { ...prev, subjetivo: unir(prev.subjetivo, texto) }; // sin JSON: no se pierde el dictado
+          return {
+            subjetivo: unir(prev.subjetivo, soap.subjetivo || ""),
+            objetivo: unir(prev.objetivo, soap.objetivo || ""),
+            examen: unir(prev.examen, soap.examen || ""),
+            indicaciones: unir(prev.indicaciones, soap.indicaciones || ""),
+          };
+        });
+        setDictado("inactivo");
+      } catch (err) {
+        setDictado("inactivo");
+        setDictadoError(err?.message || "No se pudo transcribir.");
+      }
+    };
+    grabRef.current = { recorder, stream };
+    recorder.start();
+    setDictado("grabando");
+  };
+
+  // Si se cierra la evolución con el micrófono abierto, se corta igual.
+  useEffect(() => () => {
+    try { grabRef.current?.recorder?.stop(); grabRef.current?.stream?.getTracks().forEach((t) => t.stop()); } catch {}
+  }, []);
   const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
   const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
@@ -12240,6 +12421,30 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     )}
   </div>
 
+  {/* DICTADO POR VOZ */}
+  {grabacionDisponible() && (
+    <div style={{display:"flex",flexDirection:"column",gap:6,padding:"10px 12px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        {dictado==="grabando" ? (
+          <button onClick={detenerDictado} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",fontSize:"var(--fs-1)",fontWeight:700,borderRadius:20,cursor:"pointer",border:"none",background:"var(--peligro)",color:"var(--texto-inv)"}}>
+            <span style={{width:9,height:9,borderRadius:"50%",background:"currentColor",animation:"uroLatido 1s ease-in-out infinite"}}/>
+            Detener y transcribir
+          </button>
+        ) : (
+          <button onClick={iniciarDictado} disabled={dictado==="procesando"} style={{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",fontSize:"var(--fs-1)",fontWeight:700,borderRadius:20,cursor:dictado==="procesando"?"default":"pointer",border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--primario)",opacity:dictado==="procesando"?0.6:1}}>
+            🎤 {dictado==="procesando" ? "Transcribiendo…" : "Dictar evolución"}
+          </button>
+        )}
+        <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",flex:1,minWidth:160,lineHeight:1.35}}>
+          {dictado==="grabando" ? "Grabando… habla con normalidad y detén al terminar."
+            : dictado==="procesando" ? "El audio se descarta al terminar; solo queda el texto."
+            : "Se reparte en los campos de abajo. Revisa siempre cifras y dosis antes de guardar."}
+        </span>
+      </div>
+      {dictadoError && <div style={{fontSize:"var(--fs-0)",color:"var(--peligro)",fontWeight:600}}>{dictadoError}</div>}
+    </div>
+  )}
+
   {/* SUBJETIVO */}
   <div>
     <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo (lo que refiere el paciente)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
@@ -13503,19 +13708,26 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
 }, [tab]);
 
   // ─── Tutorial: se muestra automáticamente la 1ª vez por usuario ───
+  // La marca vive en el servidor, así que no reaparece al cambiar de equipo.
+  const claveTutorial = `tutorial_v${TUTORIAL_VERSION}`;
   useEffect(() => {
     if (!currentUser) return;
-    try {
-      const clave = `uro_tutorial_visto_${currentUser.id}_v${TUTORIAL_VERSION}`;
-      if (!localStorage.getItem(clave)) {
-        setTutorialOpen(true);
-      }
-    } catch {}
+    let vivo = true;
+    (async () => {
+      const vistos = await leerFlagsVistos(currentUser.id);
+      // Migración desde la clave antigua por dispositivo: si ya lo vio acá, se
+      // sube al perfil en vez de mostrárselo de nuevo.
+      let legado = false;
+      try { legado = !!localStorage.getItem(`uro_tutorial_visto_${currentUser.id}_v${TUTORIAL_VERSION}`); } catch {}
+      if (legado && !vistos[claveTutorial]) { marcarFlagVisto(currentUser.id, claveTutorial); return; }
+      if (vivo && !vistos[claveTutorial]) setTutorialOpen(true);
+    })();
+    return () => { vivo = false; };
   }, [currentUser]);
 
   const cerrarTutorial = () => {
     setTutorialOpen(false);
-    try { if (currentUser) localStorage.setItem(`uro_tutorial_visto_${currentUser.id}_v${TUTORIAL_VERSION}`, "1"); } catch {}
+    if (currentUser) marcarFlagVisto(currentUser.id, claveTutorial);
   };
 
   // ─── Navegación con botón "atrás" del celular (PWA) ───
@@ -13648,7 +13860,14 @@ useEffect(() => {
   try { yaPreguntado = localStorage.getItem("uro_push_onboarding") === "1"; } catch {}
   if (yaPreguntado) return;
   let cancelado = false;
-  pushActivo().then((activo) => { if (!activo && !cancelado) setMostrarOnboardingPush(true); });
+  (async () => {
+    // El permiso de notificaciones es por dispositivo, pero la pregunta no
+    // debería repetirse en cada uno si el usuario ya dijo que no.
+    const vistos = await leerFlagsVistos(currentUser.id);
+    if (cancelado || vistos.push) return;
+    const activo = await pushActivo();
+    if (!activo && !cancelado) setMostrarOnboardingPush(true);
+  })();
   return () => { cancelado = true; };
 }, [currentUser]);
   // Autoscroll SOLO dentro del contenedor del chat. scrollIntoView desplazaba
@@ -14616,6 +14835,8 @@ if (!currentUser) {
         html, body, #root { background: var(--fondo); overscroll-behavior: none; }
         /* Todo contenedor con scroll propio: sin rebote ni franja blanca al final */
         div[style*="overflow-y"], div[style*="overflowY"] { overscroll-behavior: contain; }
+        @keyframes uroLatido { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.8); } }
+        @media (prefers-reduced-motion: reduce) { @keyframes uroLatido { 0%, 100% { opacity: 1; } } }
         @keyframes uro-slide-izq { from { transform: translateX(14%); opacity: .35; } to { transform: translateX(0); opacity: 1; } }
         @keyframes uro-slide-der { from { transform: translateX(-14%); opacity: .35; } to { transform: translateX(0); opacity: 1; } }
         @media (prefers-reduced-motion: reduce) {
