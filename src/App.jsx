@@ -2921,7 +2921,49 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.3.0";
+const VERSION = "v2.3.2";
+
+// ─── Diagnóstico visible en el dispositivo ────────────────────────
+// El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
+// F12. Estas líneas se guardan en memoria y se muestran dentro de la app
+// (menú del usuario → 🔧 Diagnóstico), para poder leerlas y copiarlas desde el
+// mismo dispositivo donde falla. También van a la consola cuando existe.
+const DIAG_LOGS = [];
+function logDiag(msg) {
+  const linea = `${new Date().toTimeString().slice(0, 8)}  ${msg}`;
+  DIAG_LOGS.push(linea);
+  if (DIAG_LOGS.length > 100) DIAG_LOGS.shift();
+  try { console.info("[UroSearch] " + msg); } catch {}
+}
+try { logDiag(`${VERSION} · bundle: ${document.querySelector('script[type="module"][src]')?.src?.split("/").pop() || "dev"}`); } catch {}
+
+// Panel de solo lectura con el registro. El botón Copiar deja todo en el
+// portapapeles para pegarlo en un mensaje, sin capturas.
+function DiagnosticoPanel({ onClose }) {
+  const [, refrescar] = useState(0);
+  useEffect(() => { const t = setInterval(() => refrescar((x) => x + 1), 1500); return () => clearInterval(t); }, []);
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(DIAG_LOGS.join("\n")); uroToast("Diagnóstico copiado"); }
+    catch { uroToast("No se pudo copiar; toma una captura"); }
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: "14px 14px 0 0", width: "100%", maxWidth: 640, maxHeight: "78dvh", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 14px", borderBottom: "0.5px solid var(--borde)" }}>
+          <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>🔧 Diagnóstico · {VERSION}</div>
+          <button onClick={copiar} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Copiar</button>
+          <button onClick={onClose} aria-label="Cerrar" style={{ background: "none", border: "none", fontSize: 19, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px", fontFamily: "ui-monospace, monospace", fontSize: 11.5, lineHeight: 1.6, color: "var(--texto-sec)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          {DIAG_LOGS.length ? DIAG_LOGS.join("\n") : "Sin eventos registrados todavía."}
+        </div>
+        <div style={{ padding: "8px 14px 14px", fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.45 }}>
+          Registro técnico local de esta sesión. No contiene datos de pacientes y no se envía a ninguna parte: copia y pega su contenido al reportar un problema.
+        </div>
+      </div>
+    </div>
+  );
+}
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -11059,7 +11101,10 @@ const cargarMiembrosEquipo = async () => {
     try {
       const sv = parseInt(localStorage.getItem("uro_pac_scroll_v") || "0", 10);
       const sh = parseInt(localStorage.getItem("uro_pac_scroll_h") || "0", 10);
-      if (sv <= 0 && sh <= 0) return;
+      // Registro diagnóstico deliberado: este bug lleva varios intentos y la
+      // única manera de cerrarlo es que la app misma diga qué leyó y qué hizo.
+      logDiag(`scroll pacientes: leído v=${sv} h=${sh} (pacientes=${pacientes.length})`);
+      if (sv <= 0 && sh <= 0) { logDiag("scroll pacientes: nada guardado → el problema está en el GUARDADO, no en la restauración"); return; }
       // Un solo requestAnimationFrame no basta: en el arranque en frío las
       // tarjetas todavía no tienen alto (fuentes, avatares, tarjetas que crecen
       // al montarse), así que el contenedor mide menos que `sv` y el navegador
@@ -11075,6 +11120,7 @@ const cargarMiembrosEquipo = async () => {
 
       const intentar = () => {
         if (cancelado || intentos++ > 90) {
+          logDiag(`scroll pacientes: restauración terminada ${cancelado ? "por gesto del usuario" : "SIN alcanzar la posición (contenido nunca creció lo suficiente)"} tras ${intentos} intentos`);
           ["pointerdown", "touchstart", "wheel", "keydown"].forEach((ev) =>
             window.removeEventListener(ev, abortar));
           return;
@@ -11095,7 +11141,8 @@ const cargarMiembrosEquipo = async () => {
           const actual = enVentana ? (window.scrollY || 0) : (scEl.scrollTop || 0);
           // Todavía no se alcanzó la posición porque falta contenido: reintentar.
           if (sv > 0 && actual < sv - 2 && maximo < sv) return requestAnimationFrame(intentar);
-        } catch {}
+          logDiag(`scroll pacientes: restaurado a ${actual}px de ${sv}px pedidos · contenedor=${enVentana ? "ventana" : "<" + (scEl.tagName || "?").toLowerCase() + ">"} · intento ${intentos}`);
+        } catch (e) { logDiag(`scroll pacientes: excepción al restaurar: ${e?.message || e}`); }
         ["pointerdown", "touchstart", "wheel", "keydown"].forEach((ev) =>
           window.removeEventListener(ev, abortar));
       };
@@ -11122,11 +11169,12 @@ const cargarMiembrosEquipo = async () => {
     const guardarYa = () => {
       clearTimeout(t);
       try {
-        if (!kanbanRef.current) return;
+        if (!kanbanRef.current) { logDiag("scroll pacientes: guardarYa sin contenedor (lista no montada)"); return; }
         const scEl = scrollParent(kanbanRef.current || document.body);
         const top = (scEl === document.body || scEl === document.documentElement) ? (window.scrollY || 0) : (scEl.scrollTop || 0);
         localStorage.setItem("uro_pac_scroll_v", String(Math.round(top)));
         localStorage.setItem("uro_pac_scroll_h", String(Math.round(kanbanRef.current.scrollLeft || 0)));
+        logDiag(`scroll pacientes: guardado v=${Math.round(top)} al salir/ocultar`);
       } catch {}
     };
     // capture:true también captura el scroll de contenedores internos (la fila horizontal)
@@ -14143,6 +14191,7 @@ const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cu
 const [guardandoMapa, setGuardandoMapa] = useState(false);
   const [topicOpen, setTopicOpen] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [diagOpen, setDiagOpen] = useState(false);   // panel de diagnóstico en el dispositivo
   const appMovil = useIsMobile();  // ocultar el header solo tiene sentido en celular
   const [headerOculto, setHeaderOculto] = useState(false); // se oculta al hacer scroll hacia abajo
   const scrollRef = useRef({ ultimo: 0, acum: 0, bloqueoHasta: 0 });
@@ -15379,6 +15428,7 @@ if (!currentUser) {
       <OfflineBanner/>
       {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
       {!bloqueado && <BoletinModal currentUser={currentUser} />}
+      {diagOpen && <DiagnosticoPanel onClose={() => setDiagOpen(false)} />}
       {!bloqueado && versionNueva && (
         <div style={{ position: "fixed", left: 12, right: 12, bottom: "calc(76px + env(safe-area-inset-bottom, 0px))", zIndex: 950, maxWidth: 420, margin: "0 auto", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "var(--primario)", color: "var(--texto-inv)", borderRadius: 12, boxShadow: "0 6px 20px rgba(0,0,0,0.28)" }}>
           <span style={{ flex: 1, fontSize: "var(--fs-1)", fontWeight: 600, lineHeight: 1.35 }}>Hay una versión nueva de UroSearch.</span>
@@ -15474,6 +15524,9 @@ if (!currentUser) {
             </button>
             <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🧭 Ver tutorial
+            </button>
+            <button onClick={()=>{ setMenuOpen(false); setDiagOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+              🔧 Diagnóstico
             </button>
             <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
