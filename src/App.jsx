@@ -24,7 +24,7 @@ import { uroToast, uroConfirm, UroDialogHost } from "./ui";
 import LogbookPanel from "./LogbookPanel";
 import InterconsultasPanel from "./InterconsultasPanel";
 import SeguimientoPanel, { resumenSeguimientoParaIA } from "./SeguimientoPanel";
-import { activarPush, desactivarPush, pushActivo, pushSoportado, probarPush, esIOS, estaInstalada } from "./push";
+import { activarPush, desactivarPush, pushActivo, pushSoportado, esIOS, estaInstalada } from "./push";
 import { guardarSnapshot, leerSnapshot } from "./offlineCache";
 import { Ico } from "./iconos";
 import { encolar, procesarCola, pendientesCount } from "./offlineQueue";
@@ -357,6 +357,61 @@ function clavesVocabulario() {
 }
 function pistaVocabulario() {
   return `Dictado clínico de urología en español de Chile. Siglas frecuentes: ${clavesVocabulario().replace(/,/g, ", ")}. Escribe las siglas en mayúsculas y los números como cifras.`;
+}
+
+// Hook de dictado reutilizable. `onTexto(textoCrudo)` recibe la transcripción;
+// cada pantalla decide qué hacer con ella (el chat la escribe en el input, la
+// evolución la reparte en el SOAP).
+function useDictado(onTexto) {
+  const [estado, setEstado] = useState("inactivo"); // inactivo | grabando | procesando
+  const [error, setError] = useState("");
+  const ref = useRef(null);
+  const cbRef = useRef(onTexto);
+  cbRef.current = onTexto;
+
+  const detener = () => { try { ref.current?.recorder?.stop(); } catch {} };
+
+  const iniciar = async () => {
+    setError("");
+    if (!grabacionDisponible()) { setError("Este navegador no permite grabar audio."); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch { setError("No se pudo acceder al micrófono. Revisa los permisos del sitio."); return; }
+    const mime = tipoAudioSoportado();
+    let recorder;
+    try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+    catch { recorder = new MediaRecorder(stream); }
+    const trozos = [];
+    recorder.ondataavailable = (e) => { if (e.data?.size) trozos.push(e.data); };
+    recorder.onstop = async () => {
+      // El micrófono se apaga antes de transcribir: el indicador del navegador
+      // debe desaparecer al soltar, no al terminar.
+      stream.getTracks().forEach((t) => t.stop());
+      ref.current = null;
+      const tipo = recorder.mimeType || mime || "audio/webm";
+      const blob = new Blob(trozos, { type: tipo });
+      if (blob.size < 2000) { setEstado("inactivo"); setError("La grabación fue demasiado corta."); return; }
+      setEstado("procesando");
+      try {
+        const ext = tipo.includes("mp4") ? "m4a" : tipo.includes("mpeg") ? "mp3" : tipo.includes("ogg") ? "ogg" : "webm";
+        const texto = await transcribirAudio(blob, ext);
+        await cbRef.current(texto);
+        setEstado("inactivo");
+      } catch (err) {
+        setEstado("inactivo");
+        setError(err?.message || "No se pudo transcribir.");
+      }
+    };
+    ref.current = { recorder, stream };
+    recorder.start();
+    setEstado("grabando");
+  };
+
+  useEffect(() => () => {
+    try { ref.current?.recorder?.stop(); ref.current?.stream?.getTracks().forEach((t) => t.stop()); } catch {}
+  }, []);
+
+  return { estado, error, iniciar, detener, setError };
 }
 
 async function transcribirAudio(blob, extension) {
@@ -941,9 +996,13 @@ async function leerFlagsVistos(userId) {
     const { data, error } = await supabase.from("perfiles").select("onboarding_visto").eq("id", userId).single();
     if (error) throw error;
     return data?.onboarding_visto || {};
-  } catch {
+  } catch (e) {
     // Sin red o sin la columna todavía: se cae al espejo local para no
     // bloquear al usuario ni mostrarle el tutorial en un loop.
+    // Se avisa por consola: un respaldo silencioso esconde el caso más común
+    // (la migración no se ejecutó), y entonces el tutorial parece "no
+    // arreglado" cuando en realidad falta la columna en la base.
+    console.warn("[UroSearch] onboarding_visto no disponible; usando respaldo local. ¿Se ejecutó la migración de perfiles?", e?.message || e);
     try { return JSON.parse(localStorage.getItem(`uro_vistos_${userId}`) || "{}"); } catch { return {}; }
   }
 }
@@ -957,8 +1016,11 @@ async function marcarFlagVisto(userId, clave, valor = true) {
     // Merge en el servidor: se relee para no pisar flags escritos por otro
     // dispositivo entre la lectura inicial y este guardado.
     const previos = await leerFlagsVistos(userId);
-    await supabase.from("perfiles").update({ onboarding_visto: { ...previos, ...local, [clave]: valor } }).eq("id", userId);
-  } catch {}
+    const { error } = await supabase.from("perfiles").update({ onboarding_visto: { ...previos, ...local, [clave]: valor } }).eq("id", userId);
+    if (error) throw error;
+  } catch (e) {
+    console.warn("[UroSearch] no se pudo guardar el flag de onboarding en el servidor:", e?.message || e);
+  }
 }
 
 // ─── Onboarding de notificaciones: se ofrece UNA vez al abrir la app ───
@@ -1536,11 +1598,6 @@ function ConfigModal({ onClose, currentUser }) {
                 <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 6, lineHeight: 1.45, padding: "8px 10px", background: "var(--fondo-suave)", borderRadius: 8 }}>
                   📱 En iPhone, primero agrega UroSearch a la pantalla de inicio (Compartir → Agregar a inicio) y ábrela desde ahí; Safari no permite notificaciones desde una pestaña.
                 </div>
-              )}
-              {push && (
-                <button onClick={async () => { const r = await probarPush(); if (!r.ok) setPushMsg("⚠️ " + r.error); }} style={{ marginTop: 6, padding: "7px 12px", fontSize: "var(--fs-0)", background: "none", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>
-                  Enviar una de prueba
-                </button>
               )}
               {pushMsg && <div style={{ fontSize: "var(--fs-0)", marginTop: 6, lineHeight: 1.45, color: pushMsg.startsWith("✓") ? "var(--exito)" : pushMsg.startsWith("⚠️") ? "var(--peligro)" : "var(--texto-ter)" }}>{pushMsg}</div>}
             </>
@@ -2689,7 +2746,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.2.0";
+const VERSION = "v2.3.0";
 const ESPECIALIDADES = ["Urología", "Medicina General", "Cirugía", "Nefrología", "Trasplantología", "Residente Urología", "Interno", "Otro"];
 
 // ─── Perfiles / roles y permisos ───────────────────────────────
@@ -4423,8 +4480,7 @@ function FeedbackModal({ currentUser, tabActual, onClose }) {
     return () => { vivo = false; };
   }, [currentUser?.id]);
   const [mensaje, setMensaje] = useState("");
-  const [archivo, setArchivo] = useState(null);
-  const [archivoNombre, setArchivoNombre] = useState("");
+  const [archivos, setArchivos] = useState([]);
   const [enviando, setEnviando] = useState(false);
   const [msg, setMsg] = useState("");
   const fileRef = useRef(null);
@@ -4436,34 +4492,51 @@ function FeedbackModal({ currentUser, tabActual, onClose }) {
     ["comentario", "💬 Comentario"],
   ];
 
+  const MAX_IMGS = 4;
   const onFile = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { setMsg("⚠️ La imagen no debe superar 10 MB."); return; }
-    setArchivo(f); setArchivoNombre(f.name); setMsg("");
+    const nuevos = Array.from(e.target.files || []);
+    if (!nuevos.length) return;
+    const libres = MAX_IMGS - archivos.length;
+    if (libres <= 0) { setMsg(`⚠️ Máximo ${MAX_IMGS} imágenes.`); return; }
+    const aceptados = [];
+    for (const f of nuevos.slice(0, libres)) {
+      if (f.size > 10 * 1024 * 1024) { setMsg(`⚠️ "${f.name}" supera los 10 MB y se omitió.`); continue; }
+      aceptados.push(f);
+    }
+    if (aceptados.length) { setArchivos((prev) => [...prev, ...aceptados]); setMsg(""); }
+    if (e.target) e.target.value = "";
   };
+  const quitarArchivo = (i) => setArchivos((prev) => prev.filter((_, j) => j !== i));
 
   const enviar = async () => {
     if (!mensaje.trim()) { setMsg("⚠️ Escribe tu mensaje antes de enviar."); return; }
     setEnviando(true); setMsg("");
     try {
-      let imagen_path = null;
-      if (archivo) {
-        // Se comprime antes de subir para no gastar almacenamiento ni datos móviles.
-        const b64 = await comprimirImagenPac(archivo, 1400, 0.8);
-        const bin = atob(b64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        const path = `${currentUser.id}/${Date.now()}.jpg`;
-        const up = await supabase.storage.from("feedback").upload(path, new Blob([bytes], { type: "image/jpeg" }), { contentType: "image/jpeg" });
-        if (up.error) throw new Error(up.error.message);
-        imagen_path = path;
+      // Se suben todas las capturas. `imagen_path` guarda la primera para no
+      // romper el panel de admin, que espera una sola; el resto va en
+      // `imagenes_paths`. Un fallo al subir una imagen no debe perder el texto
+      // del reporte, así que se avisa y se continúa.
+      const rutas = [];
+      const fallidas = [];
+      for (let i = 0; i < archivos.length; i++) {
+        try {
+          // Se comprime antes de subir para no gastar almacenamiento ni datos móviles.
+          const b64 = await comprimirImagenPac(archivos[i], 1400, 0.8);
+          const bin = atob(b64);
+          const bytes = new Uint8Array(bin.length);
+          for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+          const path = `${currentUser.id}/${Date.now()}_${i}.jpg`;
+          const up = await supabase.storage.from("feedback").upload(path, new Blob([bytes], { type: "image/jpeg" }), { contentType: "image/jpeg" });
+          if (up.error) throw new Error(up.error.message);
+          rutas.push(path);
+        } catch { fallidas.push(archivos[i].name); }
       }
       const { error } = await supabase.from("feedback").insert({
         user_id: currentUser.id,
         tipo,
-        mensaje: mensaje.trim(),
-        imagen_path,
+        mensaje: mensaje.trim() + (fallidas.length ? `\n\n[No se pudieron adjuntar: ${fallidas.join(", ")}]` : ""),
+        imagen_path: rutas[0] || null,
+        imagenes_paths: rutas.length ? rutas : null,
         contexto: `${tabActual || "-"} · ${VERSION}`,
       });
       if (error) throw new Error(error.message);
@@ -4494,11 +4567,20 @@ function FeedbackModal({ currentUser, tabActual, onClose }) {
 
         <textarea value={mensaje} onChange={e => setMensaje(e.target.value)} rows={5} placeholder="Escribe aquí…" style={{ ...inp, resize: "vertical" }} disabled={enviando} />
 
-        <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} disabled={enviando} />
-        <button onClick={() => fileRef.current?.click()} disabled={enviando} style={{ width: "100%", padding: 10, fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10, textAlign: "left" }}>
-          📎 {archivoNombre || "Adjuntar una captura (opcional)"}
+        <input ref={fileRef} type="file" accept="image/*" multiple onChange={onFile} style={{ display: "none" }} disabled={enviando} />
+        <button onClick={() => fileRef.current?.click()} disabled={enviando || archivos.length >= MAX_IMGS} style={{ width: "100%", padding: 10, fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: "pointer", marginBottom: 10, textAlign: "left", opacity: archivos.length >= MAX_IMGS ? 0.5 : 1 }}>
+          📎 {archivos.length ? `${archivos.length} de ${MAX_IMGS} capturas · agregar otra` : "Adjuntar capturas (opcional)"}
         </button>
-        {archivoNombre && <button onClick={() => { setArchivo(null); setArchivoNombre(""); }} style={{ background: "none", border: "none", color: "var(--texto-ter)", fontSize: "var(--fs-0)", cursor: "pointer", padding: 0, marginBottom: 10 }}>Quitar imagen</button>}
+        {archivos.length > 0 && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            {archivos.map((f, i) => (
+              <div key={i} style={{ position: "relative" }}>
+                <img src={URL.createObjectURL(f)} alt="" onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)} style={{ height: 64, borderRadius: 8, border: "0.5px solid var(--borde)", display: "block" }} />
+                <button onClick={() => quitarArchivo(i)} aria-label="Quitar" style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", border: "none", background: "var(--peligro)", color: "var(--texto-inv)", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {msg && <div style={{ fontSize: "var(--fs-1)", color: "var(--peligro)", background: "var(--peligro-bg)", padding: "8px 10px", borderRadius: 6, marginBottom: 10, lineHeight: 1.45 }}>{msg}</div>}
 
@@ -12668,12 +12750,17 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {nuevoEx.tipo === "Laboratorio" && PARAMETROS_LAB[nuevoEx.nombre] && (
             <div style={{padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6,border:"0.5px solid var(--borde)",marginBottom:6}}>
               <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginBottom:8}}>Completa solo los parámetros que tengas (los vacíos se omiten):</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+              {/* Antes: dos columnas fijas con la etiqueta y la unidad al lado del
+                  input en la misma fila. En un teléfono el input quedaba de unos
+                  pocos píxeles y no se veía la cifra al escribirla. Ahora la
+                  etiqueta va arriba y las columnas solo se parten si hay ancho. */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(190px, 1fr))",gap:10}}>
                 {PARAMETROS_LAB[nuevoEx.nombre].map(param => (
-                  <div key={param.key} style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{fontSize:"var(--fs-0)",color:"var(--texto)",fontWeight:500,minWidth:74}}>{param.label}</span>
-                    <input type="number" value={paramsLab[param.key] || ""} onChange={e=>setParamsLab({...paramsLab,[param.key]:e.target.value})} style={{...inputStyle,marginBottom:0,padding:"6px 8px",fontSize:"var(--fs-1)"}}/>
-                    {param.unidad && <span style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",minWidth:38}}>{param.unidad}</span>}
+                  <div key={param.key} style={{display:"flex",flexDirection:"column",gap:3,minWidth:0}}>
+                    <span style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",fontWeight:600}}>
+                      {param.label}{param.unidad ? <span style={{fontWeight:400,color:"var(--texto-ter)"}}> ({param.unidad})</span> : null}
+                    </span>
+                    <input type="number" inputMode="decimal" value={paramsLab[param.key] || ""} onChange={e=>setParamsLab({...paramsLab,[param.key]:e.target.value})} style={{...inputStyle,marginBottom:0,padding:"9px 10px",fontSize:"var(--fs-2)",width:"100%",minWidth:0,boxSizing:"border-box"}}/>
                   </div>
                 ))}
               </div>
@@ -13644,6 +13731,12 @@ const [conversacionActual, setConversacionActual] = useState(null); // ID de la 
 const [panelConversacionesAbierto, setPanelConversacionesAbierto] = useState(false); // mostrar/ocultar lista
 const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cuando se carga una conversación
   const [input, setInput] = useState("");
+  // Dictado en el chat: la transcripción se escribe en el input y NO se envía
+  // sola. Uros responde con apoyo clínico; mandar una consulta mal transcrita
+  // sin verla sería peor que escribirla.
+  const dictadoChat = useDictado((texto) => {
+    setInput((prev) => (prev.trim() ? prev.trim() + " " + texto : texto));
+  });
   const [loading, setLoading] = useState(false);
   const [modo, setModo] = useState("precisa");
   const [feedbackDado, setFeedbackDado] = useState({}); // índice de mensaje → "up" | "down"
@@ -15151,7 +15244,17 @@ if (!currentUser) {
 
             </div>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-              <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder="Escribe tu consulta..." rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
+              <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg();}}} placeholder={dictadoChat.estado==="grabando"?"Grabando…":dictadoChat.estado==="procesando"?"Transcribiendo…":"Escribe tu consulta..."} rows={2} style={{flex:1,resize:"none",padding:"10px 12px",fontSize:"var(--fs-2)",borderRadius:8,border:"0.5px solid var(--borde)",background:"var(--superficie)",color:"var(--texto)",lineHeight:1.5,outline:"none",fontFamily:"inherit"}}/>
+              {grabacionDisponible() && (
+                <button
+                  onClick={()=>dictadoChat.estado==="grabando"?dictadoChat.detener():dictadoChat.iniciar()}
+                  disabled={dictadoChat.estado==="procesando"}
+                  title={dictadoChat.estado==="grabando"?"Detener y transcribir":"Dictar la consulta"}
+                  aria-label={dictadoChat.estado==="grabando"?"Detener y transcribir":"Dictar la consulta"}
+                  style={{flexShrink:0,width:42,height:42,alignSelf:"flex-end",borderRadius:"50%",cursor:dictadoChat.estado==="procesando"?"default":"pointer",border:dictadoChat.estado==="grabando"?"none":"0.5px solid var(--borde)",background:dictadoChat.estado==="grabando"?"var(--peligro)":"var(--superficie)",color:dictadoChat.estado==="grabando"?"var(--texto-inv)":"var(--primario)",fontSize:17,opacity:dictadoChat.estado==="procesando"?0.55:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {dictadoChat.estado==="grabando"?"■":dictadoChat.estado==="procesando"?"…":"🎤"}
+                </button>
+              )}
               <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:"var(--fs-2)",cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
             </div>
             <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",lineHeight:1.4,marginTop:8,textAlign:"center"}}>

@@ -193,6 +193,11 @@ function etiquetaEvento(r) {
 const esMayor = (r) => !!r?.complicacion && ["IIIa", "IIIb", "IVa", "IVb", "V"].includes(String(r.clavien || ""));
 const esIncidente = (r) => r?.escala_complicacion === "incidente";
 
+// Identidad estable de un grupo de posibles duplicados: los ids de sus
+// registros, ordenados. No depende del agrupador de procedimientos ni de los
+// alias, así que un grupo descartado sigue descartado tras actualizar la app.
+const claveIds = (items) => "ids:" + items.map((r) => String(r.id)).sort().join("-");
+
 // "No aplica" es una respuesta válida al registrar, pero no aporta nada impresa
 // junto al nombre del procedimiento.
 const latTxt = (r) => (r?.lateralidad && r.lateralidad !== "No aplica" ? r.lateralidad : "");
@@ -233,7 +238,8 @@ const REGISTRO_VACIO = {
   hallazgos: "", tecnica: "",
   complicacion: false, clavien: "", escala_complicacion: "", momento_complicacion: "intraoperatoria", detalles_complicacion: "", observaciones: "",
   // Complementos posteriores (biopsia / control imagenológico)
-  biopsia_resultado: "", biopsia_isup: "", control_stone_free: "", control_imagen_detalle: "",
+  biopsia_resultado: "", biopsia_isup: "", biopsia_peso_g: "", biopsia_extension: "", biopsia_margenes: "", rtuv_musculo: "",
+  control_stone_free: "", control_imagen_detalle: "",
   // Control post-operatorio: cómo llegó el paciente al control (comentario + Clavien-Dindo)
   control_fecha: "", control_evolucion: "", control_resultado: "",
 };
@@ -275,6 +281,34 @@ const OPCIONES_CONTROL_POSTOP = [
   ["clavien_5", "Clavien V — fallecimiento"],
 ];
 const LABEL_CONTROL_POSTOP = Object.fromEntries(OPCIONES_CONTROL_POSTOP);
+
+// ─── Campos de patología según el procedimiento ───────────────────
+// No todos los datos aplican a toda cirugía: el peso de la pieza y la extensión
+// solo tienen sentido si se resecó un órgano, y la presencia de músculo en la
+// muestra es una pregunta exclusiva de la RTU-V (define si el T es evaluable).
+// Mostrar los seis campos siempre obliga a leer y descartar; se muestran solo
+// los que corresponden.
+const EXTENSION_PROSTATA = ["Órgano-confinada (pT2)", "Extraprostática (pT3a)", "Invade vesículas seminales (pT3b)", "Invade estructuras vecinas (pT4)"];
+const EXTENSION_RENAL = ["Limitada al riñón", "Invade grasa perirrenal", "Invade vena renal / VCI", "Invade más allá de Gerota"];
+const EXTENSION_VESICAL = ["No músculo-invasor (Ta / T1 / CIS)", "Músculo-invasor (T2+)", "No evaluable"];
+const MUSCULO_MUESTRA = [["presente", "Sí, hay músculo detrusor"], ["ausente", "No hay músculo detrusor"], ["no_evaluable", "No evaluable"]];
+
+// Devuelve qué campos mostrar para un procedimiento dado.
+function camposPatologia(procedimiento) {
+  const t = sinTildes(procedimiento || "");
+  const esProstatectomia = /prostatectomia|adenomectomia|rtu\s*-?\s*p|rtup|reseccion transuretral de prostata|holep|enucleacion/.test(t);
+  const esRtuv = /rtu\s*-?\s*v|rtuv|reseccion transuretral de (vejiga|tumor vesical)|tumor vesical/.test(t);
+  const esRenal = /nefrectomia|nefroureterectomia|tumorectomia renal|nefrourectomia/.test(t);
+  const esBxProstata = /biopsia\s*prostat/.test(t);
+  return {
+    isup: esProstatectomia || esBxProstata,
+    peso: esProstatectomia || esRenal,          // peso de la pieza operatoria
+    extension: esProstatectomia ? EXTENSION_PROSTATA : esRenal ? EXTENSION_RENAL : esRtuv ? EXTENSION_VESICAL : null,
+    margenes: esProstatectomia || esRenal,
+    musculo: esRtuv,
+    etiquetaPeso: esRenal ? "Peso de la pieza (g)" : "Peso de la próstata / tejido resecado (g)",
+  };
+}
 const esClavienMayor = (v) => ["clavien_3a", "clavien_3b", "clavien_4a", "clavien_4b", "clavien_5"].includes(v);
 
 // ─── Detecta el rol del usuario según su nombre en el protocolo ───
@@ -608,6 +642,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [certHasta, setCertHasta] = useState("");
   const [certGenerando, setCertGenerando] = useState(false);
   const [listaAbierta, setListaAbierta] = useState(null);      // {titulo, ids} visor genérico de cirugías
+  const [patRapida, setPatRapida] = useState(null);            // {reg, campos, datos} panel rápido de biopsia/control
+  const [patGuardando, setPatGuardando] = useState(false);
   const [complDesglose, setComplDesglose] = useState(false);   // desglose intra/post de complicaciones mayores
   const [complRapida, setComplRapida] = useState(null);        // {reg, valor, detalle} editor rápido por pulsación larga
   const [complGuardando, setComplGuardando] = useState(false);
@@ -809,6 +845,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       tamano_prostata_cc: reg.tamano_prostata_cc ? parseFloat(reg.tamano_prostata_cc) : null,
       biopsia_resultado: reg.biopsia_resultado.trim() || null,
       biopsia_isup: reg.biopsia_isup || null,
+      biopsia_peso_g: reg.biopsia_peso_g === "" || reg.biopsia_peso_g == null ? null : Number(reg.biopsia_peso_g),
+      biopsia_extension: reg.biopsia_extension || null,
+      biopsia_margenes: reg.biopsia_margenes || null,
+      rtuv_musculo: reg.rtuv_musculo || null,
       control_stone_free: reg.control_stone_free || null,
       control_imagen_detalle: reg.control_imagen_detalle.trim() || null,
       control_fecha: reg.control_fecha || null,
@@ -1138,6 +1178,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       duracion_min: r.duracion_min != null ? String(r.duracion_min) : "", sangrado_ml: r.sangrado_ml != null ? String(r.sangrado_ml) : "",
       tamano_litiasis_mm: r.tamano_litiasis_mm != null ? String(r.tamano_litiasis_mm) : "", tamano_prostata_cc: r.tamano_prostata_cc != null ? String(r.tamano_prostata_cc) : "",
       biopsia_resultado: r.biopsia_resultado || "", biopsia_isup: r.biopsia_isup || "",
+      biopsia_peso_g: r.biopsia_peso_g ?? "", biopsia_extension: r.biopsia_extension || "", biopsia_margenes: r.biopsia_margenes || "", rtuv_musculo: r.rtuv_musculo || "",
       control_stone_free: r.control_stone_free || "", control_imagen_detalle: r.control_imagen_detalle || "",
       control_fecha: r.control_fecha || "", control_evolucion: r.control_evolucion || "", control_resultado: r.control_resultado || "",
       hallazgos: r.hallazgos || "", tecnica: r.tecnica || "",
@@ -1166,7 +1207,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   // ─── Exportar CSV (incluye complicaciones y complementos) ───
   const exportarCSV = () => {
-    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "escala_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
+    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "biopsia_peso_g", "biopsia_extension", "biopsia_margenes", "rtuv_musculo", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "escala_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : c === "momento_complicacion" ? (r.complicacion ? (LABEL_MOMENTO[r[c] || "intraoperatoria"]) : "") : c === "control_resultado" ? (LABEL_CONTROL_POSTOP[r[c]] || r[c]) : r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -1192,13 +1233,20 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       const ident = norm(r.rut) || norm(r.ficha_clinica) || norm(r.iniciales);
       if (!ident) return;
       const clave = `${r.fecha}|${grupoProc(r.procedimiento)}|${ident}`;
+      // (la clave de agrupación es derivada; la de "ignorar" se calcula abajo
+      //  a partir de los ids, que sí son estables entre versiones)
       if (!grupos.has(clave)) grupos.set(clave, []);
       grupos.get(clave).push(r);
     });
     return Array.from(grupos.entries())
       .filter(([, g]) => g.length > 1)
-      .map(([clave, g]) => ({ clave, items: g }))
-      .filter((g) => !dupIgnorados.includes(g.clave))
+      // La clave que se guarda al descartar un grupo se arma con los ids de los
+      // registros, no con fecha+procedimiento+paciente. La clave derivada
+      // cambiaba al cambiar el agrupador de procedimientos o al reagrupar con
+      // alias, y entonces el grupo descartado reaparecía en cada actualización
+      // como si nunca lo hubieras revisado.
+      .map(([clave, g]) => ({ clave, claveIds: claveIds(g), items: g }))
+      .filter((g) => !dupIgnorados.includes(g.claveIds) && !dupIgnorados.includes(g.clave))
       .sort((a, b) => (b.items[0].fecha || "").localeCompare(a.items[0].fecha || ""));
   }, [registros, grupoProc, dupIgnorados]);
   const nDuplicados = gruposDuplicados.reduce((acc, g) => acc + (g.items.length - 1), 0);
@@ -1220,6 +1268,52 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     const result = await actualizarRegistroLogbook(r.id, camposEvento("ninguno"));
     if (!result.ok) return uroToast("Error: " + result.error);
     setRegistros((prev) => prev.map((x) => (x.id === r.id ? result.registro : x)));
+  };
+
+  // ─── Panel rápido de patología y control post-operatorio ───
+  // La biopsia llega días o semanas después de la cirugía. Abrir el formulario
+  // completo para anotar un ISUP obliga a pasar por veinte campos ya llenos y
+  // arriesga tocar algo por error; esto escribe solo lo que corresponde al
+  // procedimiento y nada más.
+  const abrirPatRapida = (r) => {
+    setPatRapida({
+      reg: r,
+      campos: camposPatologia(r.procedimiento),
+      datos: {
+        biopsia_resultado: r.biopsia_resultado || "",
+        biopsia_isup: r.biopsia_isup || "",
+        biopsia_peso_g: r.biopsia_peso_g ?? "",
+        biopsia_extension: r.biopsia_extension || "",
+        biopsia_margenes: r.biopsia_margenes || "",
+        rtuv_musculo: r.rtuv_musculo || "",
+        control_fecha: r.control_fecha || "",
+        control_resultado: r.control_resultado || "",
+        control_evolucion: r.control_evolucion || "",
+      },
+    });
+  };
+  const setPat = (k, v) => setPatRapida((p) => ({ ...p, datos: { ...p.datos, [k]: v } }));
+  const guardarPatRapida = async () => {
+    if (!patRapida) return;
+    setPatGuardando(true);
+    const d = patRapida.datos;
+    const parche = {
+      biopsia_resultado: d.biopsia_resultado.trim() || null,
+      biopsia_isup: d.biopsia_isup || null,
+      biopsia_peso_g: d.biopsia_peso_g === "" ? null : Number(d.biopsia_peso_g),
+      biopsia_extension: d.biopsia_extension || null,
+      biopsia_margenes: d.biopsia_margenes || null,
+      rtuv_musculo: d.rtuv_musculo || null,
+      control_fecha: d.control_fecha || null,
+      control_resultado: d.control_resultado || null,
+      control_evolucion: d.control_evolucion.trim() || null,
+    };
+    const result = await actualizarRegistroLogbook(patRapida.reg.id, parche);
+    setPatGuardando(false);
+    if (!result.ok) return uroToast("Error: " + result.error);
+    setRegistros((prev) => prev.map((x) => (x.id === patRapida.reg.id ? result.registro : x)));
+    setPatRapida(null);
+    uroToast("Registro complementado");
   };
 
   // ─── Editor rápido de complicación (pulsación larga sobre el registro) ───
@@ -1260,8 +1354,8 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     return largo;
   };
 
-  const ignorarDuplicado = (clave) => {
-    const nuevo = [...dupIgnorados, clave];
+  const ignorarDuplicado = (claveIds) => {
+    const nuevo = [...dupIgnorados, claveIds];
     setDupIgnorados(nuevo);
     try { localStorage.setItem("uro_logbook_dup_ign", JSON.stringify(nuevo)); } catch {}
   };
@@ -1825,6 +1919,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {(r.hora_inicio || r.sangrado_ml != null) && <div>{r.hora_inicio && <><b>Horario:</b> {(r.hora_inicio || "").slice(0, 5)}–{(r.hora_termino || "").slice(0, 5)}  </>}{r.sangrado_ml != null && <><b>Sangrado:</b> {r.sangrado_ml} ml</>}</div>}
                   {(r.tamano_litiasis_mm != null || r.tamano_prostata_cc != null) && <div>{r.tamano_litiasis_mm != null && <><b>Litiasis:</b> {r.tamano_litiasis_mm} mm  </>}{r.tamano_prostata_cc != null && <><b>Próstata:</b> {r.tamano_prostata_cc} cc</>}</div>}
                   {(r.biopsia_resultado || r.biopsia_isup) && <div><b>Biopsia:</b> {r.biopsia_resultado}{r.biopsia_isup ? ` (ISUP ${r.biopsia_isup})` : ""}</div>}
+                  {(r.biopsia_peso_g != null || r.biopsia_extension || r.biopsia_margenes) && (
+                    <div><b>Pieza:</b> {[r.biopsia_peso_g != null ? `${r.biopsia_peso_g} g` : "", r.biopsia_extension, r.biopsia_margenes ? `márgenes ${r.biopsia_margenes.toLowerCase()}` : ""].filter(Boolean).join(" · ")}</div>
+                  )}
+                  {r.rtuv_musculo && <div><b>Músculo en la muestra:</b> {(MUSCULO_MUESTRA.find(([v]) => v === r.rtuv_musculo) || [, r.rtuv_musculo])[1]}</div>}
                   {r.control_stone_free && <div><b>Control:</b> {r.control_stone_free === "stone_free" ? "✓ Stone free" : r.control_stone_free === "fragmento_residual" ? "Fragmento residual" : "Pendiente"}{r.control_imagen_detalle ? ` — ${r.control_imagen_detalle}` : ""}</div>}
                   {(r.control_resultado || r.control_evolucion) && <div><b>Control post-op{r.control_fecha ? ` (${r.control_fecha})` : ""}:</b> {LABEL_CONTROL_POSTOP[r.control_resultado] || ""}{r.control_evolucion ? `${r.control_resultado ? " — " : ""}${r.control_evolucion}` : ""}</div>}
                   {r.hallazgos && <div><b>Hallazgos:</b> {r.hallazgos}</div>}
@@ -1834,6 +1932,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                     {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>🖼 Ver protocolo</button>}
                     <button onClick={() => empezarEdicion(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>✏️ Editar</button>
+                    <button onClick={() => abrirPatRapida(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)", color: "var(--primario)", fontWeight: 700 }}>➕ Biopsia / control</button>
                     <button onClick={() => abrirComplRapida(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>⚠️ Complicación</button>
                     <button onClick={() => eliminar(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)", color: "var(--peligro)" }}>🗑 Eliminar</button>
                   </div>
@@ -2119,6 +2218,94 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         );
       })()}
 
+      {/* ─── Modal: complementar biopsia / control post-operatorio ─── */}
+      {patRapida && (
+        <div onClick={() => setPatRapida(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", border: "0.5px solid var(--borde)", borderRadius: 14, padding: 16, width: "100%", maxWidth: 560, maxHeight: "88dvh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--texto)" }}>Complementar registro</div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2 }}>
+                  {patRapida.reg.procedimiento || "—"}{latTxt(patRapida.reg) ? ` (${latTxt(patRapida.reg).toLowerCase()})` : ""} · {(patRapida.reg.fecha || "").split("-").reverse().join("/")}
+                  {patRapida.reg.iniciales ? ` · ${patRapida.reg.iniciales}` : ""}
+                </div>
+              </div>
+              <button onClick={() => setPatRapida(null)} style={{ background: "none", border: "none", fontSize: 20, color: "var(--texto-ter)", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            </div>
+
+            <div style={{ marginTop: 14, fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)" }}>🔬 Anatomía patológica</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginTop: 8 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={lbl}>Resultado</label>
+                <input style={inp} value={patRapida.datos.biopsia_resultado} onChange={(e) => setPat("biopsia_resultado", e.target.value)} placeholder="Ej: Adenocarcinoma acinar" />
+              </div>
+              {patRapida.campos.isup && (
+                <div>
+                  <label style={lbl}>ISUP</label>
+                  <select style={inp} value={patRapida.datos.biopsia_isup} onChange={(e) => setPat("biopsia_isup", e.target.value)}>
+                    <option value="">—</option>{["1", "2", "3", "4", "5"].map((g) => <option key={g} value={g}>ISUP {g}</option>)}
+                  </select>
+                </div>
+              )}
+              {patRapida.campos.peso && (
+                <div>
+                  <label style={lbl}>{patRapida.campos.etiquetaPeso}</label>
+                  <input type="number" inputMode="decimal" style={inp} value={patRapida.datos.biopsia_peso_g} onChange={(e) => setPat("biopsia_peso_g", e.target.value)} placeholder="g" />
+                </div>
+              )}
+              {patRapida.campos.extension && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={lbl}>Extensión</label>
+                  <select style={inp} value={patRapida.datos.biopsia_extension} onChange={(e) => setPat("biopsia_extension", e.target.value)}>
+                    <option value="">—</option>{patRapida.campos.extension.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </div>
+              )}
+              {patRapida.campos.margenes && (
+                <div>
+                  <label style={lbl}>Márgenes</label>
+                  <select style={inp} value={patRapida.datos.biopsia_margenes} onChange={(e) => setPat("biopsia_margenes", e.target.value)}>
+                    <option value="">—</option><option value="Negativos">Negativos</option><option value="Positivos">Positivos</option><option value="No evaluables">No evaluables</option>
+                  </select>
+                </div>
+              )}
+              {patRapida.campos.musculo && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={lbl}>¿Hay músculo detrusor en la muestra?</label>
+                  <select style={inp} value={patRapida.datos.rtuv_musculo} onChange={(e) => setPat("rtuv_musculo", e.target.value)}>
+                    <option value="">—</option>{MUSCULO_MUESTRA.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 4 }}>Sin músculo en la pieza el T no es evaluable y suele indicarse re-RTU.</div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "0.5px solid var(--borde)", fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--primario)" }}>🩺 Control post-operatorio</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginTop: 8 }}>
+              <div>
+                <label style={lbl}>Fecha del control</label>
+                <input type="date" style={inp} value={patRapida.datos.control_fecha} onChange={(e) => setPat("control_fecha", e.target.value)} />
+              </div>
+              <div>
+                <label style={lbl}>Resultado</label>
+                <select style={inp} value={patRapida.datos.control_resultado} onChange={(e) => setPat("control_resultado", e.target.value)}>
+                  <option value="">—</option>{OPCIONES_CONTROL_POSTOP.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={lbl}>Evolución</label>
+                <textarea rows={2} style={{ ...inp, resize: "vertical" }} value={patRapida.datos.control_evolucion} onChange={(e) => setPat("control_evolucion", e.target.value)} placeholder="Ej: asintomático, retiro de JJ a las 3 semanas" />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={guardarPatRapida} disabled={patGuardando} style={{ ...btnPrim, opacity: patGuardando ? 0.6 : 1 }}>{patGuardando ? "Guardando…" : "Guardar"}</button>
+              <button onClick={() => setPatRapida(null)} style={btnSec}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Modal: editor rápido de complicación (pulsación larga) ─── */}
       {complRapida && (
         <div onClick={() => setComplRapida(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
@@ -2386,7 +2573,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     <div style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--alerta)" }}>
                       {(g.items[0].fecha || "").split("-").reverse().join("/")} · {familiaProc(g.items[0].procedimiento)} · {g.items[0].iniciales || g.items[0].ficha_clinica || g.items[0].rut || ""} — {g.items.length} registros
                     </div>
-                    <button onClick={() => ignorarDuplicado(g.clave)} title="Son procedimientos distintos del mismo día: dejar de sugerir" style={{ flexShrink: 0, padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--superficie)", color: "var(--exito)", border: "1px solid var(--exito)", borderRadius: 8, cursor: "pointer" }}>✓ No son duplicados</button>
+                    <button onClick={() => ignorarDuplicado(g.claveIds)} title="Son procedimientos distintos del mismo día: dejar de sugerir" style={{ flexShrink: 0, padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--superficie)", color: "var(--exito)", border: "1px solid var(--exito)", borderRadius: 8, cursor: "pointer" }}>✓ No son duplicados</button>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {g.items.map((r) => (
