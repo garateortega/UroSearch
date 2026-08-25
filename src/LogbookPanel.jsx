@@ -24,7 +24,33 @@ async function tokenFuncionIA() {
   return import.meta.env.VITE_SUPABASE_ANON_KEY;
 }
 
-const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Otro"];
+const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Procedimiento de box", "Otro"];
+
+// ─── Lugar de realización ─────────────────────────────────────────
+// El mismo procedimiento cuenta distinto según dónde se hizo: una cistoscopía
+// en pabellón es actividad quirúrgica y en box es procedimiento ambulatorio.
+// Mezclarlos infla la casuística de pabellón, así que el lugar es un campo
+// aparte y no una categoría.
+const LUGARES_LOGBOOK = [["pabellon", "🔪 Pabellón"], ["box", "🏥 Box / policlínico"]];
+const LABEL_LUGAR = Object.fromEntries(LUGARES_LOGBOOK);
+const esBox = (r) => (r?.lugar || "pabellon") === "box";
+
+// Procedimientos que típicamente se hacen en box. Se ofrecen como atajo al
+// elegir ese lugar; el campo sigue siendo texto libre.
+const PROCEDIMIENTOS_BOX = [
+  "Cistostomía",
+  "Cambio de cistostomía",
+  "Cistoscopía diagnóstica",
+  "Cistografía",
+  "Uretrocistografía retrógrada",
+  "Uretrocistografía miccional",
+  "Biopsia prostática transrectal",
+  "Biopsia prostática transperineal",
+  "Instilación intravesical",
+  "Cateterismo uretral dificultoso",
+  "Retiro de catéter JJ",
+  "Dilatación uretral",
+];
 const ROLES = [["cirujano", "Cirujano principal"], ["primer_ayudante", "1er ayudante"], ["segundo_ayudante", "2do ayudante"], ["tercer_ayudante", "3er ayudante"], ["cuarto_ayudante", "4to ayudante"], ["observador", "Observador"]];
 const ROLES_AYUDANTE = ["primer_ayudante", "segundo_ayudante", "tercer_ayudante", "cuarto_ayudante"]; // cuentan como "ayudante" en las métricas
 
@@ -232,7 +258,7 @@ const esPost = (r) => !!r.complicacion && ["postoperatoria", "ambas"].includes(r
 const REGISTRO_VACIO = {
   fecha: new Date().toISOString().slice(0, 10),
   iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "", diagnostico_pre: "", diagnostico_post: "",
-  procedimiento: "", intervencion: "", categoria: "", lateralidad: "", rol: "cirujano",
+  procedimiento: "", intervencion: "", categoria: "", lateralidad: "", rol: "cirujano", lugar: "pabellon",
   cirujano: "", ayudantes: "", anestesia: "", hora_inicio: "", hora_termino: "",
   duracion_min: "", sangrado_ml: "", tamano_litiasis_mm: "", tamano_prostata_cc: "",
   hallazgos: "", tecnica: "",
@@ -663,6 +689,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   // Lista
   const [busqueda, setBusqueda] = useState("");
   const [filtroCat, setFiltroCat] = useState("Todas");
+  const [filtroLugar, setFiltroLugar] = useState("todos"); // todos | pabellon | box
   const [filtroRol, setFiltroRol] = useState("todos");
   const [abierto, setAbierto] = useState(null);
   const [fotoUrl, setFotoUrl] = useState(null); // url firmada para visor
@@ -832,6 +859,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       procedimiento: reg.procedimiento.trim(),
       intervencion: (reg.intervencion?.trim() || reg.procedimiento.trim()) || null,
       categoria: reg.categoria || "Otro",
+      lugar: reg.lugar === "box" ? "box" : "pabellon",
       lateralidad: reg.lateralidad || null,
       rol: reg.rol,
       cirujano: reg.cirujano.trim() || null,
@@ -1172,7 +1200,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       fecha: r.fecha || new Date().toISOString().slice(0, 10),
       iniciales: r.iniciales || "", ficha_clinica: r.ficha_clinica || "", rut: r.rut || "", edad: r.edad != null ? String(r.edad) : "", sexo: r.sexo || "",
       diagnostico_pre: r.diagnostico_pre || "", diagnostico_post: r.diagnostico_post || "",
-      procedimiento: r.procedimiento || "", intervencion: r.intervencion || r.procedimiento || "", categoria: r.categoria || "Otro", lateralidad: r.lateralidad || "",
+      procedimiento: r.procedimiento || "", intervencion: r.intervencion || r.procedimiento || "", categoria: r.categoria || "Otro", lateralidad: r.lateralidad || "", lugar: r.lugar === "box" ? "box" : "pabellon",
       rol: r.rol || "cirujano", cirujano: r.cirujano || "", ayudantes: r.ayudantes || "",
       anestesia: r.anestesia || "", hora_inicio: (r.hora_inicio || "").slice(0, 5), hora_termino: (r.hora_termino || "").slice(0, 5),
       duracion_min: r.duracion_min != null ? String(r.duracion_min) : "", sangrado_ml: r.sangrado_ml != null ? String(r.sangrado_ml) : "",
@@ -1207,7 +1235,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
 
   // ─── Exportar CSV (incluye complicaciones y complementos) ───
   const exportarCSV = () => {
-    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "biopsia_peso_g", "biopsia_extension", "biopsia_margenes", "rtuv_musculo", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "escala_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
+    const cols = ["fecha", "iniciales", "ficha_clinica", "rut", "edad", "sexo", "procedimiento", "categoria", "lugar", "lateralidad", "rol", "cirujano", "ayudantes", "diagnostico_pre", "diagnostico_post", "anestesia", "duracion_min", "sangrado_ml", "tamano_litiasis_mm", "tamano_prostata_cc", "biopsia_resultado", "biopsia_isup", "biopsia_peso_g", "biopsia_extension", "biopsia_margenes", "rtuv_musculo", "control_stone_free", "control_imagen_detalle", "control_fecha", "control_resultado", "control_evolucion", "complicacion", "momento_complicacion", "escala_complicacion", "clavien", "detalles_complicacion", "hallazgos", "observaciones"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const filas = [cols.join(";"), ...registros.map((r) => cols.map((c) => esc(c === "complicacion" ? (r[c] ? "Sí" : "No") : c === "momento_complicacion" ? (r.complicacion ? (LABEL_MOMENTO[r[c] || "intraoperatoria"]) : "") : c === "control_resultado" ? (LABEL_CONTROL_POSTOP[r[c]] || r[c]) : r[c])).join(";"))];
     const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -1363,12 +1391,13 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return registros.filter((r) => {
+      if (filtroLugar !== "todos" && (filtroLugar === "box") !== esBox(r)) return false;
       if (filtroCat !== "Todas" && r.categoria !== filtroCat) return false;
       if (filtroRol !== "todos" && r.rol !== filtroRol) return false;
       if (q && !`${r.procedimiento} ${r.diagnostico_pre} ${r.diagnostico_post} ${r.iniciales} ${r.hallazgos}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [registros, busqueda, filtroCat, filtroRol]);
+  }, [registros, busqueda, filtroCat, filtroRol, filtroLugar]);
 
   // ─── Métricas ───
   const prom = (arr) => (arr.length ? Math.round((arr.reduce((s, x) => s + x, 0) / arr.length) * 10) / 10 : null);
@@ -1705,7 +1734,29 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                 <option value="">—</option><option value="M">Masculino</option><option value="F">Femenino</option>
               </select>
             ))}
-            <div style={{ gridColumn: "1 / -1" }}>{campo("Procedimiento *", <input style={inp} value={reg.procedimiento} onChange={(e) => set("procedimiento", e.target.value)} placeholder="Ej: Ureterolitectomía endoscópica láser" />)}</div>
+            {/* Lugar primero: define si es actividad de pabellón o de box, y
+                cambia los atajos que se ofrecen abajo. */}
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={lbl}>Lugar</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                {LUGARES_LOGBOOK.map(([v, l]) => (
+                  <button key={v} type="button" onClick={() => {
+                    set("lugar", v);
+                    // Al pasar a box se propone la categoría correspondiente,
+                    // sin pisarla si ya eligió una distinta a propósito.
+                    if (v === "box" && !reg.categoria) set("categoria", "Procedimiento de box");
+                  }} style={{ flex: 1, padding: "9px 6px", fontSize: "var(--fs-1)", fontWeight: 600, borderRadius: 8, cursor: "pointer", border: "0.5px solid " + ((reg.lugar || "pabellon") === v ? "var(--primario)" : "var(--borde)"), background: (reg.lugar || "pabellon") === v ? "var(--primario)" : "var(--superficie)", color: (reg.lugar || "pabellon") === v ? "var(--texto-inv)" : "var(--texto-sec)" }}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>{campo("Procedimiento *", <input style={inp} value={reg.procedimiento} onChange={(e) => set("procedimiento", e.target.value)} placeholder={esBox(reg) ? "Ej: Cambio de cistostomía" : "Ej: Ureterolitectomía endoscópica láser"} />)}</div>
+            {esBox(reg) && (
+              <div style={{ gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", gap: 5, marginTop: -4 }}>
+                {PROCEDIMIENTOS_BOX.map((pb) => (
+                  <button key={pb} type="button" onClick={() => { set("procedimiento", pb); if (!reg.intervencion) set("intervencion", pb); }} style={{ padding: "5px 10px", fontSize: "var(--fs-0)", background: reg.procedimiento === pb ? "var(--primario)" : "var(--superficie)", color: reg.procedimiento === pb ? "var(--texto-inv)" : "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 10, cursor: "pointer" }}>{pb}</button>
+                ))}
+              </div>
+            )}
             <div style={{ gridColumn: "1 / -1" }}>{campo("Nombre de intervención", <input style={inp} value={reg.intervencion} onChange={(e) => set("intervencion", e.target.value)} placeholder="Se autocompleta con el procedimiento; puedes cambiarlo" />)}</div>
             {campo("Categoría", (
               <select style={inp} value={reg.categoria} onChange={(e) => set("categoria", e.target.value)}>
@@ -1848,6 +1899,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input style={{ ...inp, flex: "2 1 180px" }} placeholder="🔎 Buscar procedimiento, diagnóstico…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
+            <select style={{ ...inp, flex: "1 1 120px" }} value={filtroLugar} onChange={(e) => setFiltroLugar(e.target.value)}>
+              <option value="todos">Pabellón y box</option>
+              <option value="pabellon">Solo pabellón</option>
+              <option value="box">Solo box</option>
+            </select>
             <select style={{ ...inp, flex: "1 1 130px" }} value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)}>
               <option>Todas</option>
               {CATEGORIAS_LOGBOOK.map((c) => <option key={c}>{c}</option>)}
@@ -1899,6 +1955,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {r.complicacion && (
                     <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: esMayor(r) ? "var(--peligro)" : "var(--peligro-bg)", color: esMayor(r) ? "var(--texto-inv)" : "var(--peligro)", border: "0.5px solid var(--peligro)" }}>
                       ⚠ {etiquetaEvento(r)}{esMayor(r) ? " · mayor" : ""}
+                    </span>
+                  )}
+                  {esBox(r) && (
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: "var(--fondo-suave)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)" }}>
+                      🏥 Box
                     </span>
                   )}
                   {esIncidente(r) && (

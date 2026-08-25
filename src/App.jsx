@@ -1023,6 +1023,46 @@ async function hayVersionNueva() {
   } catch { return false; }
 }
 
+// Respuesta estándar cuando el chat no puede completarse. Se prefiere un
+// mensaje útil y honesto antes que dejar el indicador girando: el usuario
+// necesita saber que puede reintentar y que no perdió lo que escribió.
+const MSG_ERROR_CHAT = "No pude completar la consulta. Puede ser la conexión o una caída momentánea del servicio.\n\nVuelve a enviar tu pregunta en unos segundos. Si sigue fallando, avísame con el botón de comentarios y reviso qué pasó.\n\nMientras tanto, el resto de la app (pacientes, logbook, biblioteca) sigue funcionando normalmente.";
+
+// ─── Borradores: no perder lo escrito si te sales o se recarga ────
+// Guarda el formulario en localStorage con un pequeño retardo y lo restaura al
+// volver. `limpiar()` se llama al guardar de verdad, para que el borrador no
+// reaparezca sobre un registro ya persistido.
+function useBorrador(clave, valor, aplicar, activo = true) {
+  const restauradoRef = useRef(false);
+  const aplicarRef = useRef(aplicar);
+  aplicarRef.current = aplicar;
+
+  useEffect(() => {
+    if (!activo || !clave || restauradoRef.current) return;
+    restauradoRef.current = true;
+    try {
+      const g = JSON.parse(localStorage.getItem(clave) || "null");
+      if (g && typeof g === "object") aplicarRef.current(g);
+    } catch {}
+  }, [clave, activo]);
+
+  useEffect(() => {
+    // No escribir antes de haber intentado restaurar: en el montaje el estado
+    // está vacío y borraría justo el borrador que se quiere recuperar.
+    if (!activo || !clave || !restauradoRef.current) return;
+    const t = setTimeout(() => {
+      try {
+        const hayAlgo = Object.values(valor || {}).some((v) => (typeof v === "string" ? v.trim() !== "" : v != null && v !== false));
+        if (hayAlgo) localStorage.setItem(clave, JSON.stringify(valor));
+        else localStorage.removeItem(clave);
+      } catch {}
+    }, 600);
+    return () => clearTimeout(t);
+  }, [clave, valor, activo]);
+
+  return () => { try { localStorage.removeItem(clave); } catch {} };
+}
+
 function usePersistedState(clave, inicial) {
   const [val, setVal] = useState(() => {
     try { const raw = localStorage.getItem(clave); return raw != null ? JSON.parse(raw) : inicial; } catch { return inicial; }
@@ -2336,7 +2376,7 @@ function TnmViewer({ score }) {
 }
 
 // ─── Protocolos: documentos Word/PDF; solo el admin sube/elimina ───
-function ProtocolosPanel({ currentUser, isAdmin }) {
+function ProtocolosPanel({ currentUser, isAdmin, contexto, equipos = [] }) {
   const [items, setItems] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
@@ -2345,6 +2385,12 @@ function ProtocolosPanel({ currentUser, isAdmin }) {
   const [form, setForm] = useState({ titulo: "", categoria: "", archivo: null, archivoNombre: "" });
   const [abriendo, setAbriendo] = useState(null);
   const fileRef = useRef(null);
+
+  // Equipo destino: en contexto de equipo el protocolo queda de ese equipo; en
+  // contexto personal quedaría global, y eso sigue reservado al admin.
+  const destino = contexto && contexto !== "personal" ? contexto : null;
+  const puedeSubir = isAdmin || !!destino;
+  const nombreEquipo = equipos.find((e) => String(e.id) === String(destino))?.nombre || "tu equipo";
 
   const cargar = async () => {
     setCargando(true);
@@ -2389,9 +2435,10 @@ function ProtocolosPanel({ currentUser, isAdmin }) {
     <div style={{ padding: 16 }}>
       <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Buscar protocolo…" style={{ ...inp, marginBottom: 12 }} />
 
-      {isAdmin && (
+      {puedeSubir && (
         <div style={{ border: "0.5px solid var(--borde)", borderRadius: 12, padding: 14, background: "var(--superficie)", marginBottom: 16 }}>
-          <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>➕ Subir protocolo (solo admin)</div>
+          <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 8 }}>➕ Subir protocolo</div>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.4 }}>{destino ? `Quedará disponible solo para ${nombreEquipo}.` : "Sin equipo activo: quedará visible para todos los usuarios."}</div>
           <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Título (ej: Prostatectomía radical laparoscópica)" style={{ ...inp, marginBottom: 8 }} />
           <input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} placeholder="Categoría (ej: Próstata, Litiasis, Riñón…)" style={{ ...inp, marginBottom: 8 }} />
           <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { const f = e.target.files?.[0] || null; setForm({ ...form, archivo: f, archivoNombre: f?.name || "" }); }} style={{ display: "none" }} />
@@ -2418,7 +2465,8 @@ function ProtocolosPanel({ currentUser, isAdmin }) {
                     <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.archivo_nombre || ""}</div>
                   </div>
                   <button onClick={() => abrir(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--primario)", fontWeight: 600, whiteSpace: "nowrap" }}>{abriendo === p.id ? "…" : "Abrir ↗"}</button>
-                  {isAdmin && <button onClick={() => borrar(p)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>}
+                  {/* Borrar: el admin todo; el resto, lo propio o lo de su equipo. */}
+                  {(isAdmin || p.autor_id === currentUser.id || (p.equipo_id && String(p.equipo_id) === String(destino))) && <button onClick={() => borrar(p)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>}
                 </div>
               ))}
             </div>
@@ -9165,6 +9213,16 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   const campo = (l, k, ml = false) => (<div><label style={lbl}>{l}</label>{ml ? <textarea rows={2} value={f[k]} onChange={e => set(k, e.target.value)} style={{ ...inp, resize: "vertical" }} /> : <input value={f[k]} onChange={e => set(k, e.target.value)} style={inp} />}</div>);
 
+  // Borrador del ingreso: es el formulario más largo de la app y se llena en
+  // el pasillo, con interrupciones.
+  // Solo para ingresos NUEVOS: al editar uno existente la fuente es la base.
+  const limpiarBorradorIngreso = useBorrador(
+    ingresoExistente?.id ? null : "uro_ingreso_borrador",
+    f,
+    (g) => setF((p) => ({ ...p, ...g })),
+    !ingresoExistente?.id
+  );
+
   // Dictado del ingreso: la anamnesis es el campo largo y el que más se dicta.
   // Se ordena en párrafos y se anexa; nunca reemplaza lo ya escrito.
   const dictadoIngreso = useDictado(async (texto) => {
@@ -9630,7 +9688,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
           <div style={{ marginBottom: 8 }}>
             <label style={lbl}>Carpeta</label>
             <SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} />
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); limpiarBorradorIngreso(); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -9660,22 +9718,199 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 
 // ─── Panel Ingresos: lista guardada, carpetas y gestión ───
 // ─── Comités oncológicos: mismo formato que Ingresos (carpetas/subcarpetas) ───
-function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
+// ─── Escalas funcionales de uso oncológico ────────────────────────
+// Se registran porque condicionan la decisión del comité: no es lo mismo
+// discutir tratamiento radical en un ECOG 0 que en un ECOG 3.
+const ESCALAS_FUNCIONALES = {
+  ECOG: [
+    ["0", "0 — Actividad normal, sin restricciones"],
+    ["1", "1 — Restringido para actividad física intensa, ambulatorio"],
+    ["2", "2 — Ambulatorio, capaz de autocuidado, en pie >50% del día"],
+    ["3", "3 — Autocuidado limitado, en cama o silla >50% del día"],
+    ["4", "4 — Totalmente incapacitado, sin autocuidado"],
+    ["5", "5 — Fallecido"],
+  ],
+  Karnofsky: [
+    ["100", "100 — Normal, sin síntomas"], ["90", "90 — Síntomas menores"],
+    ["80", "80 — Actividad normal con esfuerzo"], ["70", "70 — Se cuida, no puede trabajar"],
+    ["60", "60 — Requiere asistencia ocasional"], ["50", "50 — Requiere asistencia considerable"],
+    ["40", "40 — Discapacitado, requiere cuidados especiales"], ["30", "30 — Gravemente discapacitado"],
+    ["20", "20 — Muy enfermo, hospitalización necesaria"], ["10", "10 — Moribundo"],
+  ],
+  G8: [
+    ["ok", "> 14 — Sin fragilidad, no requiere evaluación geriátrica"],
+    ["alterado", "≤ 14 — Alterado, sugiere valoración geriátrica integral"],
+  ],
+};
+
+// Selector compacto de TNM. Reutiliza los catálogos AJCC 8ª ed. que ya viven en
+// la Biblioteca (SCORES), en vez de duplicar las definiciones: si se corrige
+// una, se corrige en los dos lados.
+function SelectorTNM({ valor, onChange, inp, lbl }) {
+  const catalogos = SCORES.filter((x) => x.tipo === "tnm");
+  const cat = catalogos.find((c) => c.id === valor.catalogo);
+  const set = (k, v) => onChange({ ...valor, [k]: v });
+  const ejes = cat ? [["T", cat.tnm.T], ["N", cat.tnm.N], ["M", cat.tnm.M], ...(cat.tnm.S ? [["S", cat.tnm.S]] : [])] : [];
+  return (
+    <div style={{ border: "0.5px solid var(--borde)", borderRadius: 9, padding: "10px 12px", marginBottom: 8, background: "var(--fondo-suave)" }}>
+      <label style={lbl}>Etapificación TNM</label>
+      <select value={valor.catalogo || ""} onChange={(e) => onChange({ catalogo: e.target.value, T: "", N: "", M: "", S: "", estadio: "" })} style={inp}>
+        <option value="">— Sin etapificar —</option>
+        {catalogos.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+      </select>
+      {cat && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${ejes.length}, 1fr)`, gap: 6 }}>
+            {ejes.map(([eje, opciones]) => (
+              <div key={eje}>
+                <label style={{ ...lbl, marginBottom: 2 }}>{eje}</label>
+                <select value={valor[eje] || ""} onChange={(e) => set(eje, e.target.value)} style={{ ...inp, marginBottom: 6 }}>
+                  <option value="">—</option>
+                  {opciones.map(([v]) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          <label style={{ ...lbl, marginBottom: 2 }}>Estadio</label>
+          <select value={valor.estadio || ""} onChange={(e) => set("estadio", e.target.value)} style={{ ...inp, marginBottom: 6 }}>
+            <option value="">—</option>
+            {cat.tnm.estadios.map(([v, d]) => <option key={v} value={v}>{v} — {d}</option>)}
+          </select>
+          {/* Descripción del valor elegido: evita tener que abrir la Biblioteca
+              en medio de la reunión para recordar qué era un T3b. */}
+          {ejes.map(([eje, opciones]) => {
+            const d = opciones.find(([v]) => v === valor[eje]);
+            return d ? <div key={eje} style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.4, marginTop: 2 }}><b>{d[0]}:</b> {d[1]}</div> : null;
+          })}
+          {cat.tnm.nota && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 6, lineHeight: 1.4 }}>ℹ️ {cat.tnm.nota}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Texto plano del TNM para el encabezado y el PDF.
+function tnmTexto(t) {
+  if (!t?.catalogo) return "";
+  const partes = ["T", "N", "M", "S"].map((k) => (t[k] ? k + t[k].replace(/^[TNMS]/, "") : "")).filter(Boolean);
+  const base = partes.length ? partes.join(" ") : "";
+  return [base, t.estadio ? `Estadio ${t.estadio}` : ""].filter(Boolean).join(" · ");
+}
+
+// Vista de lectura del comité, con el aspecto del acta impresa. Se genera
+// desde los mismos `datos`, así que nunca puede desincronizarse del registro.
+function ComiteVista({ comite, onEditar, onClose }) {
+  const d = comite?.datos || {};
+  useBackClose(true, onClose);
+  const etiquetaEscala = (ESCALAS_FUNCIONALES[d.escalaTipo] || []).find(([v]) => v === d.escalaValor);
+  const fila = (k, v) => (v ? <div style={{ display: "flex", gap: 8, fontSize: "var(--fs-1)", lineHeight: 1.55 }}><span style={{ minWidth: 118, color: "#555", flexShrink: 0 }}>{k}</span><span style={{ color: "#111", fontWeight: 500 }}>{v}</span></div> : null);
+  const bloque = (t, v) => (v ? (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: "var(--fs-0)", fontWeight: 700, letterSpacing: 0.4, color: "#555", textTransform: "uppercase", marginBottom: 4 }}>{t}</div>
+      <div style={{ fontSize: "var(--fs-1)", color: "#111", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{v}</div>
+    </div>
+  ) : null);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 420, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "0.5px solid var(--borde)", background: "var(--fondo)" }}>
+        <button onClick={onClose} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)", flexShrink: 0 }}>✕</button>
+        <div style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Acta de comité</div>
+        <button onClick={onEditar} style={{ flexShrink: 0, padding: "7px 13px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--primario)", borderRadius: 8, cursor: "pointer" }}>✏️ Editar</button>
+        <button onClick={() => window.print()} style={{ flexShrink: 0, padding: "7px 13px", fontSize: "var(--fs-1)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>🖨 Imprimir</button>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: 16, WebkitOverflowScrolling: "touch" }}>
+        {/* Hoja blanca fija: es un documento, no debe cambiar con el tema oscuro. */}
+        <div id="uro-acta-comite" style={{ background: "#fff", color: "#111", maxWidth: 760, margin: "0 auto", padding: "26px 30px 34px", borderRadius: 6, boxShadow: "0 2px 10px rgba(0,0,0,0.18)" }}>
+          <div style={{ textAlign: "center", borderBottom: "1.5px solid #111", paddingBottom: 10, marginBottom: 14 }}>
+            <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, letterSpacing: 0.5 }}>COMITÉ ONCOLÓGICO DE UROLOGÍA</div>
+            {d.fecha && <div style={{ fontSize: "var(--fs-1)", color: "#444", marginTop: 3 }}>{d.fecha.split("-").reverse().join("/")}</div>}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {fila("Paciente", d.nombre)}
+            {fila("RUT", d.rut)}
+            {fila("Edad", d.edad ? `${d.edad} años` : "")}
+            {fila("N° ficha", d.ficha)}
+            {fila("Diagnóstico", d.diagnostico)}
+            {fila("Etapificación", tnmTexto(d.tnm))}
+            {fila(d.escalaTipo || "Escala", etiquetaEscala ? etiquetaEscala[1] : d.escalaValor)}
+            {fila("Motivo", d.motivo)}
+            {fila("Tratante", d.tratante)}
+          </div>
+
+          {bloque("Presentación del caso", d.presentacion)}
+          {bloque("Acuerdos del comité", d.acuerdos)}
+
+          <div style={{ marginTop: 26, paddingTop: 10, borderTop: "0.5px solid #bbb", fontSize: "var(--fs-0)", color: "#555", lineHeight: 1.6 }}>
+            {d.redactor ? <div>Resumen redactado por: <b style={{ color: "#111" }}>{d.redactor}</b></div> : null}
+            <div style={{ marginTop: 4 }}>Documento generado con UroSearch™ · herramienta de apoyo clínico, no reemplaza el registro oficial de la ficha.</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Al imprimir solo sale el acta, sin la barra ni el resto de la app. */}
+      <style>{`@media print {
+        body * { visibility: hidden !important; }
+        #uro-acta-comite, #uro-acta-comite * { visibility: visible !important; }
+        #uro-acta-comite { position: absolute !important; left: 0; top: 0; width: 100%; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
+      }`}</style>
+    </div>
+  );
+}
+
+function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [], currentUser }) {
   const HOY = hoyLocalISO();
-  const D = { fecha: HOY, nombre: "", ficha: "", rut: "", diagnostico: "", presentacion: "", acuerdos: "" };
-  const [f, setF] = useState(() => (comiteExistente?.datos ? { ...D, ...comiteExistente.datos } : D));
+  const D = {
+    fecha: HOY, nombre: "", ficha: "", rut: "", edad: "", diagnostico: "",
+    motivo: "", tratante: "", redactor: "",
+    escalaTipo: "ECOG", escalaValor: "",
+    tnm: { catalogo: "", T: "", N: "", M: "", S: "", estadio: "" },
+    presentacion: "", acuerdos: "",
+  };
+  const [f, setF] = useState(() => (comiteExistente?.datos
+    ? { ...D, ...comiteExistente.datos, tnm: { ...D.tnm, ...(comiteExistente.datos.tnm || {}) } }
+    : { ...D, redactor: currentUser?.nombre || "" }));
   const [carpeta, setCarpeta] = useState(comiteExistente?.carpeta || "");
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  // Borrador: los comités son largos y se escriben durante la reunión. Solo
+  // para comités NUEVOS; al editar uno existente la fuente es la base.
+  const claveBorrador = comiteExistente?.id ? null : "uro_comite_borrador";
+  const limpiarBorrador = useBorrador(claveBorrador, f, (g) => setF((p) => ({ ...p, ...g })), !comiteExistente?.id);
+
+  // Cerrar tocando el fondo cerraba el formulario al seleccionar texto: si el
+  // arrastre de la selección terminaba fuera del panel, el click se resolvía
+  // sobre el fondo y se perdía todo lo escrito. Ahora solo cierra si el gesto
+  // EMPEZÓ y TERMINÓ en el fondo.
+  const abajoEnFondo = useRef(false);
+  // "fecha", "escalaTipo" y "redactor" vienen precargados: no cuentan como
+  // contenido escrito para efectos de avisar antes de cerrar.
+  const IGNORAR = new Set(["fecha", "escalaTipo", "redactor"]);
+  const hayContenido = () => Object.entries(f).some(([k, v]) => !IGNORAR.has(k) && typeof v === "string" && v.trim() !== "");
+  const intentarCerrar = async () => {
+    if (hayContenido() && !(await uroConfirm("¿Cerrar sin guardar? El borrador queda guardado y lo recuperas al volver a abrir."))) return;
+    onClose();
+  };
+  const cerrarSiHayFondo = (e) => {
+    const enFondo = e.target === e.currentTarget && abajoEnFondo.current;
+    abajoEnFondo.current = false;
+    if (enFondo) intentarCerrar();
+  };
   const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 400, background: "var(--fondo)", display: "flex", justifyContent: "center" }}>
+    <div
+      onPointerDown={(e) => { abajoEnFondo.current = e.target === e.currentTarget; }}
+      onClick={cerrarSiHayFondo}
+      style={{ position: "fixed", inset: 0, zIndex: 400, background: "var(--fondo)", display: "flex", justifyContent: "center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 760, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
           <div style={{ fontSize: "var(--fs-4)", fontWeight: 700, color: "var(--texto)" }}>{comiteExistente?.id ? "Editar comité" : "Nuevo comité oncológico"}</div>
-          <button onClick={onClose} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)" }}>✕</button>
+          <button onClick={intentarCerrar} aria-label="Cerrar" style={{ background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--texto-sec)" }}>✕</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <div><label style={lbl}>Fecha del comité</label><input type="date" value={f.fecha} onChange={e => set("fecha", e.target.value)} style={inp} /></div>
@@ -9683,10 +9918,41 @@ function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
         </div>
         <label style={lbl}>Nombre del paciente *</label>
         <input value={f.nombre} onChange={e => set("nombre", e.target.value)} style={inp} />
-        <label style={lbl}>RUT</label>
-        <input value={f.rut} onChange={e => set("rut", e.target.value)} style={inp} />
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8 }}>
+          <div><label style={lbl}>RUT</label><input value={f.rut} onChange={e => set("rut", e.target.value)} style={inp} /></div>
+          <div><label style={lbl}>Edad</label><input type="number" inputMode="numeric" value={f.edad} onChange={e => set("edad", e.target.value)} style={inp} /></div>
+        </div>
         <label style={lbl}>Diagnóstico</label>
         <input value={f.diagnostico} onChange={e => set("diagnostico", e.target.value)} style={inp} />
+
+        <label style={lbl}>Motivo de la presentación</label>
+        <input value={f.motivo} onChange={e => set("motivo", e.target.value)} placeholder="Ej: definir tratamiento primario · evaluar rescate tras recidiva" style={inp} />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div><label style={lbl}>Médico tratante</label><input value={f.tratante} onChange={e => set("tratante", e.target.value)} style={inp} /></div>
+          <div><label style={lbl}>Redacta el resumen</label><input value={f.redactor} onChange={e => set("redactor", e.target.value)} style={inp} /></div>
+        </div>
+
+        {/* Escala funcional: el tipo define las opciones, así no se anota un
+            valor de Karnofsky en una casilla rotulada ECOG. */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
+          <div>
+            <label style={lbl}>Escala</label>
+            <select value={f.escalaTipo} onChange={e => setF(p => ({ ...p, escalaTipo: e.target.value, escalaValor: "" }))} style={inp}>
+              {Object.keys(ESCALAS_FUNCIONALES).map(k => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Valor</label>
+            <select value={f.escalaValor} onChange={e => set("escalaValor", e.target.value)} style={inp}>
+              <option value="">—</option>
+              {(ESCALAS_FUNCIONALES[f.escalaTipo] || []).map(([v, d]) => <option key={v} value={v}>{d}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <SelectorTNM valor={f.tnm || {}} onChange={(t) => set("tnm", t)} inp={inp} lbl={lbl} />
+
         <label style={lbl}>Presentación / resumen del caso</label>
         <textarea rows={4} value={f.presentacion} onChange={e => set("presentacion", e.target.value)} style={{ ...inp, resize: "vertical" }} />
         <label style={lbl}>Acuerdos del comité / plan</label>
@@ -9694,7 +9960,7 @@ function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [] }) {
         <label style={lbl}>Carpeta</label>
         <div style={{ marginBottom: 8 }}><SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} /></div>
         {msg && <div style={{ ...estiloMsg(false), marginBottom: 8 }}>{msg}</div>}
-        <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
+        <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); limpiarBorrador(); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
       </div>
     </div>
   );
@@ -9706,6 +9972,7 @@ function ComitesPanel({ currentUser, contexto }) {
   const [cargando, setCargando] = useState(true);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState(null);
+  const [viendo, setViendo] = useState(null);   // acta abierta en modo lectura
   const [colapsadas, setColapsadas] = useState(() => { try { return JSON.parse(localStorage.getItem("uro_com_colapsadas") || "{}"); } catch { return {}; } });
   useEffect(() => { try { localStorage.setItem("uro_com_colapsadas", JSON.stringify(colapsadas)); } catch {} }, [colapsadas]);
   const equipoId = contexto !== "personal" ? contexto : null;
@@ -9770,10 +10037,13 @@ function ComitesPanel({ currentUser, contexto }) {
 
   const filaItem = (item) => (
     <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--fondo-suave)", borderRadius: 8, padding: "9px 12px", marginBottom: 5 }}>
-      <div onClick={() => { setEditando(item); setModalAbierto(true); }} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
+      {/* Tocar la fila ABRE el acta; editar es un botón aparte. Lo habitual es
+          consultar un comité ya cerrado, no modificarlo. */}
+      <div onClick={() => setViendo(item)} style={{ flex: 1, cursor: "pointer", minWidth: 0 }}>
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.nombre || "(sin nombre)"}</div>
         <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{item.datos?.diagnostico ? item.datos.diagnostico + " · " : ""}{item.datos?.fecha || (item.updated_at || "").slice(0, 10)}</div>
       </div>
+      <button onClick={() => { setEditando(item); setModalAbierto(true); }} title="Editar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)" }}>✏️</button>
       <button onClick={() => mover(item)} title="Mover a carpeta" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)" }}>📁</button>
       <button onClick={() => eliminar(item.id)} title="Eliminar" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "var(--fs-2)", color: "var(--peligro)" }}>🗑</button>
     </div>
@@ -9798,7 +10068,8 @@ function ComitesPanel({ currentUser, contexto }) {
 
   return (
     <div style={{ padding: 16 }}>
-      {modalAbierto && <ComiteModal comiteExistente={editando} onGuardar={guardarComite} carpetas={todasRutas} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
+      {viendo && <ComiteVista comite={viendo} onClose={() => setViendo(null)} onEditar={() => { setEditando(viendo); setViendo(null); setModalAbierto(true); }} />}
+      {modalAbierto && <ComiteModal comiteExistente={editando} currentUser={currentUser} onGuardar={guardarComite} carpetas={todasRutas} onClose={() => { setModalAbierto(false); setEditando(null); }} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => { setEditando(null); setModalAbierto(true); }} style={{ flex: 1, padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: "pointer" }}>➕ Nuevo comité</button>
         <button onClick={() => crearCarpeta("")} style={{ padding: "11px 14px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>📁 Nueva carpeta</button>
@@ -10484,6 +10755,14 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   // Form de exámenes
   // El callback del dictado se crea una sola vez; el ref le da el modo vigente.
   useEffect(() => { tipoEvoRef.current = tipoEvo; }, [tipoEvo]);
+  // Borrador del SOAP, por paciente. La evolución libre ya se guardaba en
+  // "uro_evo_draft_<id>"; la estructurada se perdía entera al salir.
+  const limpiarBorradorEvo = useBorrador(
+    seleccionado?.id ? `uro_evo_soap_${seleccionado.id}` : null,
+    evoEstructurada,
+    (g) => setEvoEstructurada((p) => ({ ...p, ...g })),
+    !!seleccionado?.id
+  );
   const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
   const [paramsLab, setParamsLab] = useState({}); // valores de los parámetros numéricos del lab seleccionado
   // Dictado del resultado de un examen: se anexa tal cual, sin reestructurar —
@@ -11706,6 +11985,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     }
     setEvoLibre("");
     try { if (seleccionado) localStorage.removeItem("uro_evo_draft_" + seleccionado.id); } catch {}
+    limpiarBorradorEvo(); // el SOAP ya quedó persistido: el borrador sobra
     setEvoEstructurada({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
     setDiuresis({ cantidad: "", via: "", caracteristicas: "" });
     setDrenaje({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
@@ -14536,6 +14816,21 @@ if (imgsResult.ok) {
   setMessages(newMsgs); 
   setInput(""); 
   setLoading(true);
+
+  // Perro guardián: si algo se cuelga o lanza fuera del try de más abajo, el
+  // chat se quedaba en "Consultando…" para siempre. Este temporizador garantiza
+  // que siempre haya una respuesta y que el input se libere.
+  let respondido = false;
+  const fallar = (motivo) => {
+    if (respondido) return;
+    respondido = true;
+    setMessages(prev => {
+      const base = prev.length && prev[prev.length - 1]?.streaming ? prev.slice(0, -1) : prev;
+      return [...base, { role: "assistant", content: MSG_ERROR_CHAT, error: true, motivo }];
+    });
+    setLoading(false);
+  };
+  const relojChat = setTimeout(() => fallar("timeout"), 75000);
   
   // ── Detección de intención ANTES de todo ──────────────────────
   // Permite saltarse búsquedas innecesarias (respuesta más rápida) y no citar
@@ -14809,13 +15104,13 @@ if (imgsResult.ok) {
       });
     }
   } catch(e) {
-    // Si se alcanzó a mostrar texto parcial, se descarta antes del aviso de error.
-    setMessages(prev => {
-      const base = prev.length && prev[prev.length - 1]?.streaming ? prev.slice(0, -1) : prev;
-      return [...base, {role:"assistant", content:"Error al conectar."}];
-    });
+    console.error("[UroSearch] chat:", e?.message || e);
+    fallar(e?.message || "error");
+  } finally {
+    clearTimeout(relojChat);
+    respondido = true;
+    setLoading(false);
   }
-  setLoading(false);
 };
 
   const generarMapa = async (tema) => {

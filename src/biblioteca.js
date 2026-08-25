@@ -241,24 +241,29 @@ export async function buscarChunks(consulta, limite = 8) {
 
 const BUCKET_PROTOCOLOS = 'protocolos';
 
-// Listar todos los protocolos (metadatos, sin descargar el archivo)
+// Listar protocolos visibles para el usuario. La RLS decide qué se ve: los
+// globales (equipo_id nulo) y los de los equipos a los que pertenece.
 export async function listarProtocolos() {
   const { data, error } = await supabase
     .from('protocolos')
-    .select('id, titulo, categoria, archivo_nombre, archivo_path, mime, autor_id, fecha_creacion')
+    .select('id, titulo, categoria, archivo_nombre, archivo_path, mime, autor_id, equipo_id, fecha_creacion')
     .order('titulo', { ascending: true });
   if (error) return { ok: false, error: error.message };
   return { ok: true, protocolos: data || [] };
 }
 
-// Subir un protocolo (archivo = File de <input type=file>). Solo admin (lo impone la RLS).
-export async function crearProtocolo(autorId, { titulo, categoria, archivo }) {
+// Subir un protocolo. `equipoId` lo ata a un equipo/centro: cualquier médico
+// del equipo puede subirlo y solo ese equipo lo ve. Sin `equipoId` queda
+// global (reservado a admin por la RLS), para guías que aplican a todos.
+export async function crearProtocolo(autorId, { titulo, categoria, archivo, equipoId = null }) {
   if (!archivo) return { ok: false, error: 'Falta el archivo.' };
   const ext = (archivo.name.split('.').pop() || 'bin').toLowerCase();
   const permitidas = ['pdf', 'doc', 'docx'];
   if (!permitidas.includes(ext)) return { ok: false, error: 'Formato no permitido. Sube PDF o Word (.pdf, .doc, .docx).' };
   const safe = (titulo || 'protocolo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '_').slice(0, 60);
-  const path = `${autorId}/${Date.now()}_${safe}.${ext}`;
+  // El equipo va en la ruta para que las policies de Storage puedan acotarlo
+  // por prefijo, igual que se hace con el id de usuario.
+  const path = `${equipoId ? `equipo_${equipoId}` : 'global'}/${autorId}/${Date.now()}_${safe}.${ext}`;
   const up = await supabase.storage.from(BUCKET_PROTOCOLOS).upload(path, archivo, {
     contentType: archivo.type || undefined, upsert: false,
   });
@@ -267,6 +272,7 @@ export async function crearProtocolo(autorId, { titulo, categoria, archivo }) {
     .from('protocolos')
     .insert({
       autor_id: autorId,
+      equipo_id: equipoId,
       titulo: titulo,
       categoria: categoria || 'General',
       archivo_nombre: archivo.name,
@@ -283,7 +289,8 @@ export async function crearProtocolo(autorId, { titulo, categoria, archivo }) {
   return { ok: true, protocolo: data };
 }
 
-// Eliminar un protocolo (fila + archivo). Solo admin (lo impone la RLS).
+// Eliminar un protocolo (fila + archivo). La RLS permite borrar los propios y
+// los del propio equipo; los globales, solo admin.
 export async function eliminarProtocolo(id, archivoPath) {
   if (archivoPath) { try { await supabase.storage.from(BUCKET_PROTOCOLOS).remove([archivoPath]); } catch {} }
   const { error } = await supabase.from('protocolos').delete().eq('id', id);
