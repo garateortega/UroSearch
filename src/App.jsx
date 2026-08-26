@@ -2971,7 +2971,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.8.4";
+const VERSION = "v2.9.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -4596,7 +4596,13 @@ function BoletinModal({ currentUser }) {
         let legado = null;
         try { legado = localStorage.getItem("uro_boletin_visto"); } catch {}
         const yaVisto = String(vistos.boletin || "") === String(ultimo.id) || String(legado || "") === String(ultimo.id);
-        if (vivo && !yaVisto) setBoletin(ultimo);
+        if (vivo && !yaVisto) {
+          setBoletin(ultimo);
+          // Se marca al MOSTRARLO, no al cerrarlo: si el usuario salía de la
+          // app sin tocar el botón, el boletín reaparecía en cada ingreso.
+          try { localStorage.setItem("uro_boletin_visto", String(ultimo.id)); } catch {}
+          if (currentUser?.id) marcarFlagVisto(currentUser.id, "boletin", String(ultimo.id));
+        }
       } catch {}
     })();
     return () => { vivo = false; };
@@ -14646,6 +14652,13 @@ const [conversacionActual, setConversacionActual] = useState(null); // ID de la 
 const [panelConversacionesAbierto, setPanelConversacionesAbierto] = useState(false); // mostrar/ocultar lista
 const [loadingConversaciones, setLoadingConversaciones] = useState(false); // cuando se carga una conversación
   const [input, setInput] = useState("");
+  // Si la app se cerró con una consulta en curso, al volver quedaba un
+  // "Consultando…" fantasma y el input bloqueado. Al montar se limpia
+  // cualquier mensaje en streaming y se libera el envío.
+  useEffect(() => {
+    setLoading(false);
+    setMessages((prev) => (prev.some((m) => m.streaming) ? prev.filter((m) => !m.streaming) : prev));
+  }, []);
   // Dictado en el chat: la transcripción se escribe en el input y NO se envía
   // sola. Uros responde con apoyo clínico; mandar una consulta mal transcrita
   // sin verla sería peor que escribirla.
@@ -15406,8 +15419,14 @@ if (imgsResult.ok) {
     }
 
     let filtrados = concretos.length ? concretos : misPacientes;
-    if (/hospitalizad|activo|internad/.test(q)) filtrados = filtrados.filter((p) => p.estado === "activo");
-    else if (/dados? de alta|de alta/.test(q)) filtrados = filtrados.filter((p) => p.estado === "alta");
+    // Por defecto SOLO los hospitalizados: "¿cómo van mis pacientes?" se
+    // refiere a los que están ahora en cama, no al histórico completo. Los de
+    // alta se piden explícitamente.
+    if (/dados? de alta|de alta|dado de alta|historic|todos mis pacientes|alta/.test(q)) {
+      if (/dados? de alta|dado de alta/.test(q)) filtrados = filtrados.filter((p) => p.estado === "alta");
+    } else {
+      filtrados = filtrados.filter((p) => p.estado === "activo");
+    }
 
     // Iniciales en mayúsculas escritas explícitamente ("J.P.M.", "MHR").
     const inicialesEnQuery = consulta.match(/[A-Z]\.[A-Z]\.[A-Z]\.?/g) || consulta.match(/\b[A-Z]{2,4}\b/g) || [];
@@ -15534,7 +15553,14 @@ if (imgsResult.ok) {
   let ctxLogbook = "";
   {
     const qLog = txt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const pideLogbook = ["logbook", "casuistica", "bitacora", "mis cirugias", "he operado", "he ayudado", "registro quirurgico", "protocolos operatorios"].some(k => qLog.includes(k));
+    // Antes exigía frases literales ("logbook", "mis cirugias"). Preguntas
+    // naturales como "¿cuántas RTU he hecho el último año?" no contenían
+    // ninguna, así que el chat respondía sin ver un solo registro.
+    // Ahora basta con que la pregunta sea sobre la propia actividad quirúrgica.
+    const pideLogbook = ["logbook", "casuistica", "bitacora", "mis cirugias", "he operado", "he ayudado", "registro quirurgico", "protocolos operatorios"].some(k => qLog.includes(k))
+      || /\b(he|llevo|hice|tengo)\b.*\b(hecho|operad|realizad|cirugi|procedimient|ayudant|cirujano)/.test(qLog)
+      || /\bcuant[oa]s?\b.*\b(he|llevo|hice|hecho|operad|realizad|cirugi|rtu|reseccion|nefrectomia|prostatectomia|biopsia|cistoscopia|ureteroscopia|litotricia|orquid|circuncision|hidrocel|varicocel|cistostomia|adenomectomia|holep|nlpc|turp|turv)/.test(qLog)
+      || /\b(mi|mis)\b.*\b(casuistica|numeros|estadistica|actividad quirurgica|experiencia)/.test(qLog);
     if (pideLogbook) {
       try {
         const rl = await listarLogbook(sesionActiva?.user?.id || currentUser?.id);
@@ -15555,7 +15581,26 @@ if (imgsResult.ok) {
             const stone = regs.filter(r => r.control_stone_free);
             const stoneFree = stone.filter(r => r.control_stone_free === "stone_free").length;
             const ultimas = regs.slice(0, 5).map(r => `- ${r.fecha || "s/f"} | ${r.procedimiento || "?"} | rol: ${r.rol || "?"}${r.complicacion ? " | con complicación" : ""}`).join("\n");
-            ctxLogbook = `\n\n=== LOGBOOK QUIRÚRGICO DEL USUARIO ===\nTotal de registros: ${regs.length} (como cirujano: ${cx}, como ayudante: ${ayud}).\nPor procedimiento: ${top}.\nComplicaciones intraoperatorias registradas: ${compl}.${conCtrl.length ? `\nControles post-operatorios registrados: ${conCtrl.length} (favorables: ${ctrlFav}, Clavien ≥ III: ${ctrlMayor}).` : ""}${stone.length ? `\nControles imagenológicos de litiasis: ${stone.length} (stone free: ${stoneFree}).` : ""}\nÚltimos 5 registros:\n${ultimas}\nResponde con un resumen motivador y concreto del progreso de su casuística.`;
+            // Desglose temporal: "el último año", "este mes" son preguntas
+            // habituales y sin estos números el modelo tendría que contar a
+            // ojo sobre los últimos 5 registros.
+            const hoyD = new Date();
+            const haceN = (d) => { const x = new Date(hoyD); x.setDate(x.getDate() - d); return x.toISOString().slice(0, 10); };
+            const enRango = (desde) => regs.filter(r => (r.fecha || "") >= desde);
+            const resumenPeriodo = (etiqueta, lista) => {
+              if (!lista.length) return `${etiqueta}: 0`;
+              const pp = {};
+              lista.forEach(r => { const k = r.procedimiento || "Sin procedimiento"; pp[k] = (pp[k] || 0) + 1; });
+              const det = Object.entries(pp).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k}: ${v}`).join(" · ");
+              return `${etiqueta}: ${lista.length} (${det})`;
+            };
+            const bloquePeriodos = [
+              resumenPeriodo("Últimos 30 días", enRango(haceN(30))),
+              resumenPeriodo("Últimos 12 meses", enRango(haceN(365))),
+            ].join("\n");
+            const porLugar = `Pabellón: ${regs.filter(r => (r.lugar || "pabellon") !== "box").length} · Box: ${regs.filter(r => r.lugar === "box").length}`;
+
+            ctxLogbook = `\n\n=== LOGBOOK QUIRÚRGICO DEL USUARIO ===\nHoy es ${hoyD.toISOString().slice(0, 10)}.\n${bloquePeriodos}\n${porLugar}\nTotal de registros: ${regs.length} (como cirujano: ${cx}, como ayudante: ${ayud}).\nPor procedimiento: ${top}.\nComplicaciones intraoperatorias registradas: ${compl}.${conCtrl.length ? `\nControles post-operatorios registrados: ${conCtrl.length} (favorables: ${ctrlFav}, Clavien ≥ III: ${ctrlMayor}).` : ""}${stone.length ? `\nControles imagenológicos de litiasis: ${stone.length} (stone free: ${stoneFree}).` : ""}\nÚltimos 5 registros:\n${ultimas}\nResponde con un resumen motivador y concreto del progreso de su casuística.`;
           }
         }
       } catch {}
@@ -16330,7 +16375,7 @@ if (!currentUser) {
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:"var(--fs-2)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
-                  <Uros expresion="pensando" size={26}/> Consultando...
+                  Consultando...
                 </div>
               </div>
             )}
