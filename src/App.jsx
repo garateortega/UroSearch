@@ -2962,7 +2962,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.8.0";
+const VERSION = "v2.8.3";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -15355,10 +15355,10 @@ if (imgsResult.ok) {
   // que realmente hay en la lista —nombres, camas, servicios, diagnósticos—.
   // Si la pregunta menciona algo de un paciente concreto, ese paciente entra al
   // contexto aunque no aparezca la palabra "paciente" por ninguna parte.
-  const buscarPacientesRelevantes = (consulta) => {
+  const buscarPacientesRelevantes = (consulta, lista) => {
     const norm = (t) => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const q = norm(consulta);
-    const misPacientes = pacientes || [];
+    const misPacientes = lista || pacientes || [];
 
     // Palabras vacías: aparecen en cualquier diagnóstico y harían coincidir todo.
     const VACIAS = new Set(["de","del","la","el","los","las","con","sin","por","para","en","y","o","a","al","un","una","izq","der","izquierda","derecha","bilateral","paciente","post","operado","cirugia","control","dia","dias"]);
@@ -15440,7 +15440,18 @@ if (imgsResult.ok) {
   // la base de conocimiento cuando no corresponde (saludos, pacientes, tabla).
   const esCharla = esCharlaBasica(txt);
   const consultaCirugias = buscarCirugiasRelevantes(txt);
-  const consultaPacientes = buscarPacientesRelevantes(txt);
+  // Los pacientes los carga el panel de Servicio al visitarlo. Si la primera
+  // acción de la sesión es preguntar en el chat, la lista en memoria está
+  // vacía y el chat respondía "no tienes pacientes" teniéndolos: acá se van a
+  // buscar directo antes de decidir.
+  let listaPacChat = pacientes;
+  if ((!listaPacChat || listaPacChat.length === 0) && currentUser) {
+    try {
+      const rp = await listarPacientes(currentUser.id, contexto);
+      if (rp.ok) { listaPacChat = rp.pacientes; setPacientes(rp.pacientes); }
+    } catch {}
+  }
+  const consultaPacientes = buscarPacientesRelevantes(txt, listaPacChat);
   const necesitaBase = !esCharla && !consultaCirugias && !consultaPacientes;
   // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
   const busquedaPromise = necesitaBase ? buscarChunks(expandirSiglas(txt), 8) : Promise.resolve({ ok: true, chunks: [] });
@@ -16018,7 +16029,10 @@ if (!currentUser) {
         <div style={{ position: "fixed", inset: 0, zIndex: 1400, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "16px 18px 10px", borderBottom: "0.5px solid var(--borde)" }}>
             <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>{docLegalPendiente.titulo}</div>
-            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2 }}>Versión {docLegalPendiente.version} · debes aceptar para continuar usando UroSearch</div>
+            {/* La versión del documento NO se muestra: "Versión 1.0" se leía
+                como si fuera la versión de la app. Queda solo en el registro
+                de aceptaciones, que es donde cumple su función. */}
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2 }}>Debes aceptarlo para continuar usando UroSearch {VERSION}</div>
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px", fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.65, whiteSpace: "pre-wrap", WebkitOverflowScrolling: "touch" }}>
             {docLegalPendiente.cuerpo}
@@ -16333,7 +16347,7 @@ if (!currentUser) {
               <button onClick={sendMsg} disabled={loading||!input.trim()} style={{padding:"10px 16px",borderRadius:8,border:"none",background:loading||!input.trim()?"var(--borde)":"var(--primario)",color:"var(--texto-inv)",fontSize:"var(--fs-2)",cursor:loading||!input.trim()?"default":"pointer",fontWeight:500,whiteSpace:"nowrap"}}>Enviar</button>
             </div>
             <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",lineHeight:1.4,marginTop:8,textAlign:"center"}}>
-              ⚠️ Información de apoyo clínico. No reemplaza el juicio médico.
+              ⚠️ Respuestas generadas por IA: pueden contener errores u omisiones. Verifica la información antes de aplicarla; no reemplaza tu juicio clínico.
             </div>
           </div>
         </div>
