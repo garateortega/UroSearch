@@ -180,6 +180,67 @@ export async function eliminarExamen(examenId) {
 }
 
 // ============================================================
+// IMÁGENES DE LA FICHA
+// ============================================================
+// Fotos clínicas adjuntas al paciente: lesiones, heridas operatorias, informes
+// en papel, esquemas dibujados a mano. El archivo vive en el bucket
+// `paciente-imagenes` bajo <paciente_id>/, y la fila guarda su metadato.
+const BUCKET_IMG_PAC = 'paciente-imagenes';
+
+export async function listarImagenesPaciente(pacienteId) {
+  const { data, error } = await supabase
+    .from('paciente_imagenes')
+    .select('*, autor:perfiles!autor_id(nombre)')
+    .eq('paciente_id', pacienteId)
+    .order('fecha', { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, imagenes: data || [] };
+}
+
+// `bytes` es un Blob/File ya comprimido por el cliente.
+export async function subirImagenPaciente(pacienteId, autorId, bytes, { descripcion = '', fecha = null } = {}) {
+  const path = `${pacienteId}/${Date.now()}.jpg`;
+  const up = await supabase.storage.from(BUCKET_IMG_PAC)
+    .upload(path, bytes, { contentType: 'image/jpeg' });
+  if (up.error) return { ok: false, error: up.error.message };
+
+  const { data, error } = await supabase
+    .from('paciente_imagenes')
+    .insert({
+      paciente_id: pacienteId,
+      autor_id: autorId,
+      path,
+      descripcion: descripcion.trim() || null,
+      fecha: fecha || new Date().toISOString().slice(0, 10),
+    })
+    .select('*, autor:perfiles!autor_id(nombre)')
+    .single();
+  if (error) {
+    // La fila no se creó: se retira el archivo para no dejar huérfanos que
+    // nadie pueda ver ni borrar desde la app.
+    await supabase.storage.from(BUCKET_IMG_PAC).remove([path]);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, imagen: data };
+}
+
+// URL temporal para mostrar la imagen. El bucket es privado: son datos de
+// salud y una URL pública sería accesible por cualquiera que la tuviera.
+export async function urlImagenPaciente(path, segundos = 3600) {
+  const { data, error } = await supabase.storage
+    .from(BUCKET_IMG_PAC).createSignedUrl(path, segundos);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, url: data.signedUrl };
+}
+
+export async function eliminarImagenPaciente(id, path) {
+  if (path) await supabase.storage.from(BUCKET_IMG_PAC).remove([path]);
+  const { error } = await supabase.from('paciente_imagenes').delete().eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// ============================================================
 // SERVICIOS DEL USUARIO
 // ============================================================
 

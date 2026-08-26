@@ -3,7 +3,7 @@ import { register as registerUser, login as loginUser, logout as logoutUser, get
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion, cancelarInvitacion } from "./equipos";
-import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, transferirPacienteAPersonal, transferirPacienteAEquipo, restringirPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
+import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, transferirPacienteAPersonal, transferirPacienteAEquipo, restringirPaciente, listarImagenesPaciente, subirImagenPaciente, urlImagenPaciente, eliminarImagenPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarLogbook } from "./logbook";
 
 
@@ -2945,7 +2945,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.5.0";
+const VERSION = "v2.6.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -10783,6 +10783,107 @@ function useSugRx(uid) {
   return v;
 }
 
+// ─── Imágenes clínicas de la ficha ───
+// Lesiones, heridas operatorias, informes en papel, esquemas dibujados. El
+// bucket es PRIVADO y se accede con URL firmada: son datos de salud, y una URL
+// pública sería descargable por cualquiera que la tuviera.
+function ImagenesPaciente({ paciente, currentUser, soloLectura }) {
+  const [imgs, setImgs] = useState([]);
+  const [urls, setUrls] = useState({});
+  const [cargando, setCargando] = useState(true);
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState("");
+  const [zoom, setZoom] = useState(null);
+  const fileRef = useRef(null);
+
+  const cargar = async () => {
+    setCargando(true);
+    const r = await listarImagenesPaciente(paciente.id);
+    setCargando(false);
+    if (!r.ok) { setError(r.error); return; }
+    setImgs(r.imagenes);
+    // Las URLs firmadas se piden en paralelo y caducan en una hora; se vuelven
+    // a pedir en cada visita a la ficha.
+    const pares = await Promise.all(r.imagenes.map(async (i) => {
+      const u = await urlImagenPaciente(i.path);
+      return [i.id, u.ok ? u.url : null];
+    }));
+    setUrls(Object.fromEntries(pares));
+  };
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [paciente.id]);
+
+  const onFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (e.target) e.target.value = "";
+    if (!files.length) return;
+    setError(""); setSubiendo(true);
+    for (const f of files.slice(0, 6)) {
+      try {
+        const b64 = await comprimirImagenPac(f, 1600, 0.82);
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const r = await subirImagenPaciente(paciente.id, currentUser.id, new Blob([bytes], { type: "image/jpeg" }));
+        if (!r.ok) setError(r.error);
+      } catch (err) { setError(err?.message || "No se pudo subir la imagen"); }
+    }
+    setSubiendo(false);
+    cargar();
+  };
+
+  const borrar = async (im) => {
+    if (!(await uroConfirm("¿Eliminar esta imagen de la ficha?"))) return;
+    const r = await eliminarImagenPaciente(im.id, im.path);
+    if (!r.ok) return uroToast("Error: " + r.error);
+    setImgs((p) => p.filter((x) => x.id !== im.id));
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={ST_TITULO_SEC}>📷 Imágenes {imgs.length > 0 && <span style={{ fontWeight: 400, color: "var(--texto-ter)" }}>({imgs.length})</span>}</div>
+        {!soloLectura && (
+          <>
+            <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={onFiles} />
+            <button onClick={() => fileRef.current?.click()} disabled={subiendo} title="Agregar imagen" aria-label="Agregar imagen" style={{ ...ST_BTN_MAS, opacity: subiendo ? 0.6 : 1 }}>{subiendo ? "…" : "+"}</button>
+          </>
+        )}
+      </div>
+      {error && <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)", fontWeight: 600, marginBottom: 6 }}>{error}</div>}
+      {cargando ? (
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", fontStyle: "italic" }}>Cargando imágenes…</div>
+      ) : imgs.length === 0 ? (
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", fontStyle: "italic", padding: "6px 0" }}>Sin imágenes adjuntas</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(96px,1fr))", gap: 8 }}>
+          {imgs.map((im) => (
+            <div key={im.id} style={{ position: "relative" }}>
+              {urls[im.id] ? (
+                <img src={urls[im.id]} alt={im.descripcion || "Imagen clínica"} onClick={() => setZoom(urls[im.id])}
+                  style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: "0.5px solid var(--borde)", cursor: "zoom-in", display: "block" }} />
+              ) : (
+                <div style={{ width: "100%", aspectRatio: "1", borderRadius: 8, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)" }} />
+              )}
+              <div style={{ fontSize: 9.5, color: "var(--texto-ter)", marginTop: 3, lineHeight: 1.3 }}>
+                {(im.fecha || "").split("-").reverse().slice(0, 2).join("/")} · {im.autor?.nombre?.split(" ")[0] || "—"}
+              </div>
+              {!soloLectura && (
+                <button onClick={() => borrar(im)} aria-label="Eliminar imagen"
+                  style={{ position: "absolute", top: -6, right: -6, width: 22, height: 22, borderRadius: "50%", border: "none", background: "var(--peligro)", color: "var(--texto-inv)", fontSize: 13, fontWeight: 700, cursor: "pointer", lineHeight: 1 }}>×</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {zoom && (
+        <div onClick={() => setZoom(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+          <img src={zoom} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Ámbito de un paciente: traspaso equipo↔personal y visibilidad ───
 // Un paciente del equipo lo ven todos sus miembros. Hay casos —consulta
 // privada, situaciones sensibles— en que eso no corresponde. Dos herramientas:
@@ -12967,6 +13068,10 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
 
         {/* EXÁMENES agrupados por día + anteriores colapsados */}
+        <div style={{order:1.5,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
+          <ImagenesPaciente paciente={seleccionado} currentUser={currentUser} soloLectura={soloLectura} />
+        </div>
+
         <div style={{order:2,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={ST_TITULO_SEC}>🧪 Exámenes</div>
@@ -12976,6 +13081,44 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               <button onClick={()=>{setAbrirFormExamen(true); setTimeout(()=>formExamenRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar examen" aria-label="Agregar examen" style={ST_BTN_MAS}>+</button>
             </div>}
           </div>
+          {/* Últimos por tipo: lo primero que se necesita en la visita es el
+              laboratorio y la imagen más recientes, y con el listado por fecha
+              había que ir barriendo días hacia atrás para encontrarlos. */}
+          {examenes.length > 0 && (() => {
+            const ORDEN_TIPOS = ["Laboratorio", "Imagen", "Cultivo", "Anatomía patológica", "Cistoscopia", "Otro"];
+            const ICONO_TIPO = { "Laboratorio": "🧪", "Imagen": "🩻", "Cultivo": "🦠", "Anatomía patológica": "🔬", "Cistoscopia": "🔭", "Otro": "📄" };
+            // examenes ya viene ordenado por fecha desc: el primero de cada
+            // tipo es el más reciente.
+            const ultimos = [];
+            ORDEN_TIPOS.forEach((t) => {
+              const ex = examenes.find((e) => (e.tipo || "Otro") === t);
+              if (ex) ultimos.push(ex);
+            });
+            if (ultimos.length === 0) return null;
+            const dias = (f) => {
+              if (!f) return null;
+              const d = Math.round((Date.now() - new Date(f + "T00:00:00").getTime()) / 86400000);
+              return d <= 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} días`;
+            };
+            return (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:8,marginBottom:12}}>
+                {ultimos.map((ex) => (
+                  <div key={"ult"+ex.id} onClick={()=>{ setMostrarExAntiguos(true); }} style={{background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:9,padding:"9px 11px",cursor:"pointer"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                      <span style={{fontSize:13}}>{ICONO_TIPO[ex.tipo] || "📄"}</span>
+                      <span style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--texto-sec)",textTransform:"uppercase",letterSpacing:0.3}}>Último {ex.tipo?.toLowerCase()}</span>
+                    </div>
+                    <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",lineHeight:1.35}}>{ex.nombre}</div>
+                    <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>
+                      {(ex.fecha_examen||"").split("-").reverse().join("/")}{dias(ex.fecha_examen) ? ` · ${dias(ex.fecha_examen)}` : ""}
+                    </div>
+                    {ex.resultado && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginTop:4,lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{ex.resultado}</div>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           {examenes.length === 0 ? (
             <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay exámenes registrados</div>
           ) : (() => {
@@ -13183,6 +13326,27 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </div>
     )}
   </div>
+
+  {/* Últimos exámenes a la vista mientras se escribe la evolución: son el dato
+      que uno va a buscar a otra pantalla justo cuando está redactando. */}
+  {examenes.length > 0 && (() => {
+    const tipos = ["Laboratorio", "Imagen"];
+    const ults = tipos.map(t => examenes.find(e => (e.tipo||"Otro") === t)).filter(Boolean);
+    if (!ults.length) return null;
+    return (
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {ults.map(ex => (
+          <div key={"evoUlt"+ex.id} style={{flex:"1 1 200px",minWidth:0,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:9,padding:"8px 10px"}}>
+            <div style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--texto-ter)",textTransform:"uppercase",letterSpacing:0.3}}>
+              {ex.tipo === "Imagen" ? "🩻" : "🧪"} Último {ex.tipo.toLowerCase()} · {(ex.fecha_examen||"").split("-").reverse().join("/")}
+            </div>
+            <div style={{fontSize:"var(--fs-1)",fontWeight:600,color:"var(--texto)",marginTop:2}}>{ex.nombre}</div>
+            {ex.resultado && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginTop:3,lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{ex.resultado}</div>}
+          </div>
+        ))}
+      </div>
+    );
+  })()}
 
   {/* DICTADO POR VOZ — reparte en SOAP o arma párrafos según el modo activo */}
   <ControlDictado
