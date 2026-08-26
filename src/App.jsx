@@ -146,7 +146,16 @@ function anonimizarCtx(texto) {
 }
 function desanonimizar(texto, mapa) {
   let r = texto;
-  for (const { tok, val } of mapa) r = r.replaceAll(tok, val);
+  for (const { tok, val } of mapa) {
+    // El modelo casi nunca devuelve el token tal cual: escribe "PAC-1" sin
+    // corchetes, o lo envuelve en negrita ("**PAC-1**"). Con un replaceAll
+    // literal del token no coincidía nada y el usuario terminaba leyendo
+    // "PAC-1" en vez del nombre de su paciente.
+    // Se reemplaza el identificador con o sin corchetes.
+    const nucleo = tok.replace(/^\[|\]$/g, "");          // PAC-1
+    const esc = nucleo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    r = r.replace(new RegExp(`\\[?\\b${esc}\\b\\]?`, "g"), val);
+  }
   return r;
 }
 
@@ -2962,7 +2971,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.8.3";
+const VERSION = "v2.8.4";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
