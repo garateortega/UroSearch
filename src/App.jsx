@@ -2962,7 +2962,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.7.1";
+const VERSION = "v2.8.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -14933,6 +14933,38 @@ useEffect(() => {
 
   const isAdmin = currentUser?.rol === "admin";
 
+  // ── Aceptación de documentos legales del piloto ──
+  // El documento vive en la base (documentos_legales) y el gate solo se activa
+  // cuando existe uno activo: sin fila, la app funciona igual que hoy. Cada
+  // aceptación queda registrada con usuario, versión y fecha — que es lo que
+  // vale como consentimiento en línea (Ley 19.799 / eIDAS).
+  const [docLegalPendiente, setDocLegalPendiente] = useState(null);
+  useEffect(() => {
+    if (!currentUser) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const { data: docs } = await supabase.from("documentos_legales")
+          .select("clave, version, titulo, cuerpo").eq("activo", true);
+        if (!vivo || !docs?.length) return;
+        const { data: acept } = await supabase.from("aceptaciones_legales")
+          .select("clave, version").eq("user_id", currentUser.id);
+        const hechas = new Set((acept || []).map((a) => `${a.clave}|${a.version}`));
+        const falta = docs.find((d) => !hechas.has(`${d.clave}|${d.version}`));
+        if (vivo && falta) setDocLegalPendiente(falta);
+      } catch {}
+    })();
+    return () => { vivo = false; };
+  }, [currentUser]);
+
+  const aceptarDocLegal = async () => {
+    const d = docLegalPendiente;
+    const { error } = await supabase.from("aceptaciones_legales")
+      .insert({ user_id: currentUser.id, clave: d.clave, version: d.version });
+    if (error && error.code !== "23505") return uroToast("No se pudo registrar: " + error.message);
+    setDocLegalPendiente(null);
+  };
+
   // Aviso de versión nueva. Se revisa al volver del segundo plano y cada 30 min.
   // NO se recarga sola: recargar mientras alguien escribe una evolución le
   // borraría el trabajo. El usuario decide cuándo.
@@ -15980,6 +16012,23 @@ if (!currentUser) {
       <OfflineBanner/>
       {bloqueado && <LockScreen onUnlock={()=>setBloqueado(false)} />}
       {!bloqueado && <BoletinModal currentUser={currentUser} />}
+      {/* Gate legal: bloquea el uso hasta aceptar. Sin botón de cerrar a
+          propósito: aceptar o salir es exactamente la decisión que se pide. */}
+      {docLegalPendiente && !bloqueado && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1400, background: "var(--fondo)", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "16px 18px 10px", borderBottom: "0.5px solid var(--borde)" }}>
+            <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>{docLegalPendiente.titulo}</div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2 }}>Versión {docLegalPendiente.version} · debes aceptar para continuar usando UroSearch</div>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px", fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.65, whiteSpace: "pre-wrap", WebkitOverflowScrolling: "touch" }}>
+            {docLegalPendiente.cuerpo}
+          </div>
+          <div style={{ padding: "12px 18px calc(16px + env(safe-area-inset-bottom, 0px))", borderTop: "0.5px solid var(--borde)", display: "flex", gap: 10 }}>
+            <button onClick={aceptarDocLegal} style={{ flex: 1, padding: 13, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 10, cursor: "pointer" }}>Acepto</button>
+            <button onClick={() => { try { supabase.auth.signOut(); } catch {} }} style={{ padding: "13px 16px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 10, cursor: "pointer" }}>Salir</button>
+          </div>
+        </div>
+      )}
       {diagOpen && <DiagnosticoPanel onClose={() => setDiagOpen(false)} />}
       {!bloqueado && versionNueva && (
         <div style={{ position: "fixed", left: 12, right: 12, bottom: "calc(76px + env(safe-area-inset-bottom, 0px))", zIndex: 950, maxWidth: 420, margin: "0 auto", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "var(--primario)", color: "var(--texto-inv)", borderRadius: 12, boxShadow: "0 6px 20px rgba(0,0,0,0.28)" }}>
