@@ -2945,7 +2945,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.6.0";
+const VERSION = "v2.7.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -3417,15 +3417,19 @@ function pasosTutorial(rol, movil = false) {
 
     { target: "tab-hospital", tab: "hospital", subtab: "pacientes", uros: "checklist", titulo: "Servicio", texto: "Tus pacientes, la tabla quirúrgica y las notas. Tocando de nuevo la pestaña se despliega el menú con Pacientes · Tabla · Notas · Recetas · Interconsultas · Seguimiento, y el cambio entre 👤 tus pacientes y 👥 los del equipo." },
 
-    { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio), con evoluciones SOAP y exámenes:" },
+    { tab: "hospital", subtab: "pacientes", demo: "ficha", uros: "explicando", titulo: "La ficha del paciente", texto: "Al abrir un paciente ves su ficha completa (ejemplo ficticio): evoluciones SOAP, exámenes con los últimos de cada tipo destacados, y 📷 imágenes clínicas que puedes adjuntar desde la cámara." },
+
+    { tab: "hospital", subtab: "pacientes", uros: "camara", titulo: "🎤 Dicta en vez de escribir", texto: "En evoluciones, ingresos, resultados de exámenes y en el chat hay un botón de micrófono. Dictas, y el texto se ordena solo en los campos que corresponden. El audio no se guarda: solo queda el texto, y siempre puedes cancelar antes de transcribir. Revisa las cifras y dosis antes de guardar." },
+
+    { tab: "hospital", subtab: "pacientes", uros: "checklist", titulo: "Mantén presionado un paciente", texto: "Se abre un menú rápido: dar de alta, cambiar cama o servicio, adjuntar ingreso, y 🔒 decidir quién del equipo puede verlo o pasarlo a tu lista personal." },
 
     { tab: "hospital", subtab: "tabla", demo: "tabla-tools", uros: "trocar", titulo: "Tabla quirúrgica", texto: "En «Tabla» programas las cirugías. Toca de nuevo la pestaña para ver su barra:" },
 
     { target: "tab-conocimiento", tab: "conocimiento", uros: "lectura", titulo: "Biblioteca", texto: "Protocolos quirúrgicos, videos, preguntas y los scores de uso diario: IPSS, D'Amico, RENAL, PADUA, Clavien-Dindo y etapificación TNM." },
 
-    { target: "tab-logbook", tab: "logbook", uros: "camara", titulo: "📓 Logbook quirúrgico", texto: "Tu casuística personal. Fotografías el protocolo operatorio y extraigo procedimiento, paciente, duración y hallazgos. Las tarjetas y los gráficos son filtros: tócalos. El botón «Certificado» arma el PDF que antes hacías a mano en Excel." },
+    { target: "tab-logbook", tab: "logbook", uros: "camara", titulo: "📓 Logbook quirúrgico", texto: "Tu casuística personal, de pabellón y de box. Fotografías el protocolo y extraigo procedimiento, paciente, duración y hallazgos. Mantén presionado un registro para agregar la complicación (Clavien-Dindo) o completar la biopsia cuando llegue. El botón «Certificado» arma el PDF que antes hacías a mano." },
 
-    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Los equipos y este mismo tutorial están en tu menú, arriba a la derecha, junto a los Términos y la Política de Privacidad. UroSearch™ es una herramienta de apoyo, no un dispositivo médico." },
+    { uros: "hero", titulo: "¡Listo! 🎉", texto: "Los equipos y este mismo tutorial están en tu menú, arriba a la derecha, junto a los Términos y la Política de Privacidad. Ten presente que las imágenes clínicas se eliminan automáticamente a los 6 meses: lo que deba quedar permanente va a la ficha institucional. UroSearch™ es una herramienta de apoyo, no un dispositivo médico." },
   ];
   // Enfermería no ve Biblioteca ni Logbook; internos sí. Filtramos pasos cuyo tab no aplica.
   const tabsFuera = rol === "enfermeria" ? ["conocimiento", "logbook"] : [];
@@ -15237,27 +15241,66 @@ if (imgsResult.ok) {
   };
 
   // Detecta si la consulta es sobre los pacientes del médico
+  // Decide si una consulta trata sobre los pacientes del usuario, y cuáles.
+  //
+  // Antes esto dependía de una lista fija de palabras ("paciente", "cama",
+  // "hospitalizado"…). Preguntas naturales como "¿qué antibiótico le dejamos
+  // al de pionefrosis?" o "¿cómo va Ramírez?" no contenían ninguna, así que el
+  // chat respondía sin ver los datos, como si el paciente no existiera.
+  //
+  // Ahora la detección es DIRIGIDA POR LOS DATOS: se compara la consulta con lo
+  // que realmente hay en la lista —nombres, camas, servicios, diagnósticos—.
+  // Si la pregunta menciona algo de un paciente concreto, ese paciente entra al
+  // contexto aunque no aparezca la palabra "paciente" por ninguna parte.
   const buscarPacientesRelevantes = (consulta) => {
-    const q = consulta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-    const palabrasPacientes = ["paciente","pacientes","hospitalizad","hospitalizado","cama","camas","servicio","ingres","alta","altas","mis","tengo","cuanto","cuanta","quien","resumen","ficha","evolucion","examen","diagnostic","operad","post op","postop","visita"];
-    const esConsulta = palabrasPacientes.some(p => q.includes(p));
-    if (!esConsulta) return null;
-    // Los pacientes ya vienen filtrados por contexto (personales o del equipo activo)
+    const norm = (t) => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const q = norm(consulta);
     const misPacientes = pacientes || [];
+
+    // Palabras vacías: aparecen en cualquier diagnóstico y harían coincidir todo.
+    const VACIAS = new Set(["de","del","la","el","los","las","con","sin","por","para","en","y","o","a","al","un","una","izq","der","izquierda","derecha","bilateral","paciente","post","operado","cirugia","control","dia","dias"]);
+
+    // ── 1. Coincidencia por datos concretos del paciente ──
+    const puntaje = new Map();
+    const sumar = (p, n) => puntaje.set(p.id, (puntaje.get(p.id) || 0) + n);
+    misPacientes.forEach((p) => {
+      // Nombre/iniciales: cada palabra de 3+ letras que aparezca en la consulta.
+      norm(p.iniciales).split(/\s+/).filter((w) => w.length >= 3 && !VACIAS.has(w))
+        .forEach((w) => { if (new RegExp(`\\b${w}`, "i").test(q)) sumar(p, 3); });
+      // Cama: "cama 12", "de la 12", o el número suelto si es de 1-3 dígitos.
+      if (p.cama && new RegExp(`\\b${String(p.cama).toLowerCase()}\\b`).test(q)) sumar(p, 3);
+      // Diagnóstico: palabras clínicas distintivas.
+      norm(p.diagnostico).split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !VACIAS.has(w))
+        .forEach((w) => { if (q.includes(w)) sumar(p, 2); });
+      // Servicio y ficha.
+      if (p.servicio && q.includes(norm(p.servicio)) && norm(p.servicio).length >= 4) sumar(p, 1);
+      if (p.ficha_clinica && q.includes(String(p.ficha_clinica).toLowerCase())) sumar(p, 4);
+    });
+    const concretos = misPacientes.filter((p) => (puntaje.get(p.id) || 0) >= 2)
+      .sort((a, b) => (puntaje.get(b.id) || 0) - (puntaje.get(a.id) || 0));
+
+    // ── 2. Consulta general sobre la lista ──
+    const palabrasPacientes = ["paciente","pacientes","hospitalizad","hospitalizado","internad","cama","camas","servicio","ingres","alta","altas","mis ","tengo","cuanto","cuanta","cuantos","quien","quienes","resumen","ficha","evolucion","examen","diagnostic","operad","post op","postop","visita","ronda","entrega de turno","pendiente"];
+    const esGeneral = palabrasPacientes.some((w) => q.includes(w));
+
+    if (concretos.length === 0 && !esGeneral) return null;
     if (misPacientes.length === 0) return { ningun: true, total: 0 };
 
-    // Filtrar por estado si se menciona
-    let filtrados = misPacientes;
-    if (q.includes("hospitalizad") || q.includes("activo") || q.includes("internad")) {
-      filtrados = filtrados.filter(p => p.estado === "activo");
-    } else if (q.includes("dado de alta") || q.includes("dados de alta") || q.includes("de alta")) {
-      filtrados = filtrados.filter(p => p.estado === "alta");
+    // Si la pregunta apunta a pacientes concretos, se manda SOLO esos: el
+    // contexto rinde mucho más con tres fichas completas que con cuarenta
+    // líneas de resumen.
+    if (concretos.length > 0 && concretos.length <= 5) {
+      return { pacientes: concretos, totalMisPacientes: misPacientes.length, ningun: false };
     }
 
-    // Filtrar por iniciales si se mencionan
-    const inicialesEnQuery = consulta.match(/[A-Z]\.[A-Z]\.[A-Z]\.?/g) || consulta.match(/[A-Z]{2,}/g) || [];
+    let filtrados = concretos.length ? concretos : misPacientes;
+    if (/hospitalizad|activo|internad/.test(q)) filtrados = filtrados.filter((p) => p.estado === "activo");
+    else if (/dados? de alta|de alta/.test(q)) filtrados = filtrados.filter((p) => p.estado === "alta");
+
+    // Iniciales en mayúsculas escritas explícitamente ("J.P.M.", "MHR").
+    const inicialesEnQuery = consulta.match(/[A-Z]\.[A-Z]\.[A-Z]\.?/g) || consulta.match(/\b[A-Z]{2,4}\b/g) || [];
     if (inicialesEnQuery.length > 0) {
-      const matched = filtrados.filter(p => inicialesEnQuery.some(ini => (p.iniciales || "").toUpperCase().includes(ini.replace(/\./g,"")) ));
+      const matched = filtrados.filter((p) => inicialesEnQuery.some((ini) => (p.iniciales || "").toUpperCase().includes(ini.replace(/\./g, ""))));
       if (matched.length > 0) filtrados = matched;
     }
 
