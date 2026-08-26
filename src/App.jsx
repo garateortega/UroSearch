@@ -2921,7 +2921,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.3.3";
+const VERSION = "v2.3.6";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -11126,7 +11126,7 @@ const cargarMiembrosEquipo = async () => {
           return;
         }
         try {
-          const scEl = scrollParent(kanbanRef.current || document.body);
+          const scEl = scrollParent(kanbanRef.current?.parentElement || document.body);
           const enVentana = scEl === document.body || scEl === document.documentElement;
           const maximo = enVentana
             ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
@@ -11135,13 +11135,23 @@ const cargarMiembrosEquipo = async () => {
             if (enVentana) window.scrollTo(0, Math.min(sv, maximo));
             else scEl.scrollTop = Math.min(sv, maximo);
           }
-          if (sh > 0 && orientacionPac === "horizontal" && kanbanRef.current) {
-            kanbanRef.current.scrollLeft = sh;
+          // Eje horizontal con la MISMA lógica de reintento que el vertical.
+          // En el kanban horizontal el desplazamiento que importa es scrollLeft,
+          // y aplicarlo una sola vez fallaba igual: al intento 1 las columnas
+          // aún no tienen ancho completo y el navegador recorta el valor.
+          let actualH = 0, maximoH = 0;
+          if (sh > 0 && kanbanRef.current) {
+            maximoH = Math.max(0, kanbanRef.current.scrollWidth - kanbanRef.current.clientWidth);
+            kanbanRef.current.scrollLeft = Math.min(sh, maximoH);
+            actualH = kanbanRef.current.scrollLeft || 0;
           }
           const actual = enVentana ? (window.scrollY || 0) : (scEl.scrollTop || 0);
-          // Todavía no se alcanzó la posición porque falta contenido: reintentar.
-          if (sv > 0 && actual < sv - 2 && maximo < sv) return requestAnimationFrame(intentar);
-          logDiag(`scroll pacientes: restaurado a ${actual}px de ${sv}px pedidos · contenedor=${enVentana ? "ventana" : "<" + (scEl.tagName || "?").toLowerCase() + ">"} · intento ${intentos}`);
+          // Todavía no se alcanza la posición en ALGÚN eje porque falta
+          // contenido: reintentar.
+          const faltaV = sv > 0 && actual < sv - 2 && maximo < sv;
+          const faltaH = sh > 0 && actualH < sh - 2 && maximoH < sh;
+          if (faltaV || faltaH) return requestAnimationFrame(intentar);
+          logDiag(`scroll pacientes: restaurado v=${actual}/${sv} h=${actualH}/${sh} · contenedor=${enVentana ? "ventana" : "<" + (scEl.tagName || "?").toLowerCase() + ">"} · intento ${intentos}`);
         } catch (e) { logDiag(`scroll pacientes: excepción al restaurar: ${e?.message || e}`); }
         ["pointerdown", "touchstart", "wheel", "keydown"].forEach((ev) =>
           window.removeEventListener(ev, abortar));
@@ -11156,7 +11166,7 @@ const cargarMiembrosEquipo = async () => {
       t = setTimeout(() => {
         try {
           if (!kanbanRef.current) return; // solo en la vista kanban (no con una ficha abierta)
-          const scEl = scrollParent(kanbanRef.current || document.body);
+          const scEl = scrollParent(kanbanRef.current?.parentElement || document.body);
           const top = (scEl === document.body || scEl === document.documentElement) ? (window.scrollY || 0) : (scEl.scrollTop || 0);
           localStorage.setItem("uro_pac_scroll_v", String(Math.round(top)));
           localStorage.setItem("uro_pac_scroll_h", String(Math.round(kanbanRef.current.scrollLeft || 0)));
@@ -11175,11 +11185,11 @@ const cargarMiembrosEquipo = async () => {
       clearTimeout(t);
       try {
         if (!kanbanRef.current) { logDiag("scroll pacientes: guardarYa sin contenedor (lista no montada)"); return; }
-        const scEl = scrollParent(kanbanRef.current || document.body);
+        const scEl = scrollParent(kanbanRef.current?.parentElement || document.body);
         const top = (scEl === document.body || scEl === document.documentElement) ? (window.scrollY || 0) : (scEl.scrollTop || 0);
         localStorage.setItem("uro_pac_scroll_v", String(Math.round(top)));
         localStorage.setItem("uro_pac_scroll_h", String(Math.round(kanbanRef.current.scrollLeft || 0)));
-        logDiag(`scroll pacientes: guardado v=${Math.round(top)} al salir/ocultar`);
+        logDiag(`scroll pacientes: guardado v=${Math.round(top)} h=${Math.round(kanbanRef.current.scrollLeft || 0)} · contV=${scEl === document.body || scEl === document.documentElement ? "ventana" : "<" + (scEl.tagName || "?").toLowerCase() + ">"}`);
       } catch {}
     };
     // capture:true también captura el scroll de contenedores internos (la fila horizontal)
@@ -11333,7 +11343,7 @@ const cargarMiembrosEquipo = async () => {
       window.removeEventListener("pointermove", preMove); window.removeEventListener("pointerup", preUp);
       dragPacRef.current = p; overRef.current = null; setGapId(null); setDragPos({ x: startX, y: startY });
       try { navigator.vibrate?.(15); } catch {}
-      scEl = scrollParent(kanbanRef.current || document.body);
+      scEl = scrollParent(kanbanRef.current?.parentElement || document.body);
       rafId = requestAnimationFrame(autoScroll);
       window.addEventListener("pointermove", move, { passive: false });
       window.addEventListener("pointerup", up);
@@ -11396,7 +11406,7 @@ const cargarMiembrosEquipo = async () => {
     // moverlo. El eje sigue al del arrastre (horizontal en el kanban ancho,
     // vertical cuando las columnas van apiladas en el teléfono).
     let rafCol = null, ultXY = { x: 0, y: 0 };
-    const contScroll = () => (d0.vertical ? scrollParent(cont || document.body) : cont);
+    const contScroll = () => (d0.vertical ? scrollParent(cont?.parentElement || document.body) : cont);
     const d0 = dragColInfo.current;
     const autoScrollCol = () => {
       const d = dragColInfo.current;
@@ -13733,8 +13743,16 @@ const ST_BTN_MAS = { ...ST_BTN_ICO, background: "var(--primario)", color: "var(-
 
 function scrollParent(el) {
   while (el && el !== document.body) {
-    const oy = getComputedStyle(el).overflowY;
-    if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 4) return el;
+    const cs = getComputedStyle(el);
+    // Trampa de CSS: con overflow-x:auto y overflow-y sin especificar, el
+    // overflow-y COMPUTA "auto" aunque nadie lo pidiera. El kanban horizontal
+    // pasaba este filtro y se elegía a sí mismo como contenedor vertical, y el
+    // guardado leía un scrollTop perpetuamente en 0 — por eso la posición
+    // horizontal se conservaba y la vertical no. Un elemento que ya desplaza en
+    // horizontal y tiene scrollTop 0 no sirve: se sigue buscando hacia arriba.
+    const esVertical = (cs.overflowY === "auto" || cs.overflowY === "scroll") && el.scrollHeight > el.clientHeight + 4;
+    const pareceCarruselH = (cs.overflowX === "auto" || cs.overflowX === "scroll") && el.scrollWidth > el.clientWidth + 4 && (el.scrollTop || 0) === 0;
+    if (esVertical && !pareceCarruselH) return el;
     el = el.parentElement;
   }
   return document.scrollingElement || document.documentElement;
@@ -15537,9 +15555,15 @@ if (!currentUser) {
             <button onClick={()=>{ setMenuOpen(false); setTutorialOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               🧭 Ver tutorial
             </button>
-            <button onClick={()=>{ setMenuOpen(false); setDiagOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
-              🔧 Diagnóstico
-            </button>
+            {/* Herramienta de diagnóstico: SOLO para el admin. Los usuarios de
+                producción no la ven; para ellos no existe. Se conserva porque
+                fue lo que permitió resolver el bug del scroll leyendo registros
+                desde el teléfono mismo, sin consola. */}
+            {isAdmin && (
+              <button onClick={()=>{ setMenuOpen(false); setDiagOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+                🔧 Diagnóstico
+              </button>
+            )}
             <button onClick={handleLogout} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--peligro)",cursor:"pointer"}}>Cerrar sesión</button>
           </div>
           </>
