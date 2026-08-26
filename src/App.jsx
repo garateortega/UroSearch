@@ -18,7 +18,7 @@ function horaLocalHM() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }import { listarCirugias, crearCirugia, crearCirugiasBulk, actualizarCirugia, eliminarCirugia, listarPendientes, crearPendiente, actualizarPendiente, eliminarPendiente } from "./cirugias";
-import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, crearFigurasCapitulo, listarFigurasPendientes, marcarFiguraCurada, eliminarFiguraCapitulo, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
+import { listarConocimiento, obtenerConocimiento, crearConocimiento, eliminarConocimiento, listarVideos, crearVideo, eliminarVideo as eliminarVideoSupabase, listarPreguntas, crearPregunta, eliminarPregunta, crearChunks, listarChunks, buscarChunks, crearFigurasCapitulo, listarFigurasPendientes, obtenerProtocolosParaChat, marcarFiguraCurada, eliminarFiguraCapitulo, listarProtocolos, crearProtocolo, eliminarProtocolo, urlProtocolo } from "./biblioteca";
 import { supabase } from "./supabase"; // ← AJUSTA esta ruta si tu cliente está en otro archivo (ej: "./supabaseClient" o "./lib/supabase")
 import { uroToast, uroConfirm, UroDialogHost } from "./ui";
 import LogbookPanel from "./LogbookPanel";
@@ -2435,7 +2435,24 @@ function ProtocolosPanel({ currentUser, isAdmin, contexto, equipos = [] }) {
     if (!form.titulo.trim()) { setMsg("⚠️ Ponle un título al protocolo."); return; }
     if (!form.archivo) { setMsg("⚠️ Selecciona un archivo Word o PDF."); return; }
     setSubiendo(true); setMsg("");
-    const r = await crearProtocolo(currentUser.id, { titulo: form.titulo.trim(), categoria: form.categoria.trim() || "General", archivo: form.archivo });
+    // Si el archivo es PDF se extrae su texto al subirlo: es lo que permite que
+    // el chat responda citando el protocolo local en vez de la guía genérica.
+    let contenidoTexto = null;
+    if (/pdf$/i.test(form.archivo?.name || "") || form.archivo?.type === "application/pdf") {
+      try {
+        const lib = await cargarPdfJs();
+        const buf = await form.archivo.arrayBuffer();
+        const doc = await lib.getDocument({ data: buf }).promise;
+        const partes = [];
+        for (let i = 1; i <= Math.min(doc.numPages, 60); i++) {
+          const pg = await doc.getPage(i);
+          const c = await pg.getTextContent();
+          partes.push(c.items.map((it) => it.str).join(" "));
+        }
+        contenidoTexto = partes.join("\n").replace(/\s{3,}/g, " ").trim();
+      } catch { /* sin texto: el protocolo igual se sube y se descarga normal */ }
+    }
+    const r = await crearProtocolo(currentUser.id, { titulo: form.titulo.trim(), categoria: form.categoria.trim() || "General", archivo: form.archivo, equipoId: destino || null, contenidoTexto });
     setSubiendo(false);
     if (r.ok) { setForm({ titulo: "", categoria: "", archivo: null, archivoNombre: "" }); if (fileRef.current) fileRef.current.value = ""; setMsg("✓ Protocolo subido."); cargar(); }
     else setMsg("⚠️ " + r.error);
@@ -2945,7 +2962,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.7.0";
+const VERSION = "v2.7.1";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -6785,6 +6802,39 @@ function detectarFigurasEnTexto(texto) {
 function RecortadorPDF({ onRecorte, onCerrar, objetivo }) {
   const [doc, setDoc] = useState(null);
   const [nombrePdf, setNombrePdf] = useState("");
+  // Páginas candidatas a contener un esquema, detectadas por densidad de
+  // rectángulos vectoriales. Existe porque hay libros —como el Manual de
+  // Andrología— cuyos esquemas son cajas y flechas dibujadas en el PDF, sin
+  // pies de figura ni imágenes embebidas: nada que el detector de texto pueda
+  // encontrar. Los rectángulos delatan dónde están.
+  const [candidatas, setCandidatas] = useState(null); // null=no buscado, []=sin resultados
+  const [buscandoEsq, setBuscandoEsq] = useState(false);
+
+  const buscarEsquemas = async () => {
+    if (!doc) return;
+    setBuscandoEsq(true);
+    try {
+      const lib = window.pdfjsLib;
+      const res = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const pg = await doc.getPage(i);
+        const ops = await pg.getOperatorList();
+        let rects = 0;
+        for (let j = 0; j < ops.fnArray.length; j++) {
+          if (ops.fnArray[j] === lib.OPS.constructPath) {
+            // El primer arreglo del argumento lista los sub-comandos del trazo;
+            // el 19 es `rectangle` en pdf.js.
+            const sub = ops.argsArray[j]?.[0];
+            if (Array.isArray(sub)) rects += sub.filter((c) => c === 19).length;
+          }
+        }
+        if (rects >= 10) res.push({ pagina: i, rects });
+      }
+      res.sort((a, b) => b.rects - a.rects);
+      setCandidatas(res);
+    } catch { setCandidatas([]); }
+    setBuscandoEsq(false);
+  };
   const [pagina, setPagina] = useState(1);
   const [numPaginas, setNumPaginas] = useState(0);
   const [cargando, setCargando] = useState(false);
@@ -6914,6 +6964,27 @@ function RecortadorPDF({ onRecorte, onCerrar, objetivo }) {
             <option value="">🖼 Ir a una figura detectada ({figuras.length})…</option>
             {figuras.map((f) => <option key={f.ref} value={f.ref}>{String(f.ref).startsWith("s") ? "Lámina" : `${f.tipo && !/^fig/.test(f.tipo) ? f.tipo.charAt(0).toUpperCase() + f.tipo.slice(1) : "Fig."} ${f.ref}`} · pág. {f.pagina} — {f.caption.slice(0, 70)}</option>)}
           </select>
+        )}
+
+        {/* Búsqueda por vectores: para libros sin pies de figura, donde los
+            esquemas son cajas dibujadas. Lista las páginas con densidad alta
+            de rectángulos, ordenadas de mayor a menor. */}
+        {doc && (
+          <div style={{ marginBottom: 8 }}>
+            {candidatas === null ? (
+              <button onClick={buscarEsquemas} disabled={buscandoEsq} style={{ width: "100%", padding: "8px 10px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--superficie)", color: "var(--primario)", border: "1px dashed var(--primario)", borderRadius: 8, cursor: buscandoEsq ? "default" : "pointer", opacity: buscandoEsq ? 0.6 : 1 }}>
+                {buscandoEsq ? "Analizando páginas…" : "🔍 Buscar esquemas dibujados (sin pie de figura)"}
+              </button>
+            ) : candidatas.length === 0 ? (
+              <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", fontStyle: "italic" }}>No se detectaron páginas con esquemas dibujados.</div>
+            ) : (
+              <select value="" onChange={(e) => { const n = Number(e.target.value); if (n) irA(n); }}
+                style={{ padding: "7px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, width: "100%" }}>
+                <option value="">📐 {candidatas.length} páginas con esquemas — ir a…</option>
+                {candidatas.map((c) => <option key={c.pagina} value={c.pagina}>Página {c.pagina} · {c.rects} cajas</option>)}
+              </select>
+            )}
+          </div>
         )}
 
         {doc && (
@@ -15438,6 +15509,35 @@ if (imgsResult.ok) {
       } catch {}
     }
   }
+  // ── Protocolos locales del servicio ──
+  // Si la consulta calza con un protocolo subido (por título, categoría o al
+  // pedir explícitamente "protocolo"/"nuestro manejo"), su texto entra al
+  // contexto con prioridad: el protocolo local manda por sobre la guía
+  // genérica, porque refleja cómo se hace EN ese hospital.
+  let ctxProtocolos = "";
+  try {
+    const qn = txt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const pideProto = /protocolo|nuestro manejo|manejo local|como (lo )?hacemos|pauta del servicio|guia del servicio/.test(qn);
+    const rp = await obtenerProtocolosParaChat();
+    if (rp.ok && rp.protocolos.length) {
+      const VAC = new Set(["de","del","la","el","los","las","en","y","o","para","con"]);
+      const puntuados = rp.protocolos.map((pr) => {
+        const palabras = `${pr.titulo} ${pr.categoria || ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !VAC.has(w));
+        const aciertos = palabras.filter((w) => qn.includes(w)).length;
+        return { pr, aciertos };
+      }).filter((x) => x.aciertos >= (pideProto ? 1 : 2))
+        .sort((a, b) => b.aciertos - a.aciertos)
+        .slice(0, 2);
+      if (puntuados.length) {
+        ctxProtocolos = "\n\n=== PROTOCOLOS LOCALES DEL SERVICIO ===\n" +
+          "Estos protocolos fueron subidos por el equipo del usuario y PRIORIZAN sobre guías generales. Si contradicen a la literatura, señálalo, pero responde según el protocolo local.\n" +
+          puntuados.map(({ pr }) => `\n--- ${pr.titulo} (${pr.categoria || "General"}) ---\n${(pr.contenido_texto || "(sin texto extraído: sugiere abrirlo desde Biblioteca › Protocolos)").slice(0, 6000)}`).join("\n");
+      } else if (pideProto) {
+        ctxProtocolos = `\n\n=== PROTOCOLOS LOCALES ===\nNinguno calza con la consulta. Disponibles: ${rp.protocolos.map((pr) => pr.titulo).slice(0, 20).join("; ")}. Indícale al usuario cuáles existen.`;
+      }
+    }
+  } catch {}
+
   // Si la pregunta va sobre pacientes en seguimiento, se le entrega ese contexto real
   let ctxSeguimiento = "";
   if (/seguimiento|vigilancia|control(es)?\b|atrasad|pendiente.*control|proximo.*control|pr[oó]ximos?\s*control/i.test(txt)) {
@@ -15535,6 +15635,7 @@ if (imgsResult.ok) {
     // Contexto de pacientes en seguimiento (si la pregunta lo amerita)
     if (ctxSeguimiento) ctx += `\n\n${ctxSeguimiento}`;
     if (ctxLogbook) ctx += ctxLogbook;
+    if (ctxProtocolos) ctx += ctxProtocolos;
     // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
     const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
     const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon + ctxImagenes;

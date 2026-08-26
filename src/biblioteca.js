@@ -255,7 +255,7 @@ export async function listarProtocolos() {
 // Subir un protocolo. `equipoId` lo ata a un equipo/centro: cualquier médico
 // del equipo puede subirlo y solo ese equipo lo ve. Sin `equipoId` queda
 // global (reservado a admin por la RLS), para guías que aplican a todos.
-export async function crearProtocolo(autorId, { titulo, categoria, archivo, equipoId = null }) {
+export async function crearProtocolo(autorId, { titulo, categoria, archivo, equipoId = null, contenidoTexto = null }) {
   if (!archivo) return { ok: false, error: 'Falta el archivo.' };
   const ext = (archivo.name.split('.').pop() || 'bin').toLowerCase();
   const permitidas = ['pdf', 'doc', 'docx'];
@@ -273,6 +273,9 @@ export async function crearProtocolo(autorId, { titulo, categoria, archivo, equi
     .insert({
       autor_id: autorId,
       equipo_id: equipoId,
+      // Texto extraído del PDF al subirlo: es lo que permite que el chat
+      // responda citando el protocolo local en vez de la guía genérica.
+      contenido_texto: contenidoTexto ? contenidoTexto.slice(0, 60000) : null,
       titulo: titulo,
       categoria: categoria || 'General',
       archivo_nombre: archivo.name,
@@ -287,6 +290,17 @@ export async function crearProtocolo(autorId, { titulo, categoria, archivo, equi
     return { ok: false, error: error.message };
   }
   return { ok: true, protocolo: data };
+}
+
+// Protocolos con su texto, para el contexto del chat. La RLS ya limita a los
+// visibles por el usuario (globales + sus equipos).
+export async function obtenerProtocolosParaChat() {
+  const { data, error } = await supabase
+    .from('protocolos')
+    .select('id, titulo, categoria, equipo_id, contenido_texto')
+    .order('titulo');
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, protocolos: data || [] };
 }
 
 // Eliminar un protocolo (fila + archivo). La RLS permite borrar los propios y
