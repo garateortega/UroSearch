@@ -34,7 +34,43 @@ export async function listarPacientes(userId, contexto) {
 
   const { data, error } = await query;
   if (error) return { ok: false, error: error.message };
-  return { ok: true, pacientes: data || [] };
+
+  // Pacientes restringidos: si `restringido_a` trae ids, solo esos usuarios lo
+  // ven dentro del equipo. El filtro real vive en la RLS —esto es únicamente
+  // para que la interfaz no muestre un hueco raro si la policy cambiara—, y el
+  // dueño y quien restringió siempre lo conservan.
+  const visibles = (data || []).filter((p) => {
+    const r = p.restringido_a;
+    if (!Array.isArray(r) || r.length === 0) return true;
+    return r.includes(userId) || p.medico_id === userId;
+  });
+  return { ok: true, pacientes: visibles };
+}
+
+// ─── Transferencia entre equipo y personal ───
+// Mover a personal: el paciente sale del equipo y queda solo para `userId`.
+// Devolver al equipo: vuelve a ser visible para todos sus miembros.
+// En ambos casos se limpia la restricción, porque pertenece al otro ámbito.
+export async function transferirPacienteAPersonal(pacienteId, userId) {
+  return await actualizarPaciente(pacienteId, {
+    equipo_id: null,
+    medico_id: userId,
+    restringido_a: null,
+  });
+}
+
+export async function transferirPacienteAEquipo(pacienteId, equipoId) {
+  return await actualizarPaciente(pacienteId, {
+    equipo_id: equipoId,
+    restringido_a: null,
+  });
+}
+
+// Restringir la visibilidad dentro del equipo a una lista de médicos.
+// Lista vacía o null = visible para todo el equipo.
+export async function restringirPaciente(pacienteId, userIds) {
+  const lista = Array.isArray(userIds) && userIds.length ? userIds : null;
+  return await actualizarPaciente(pacienteId, { restringido_a: lista });
 }
 
 // Crear paciente

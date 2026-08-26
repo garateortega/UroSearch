@@ -3,7 +3,7 @@ import { register as registerUser, login as loginUser, logout as logoutUser, get
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion, cancelarInvitacion } from "./equipos";
-import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
+import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, transferirPacienteAPersonal, transferirPacienteAEquipo, restringirPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
 import { listarLogbook } from "./logbook";
 
 
@@ -534,17 +534,41 @@ async function estructurarDictadoSOAP(texto) {
 Responde SOLO con JSON válido, sin markdown ni backticks.
 
 {
-  "subjetivo": "lo que refiere el paciente, o null",
-  "objetivo": "signos vitales, diuresis, drenajes, laboratorio mencionado, o null",
-  "examen": "hallazgos del examen físico, o null",
-  "indicaciones": "plan e indicaciones, una por línea precedida de '• ', o null"
+  "subjetivo": "...",
+  "objetivo": "...",
+  "examen": "...",
+  "indicaciones": "...",
+  "estado_sugerido": "estable" | "regular" | "cuidado" | null,
+  "estado_motivo": "frase breve citando lo dictado que justifica el estado, o null"
 }
 
-Reglas estrictas:
-- Usa EXCLUSIVAMENTE lo que aparece en el dictado. No completes, no infieras, no agregues hallazgos habituales.
+QUÉ VA EN CADA CAMPO (S-O-A-P clásico):
+- "subjetivo" (S): TODO lo que el paciente refiere o cómo se le describe en
+  términos de síntomas y evolución percibida. Incluye: dolor y su intensidad,
+  náuseas, disuria, tolerancia oral, sueño, ánimo, si "amaneció bien",
+  "refiere molestia", "sin quejas", "pasó buena noche". También va acá el
+  relato del día ("cursando primer día post-operatorio sin incidentes").
+  Es el campo que más contenido suele tener: no lo dejes vacío si el dictado
+  describe cómo está el paciente.
+- "objetivo" (O): datos medidos. Signos vitales, diuresis y su característica,
+  débito de drenajes, sangrado, laboratorio o imágenes mencionadas, balance.
+- "examen" (A): hallazgos de la exploración física del médico. Abdomen,
+  herida operatoria, genitales, puñopercusión, extremidades.
+- "indicaciones" (P): plan, fármacos, retiros de sonda o drenaje, exámenes a
+  pedir, interconsultas, alta. Una por línea precedida de "• ".
+
+REGLAS ESTRICTAS:
+- Usa EXCLUSIVAMENTE lo dictado. No completes, no infieras, no agregues hallazgos habituales.
 - Copia las cifras EXACTAMENTE como fueron dictadas. Si un número o una dosis suena ambiguo, escríbelo tal cual y agrega " (?)" justo después.
 - Corrige solo errores evidentes de transcripción de términos urológicos.
-- Si algo no encaja en ningún campo, ponlo en "subjetivo".
+- Si un campo no tiene contenido en el dictado, usa null. NO repartas la misma frase en dos campos.
+- Si algo no encaja claramente, ponlo en "subjetivo" antes que descartarlo.
+
+ESTADO SUGERIDO (es una SUGERENCIA que el médico confirma, nunca un diagnóstico):
+- "estable": evoluciona bien, sin hallazgos que preocupen, buen manejo del dolor.
+- "regular": molestias significativas, fiebre, mal manejo del dolor, hallazgo que requiere seguimiento estrecho.
+- "cuidado": inestabilidad hemodinámica, sangrado activo, sepsis, deterioro, traslado a unidad de mayor complejidad.
+- null: si el dictado NO alcanza para juzgarlo. Ante la duda, null. Es preferible no sugerir nada a sugerir de más.
 
 Dictado:
 """${texto}"""`;
@@ -2921,7 +2945,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.3.6";
+const VERSION = "v2.5.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -6101,7 +6125,12 @@ function ConocimientoPanel({ conocimiento, setConocimiento, isAdmin }) {
       capitulo: nuevoForm.titulo,
       pagina: f.pagina,
       ref: f.ref,
-      caption: f.caption,
+      // El rótulo real de la lámina va en el caption: "Mapa conceptual 3 · …".
+      // Sin esto todo aparecía como "Fig. N" y era imposible distinguir un
+      // mapa conceptual de una foto en la lista de pendientes.
+      caption: f.tipo && !/^fig/.test(f.tipo)
+        ? `${f.tipo.charAt(0).toUpperCase()}${f.tipo.slice(1)} ${String(f.ref).startsWith("s") ? "" : f.ref} · ${f.caption}`.replace(/\s+·/, " ·")
+        : f.caption,
     }))).catch(() => {});
   }
 
@@ -6687,22 +6716,60 @@ async function cargarPdfJs() {
   return window.pdfjsLib;
 }
 
-// Detecta pies de figura en el texto de una página: "Figura 12-4. Algoritmo…".
-// Devuelve [{ref, caption}]. El caption se corta en el primer punto razonable.
+// Detecta pies de lámina en el texto de una página.
+//
+// Antes solo reconocía "Figura 12-4. …" o "Fig. 3: …". Un documento de mapas
+// conceptuales rotula sus láminas de otra forma —"Mapa conceptual 3",
+// "Esquema 2", "Algoritmo de manejo", "Flujograma 1"— y no se detectaba
+// ninguna. Ahora se reconocen todos esos rótulos, y además:
+//
+//  1. Láminas SIN número ("Algoritmo de manejo de la hematuria"), frecuentes
+//     en material docente. Se les asigna una referencia sintética.
+//  2. Pies en dos líneas, donde el rótulo queda separado del texto.
+//
+// Devuelve [{ref, caption, tipo}].
+const ROTULOS_LAMINA = "fig(?:ura)?|mapa\\s+conceptual|mapa|esquema|algoritmo|flujograma|diagrama|cuadro|tabla|l[áa]mina|gr[áa]fico";
+
 function detectarFigurasEnTexto(texto) {
   const out = [];
-  const re = /\b[Ff][Ii][Gg](?:[Uu][Rr][Aa])?\.?\s{0,3}([0-9]{1,3}(?:\s?[-–.]\s?[0-9A-Za-z]{1,4})?)\s*[.:\-–]\s*([^\n]{8,240})/g;
-  let m;
-  while ((m = re.exec(texto)) !== null) {
-    const ref = m[1].replace(/\s/g, "");
-    let cap = m[2].trim();
+  const agregar = (ref, cap, tipo) => {
+    cap = (cap || "").replace(/\s+/g, " ").trim();
+    if (cap.length < 8) return;
     const punto = cap.search(/\.\s+[A-ZÁÉÍÓÚÑ(]/); // fin de la primera oración
     if (punto > 15) cap = cap.slice(0, punto + 1);
     if (cap.length > 200) cap = cap.slice(0, 200).replace(/\s+\S*$/, "") + "…";
-    // Se descartan falsos positivos obvios (referencias tipo "ver Figura 3")
-    if (/^(ver|véase|vease|en la|de la)\b/i.test(cap)) continue;
-    if (!out.some((f) => f.ref === ref)) out.push({ ref, caption: cap });
+    // Falsos positivos: referencias cruzadas dentro del cuerpo del texto.
+    if (/^(ver|v[ée]ase|en el|en la|del|de la|seg[úu]n|como se|adaptado|p[áa]g)\b/i.test(cap)) return;
+    if (!out.some((f) => f.ref === ref)) out.push({ ref, caption: cap, tipo });
+  };
+
+  // A) Rótulo + número + separador + texto.  "Mapa conceptual 3. Manejo de…"
+  //    El salto de línea se permite entre el número y el texto (pies partidos).
+  const reNum = new RegExp(
+    `\\b(${ROTULOS_LAMINA})\\.?\\s{0,3}([0-9]{1,3}(?:\\s?[-–]\\s?[0-9A-Za-z]{1,3}|\\.[0-9]{1,3})?)\\s*[.:\\-–]?\\s*\\n?\\s*([^\\n]{8,240})`,
+    "gi"
+  );
+  let m;
+  while ((m = reNum.exec(texto)) !== null) {
+    // Referencia cruzada dentro de la prosa ("…ver figura 3…", "(fig. 2)"):
+    // lo que precede al rótulo delata que no es un pie de lámina.
+    const antes = texto.slice(Math.max(0, m.index - 24), m.index);
+    if (/\b(ver|v[ée]ase|vease|consultar|muestra la|en la|seg[úu]n la)\s*$/i.test(antes)) continue;
+    const tipo = m[1].toLowerCase().replace(/\s+/g, " ");
+    agregar(m[2].replace(/\s/g, ""), m[3], tipo);
   }
+
+  // B) Rótulo SIN número: "Algoritmo de manejo de la hematuria macroscópica".
+  //    Solo para rótulos que casi nunca aparecen en prosa corriente, y exigiendo
+  //    que la línea empiece con el rótulo, para no capturar menciones sueltas.
+  const reSin = /^[ \t]*(mapa\s+conceptual|esquema|algoritmo|flujograma|diagrama)\s+(?:de|del|para|sobre)\s+([^\n]{8,200})/gim;
+  let k = 1;
+  while ((m = reSin.exec(texto)) !== null) {
+    const tipo = m[1].toLowerCase().replace(/\s+/g, " ");
+    // Referencia sintética: no hay número impreso que citar.
+    agregar(`s${k++}`, `${m[1]} de ${m[2]}`, tipo);
+  }
+
   return out;
 }
 
@@ -6841,7 +6908,7 @@ function RecortadorPDF({ onRecorte, onCerrar, objetivo }) {
           <select value="" onChange={(e) => { const f = figuras.find((x) => x.ref === e.target.value); if (f) irA(f.pagina); }}
             style={{ marginBottom: 8, padding: "7px 10px", fontSize: "var(--fs-1)", background: "var(--superficie)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 8, width: "100%" }}>
             <option value="">🖼 Ir a una figura detectada ({figuras.length})…</option>
-            {figuras.map((f) => <option key={f.ref} value={f.ref}>Fig. {f.ref} · pág. {f.pagina} — {f.caption.slice(0, 70)}</option>)}
+            {figuras.map((f) => <option key={f.ref} value={f.ref}>{String(f.ref).startsWith("s") ? "Lámina" : `${f.tipo && !/^fig/.test(f.tipo) ? f.tipo.charAt(0).toUpperCase() + f.tipo.slice(1) : "Fig."} ${f.ref}`} · pág. {f.pagina} — {f.caption.slice(0, 70)}</option>)}
           </select>
         )}
 
@@ -10716,6 +10783,112 @@ function useSugRx(uid) {
   return v;
 }
 
+// ─── Ámbito de un paciente: traspaso equipo↔personal y visibilidad ───
+// Un paciente del equipo lo ven todos sus miembros. Hay casos —consulta
+// privada, situaciones sensibles— en que eso no corresponde. Dos herramientas:
+// sacarlo del equipo a tu lista personal, o dejarlo en el equipo pero visible
+// solo para los médicos que elijas.
+function AmbitoPacienteModal({ paciente, contexto, equipos = [], currentUser, onListo, onClose }) {
+  const enEquipo = contexto !== "personal";
+  const [miembros, setMiembros] = useState([]);
+  const [sel, setSel] = useState(() => (Array.isArray(paciente.restringido_a) ? paciente.restringido_a : []));
+  const [equipoDestino, setEquipoDestino] = useState(equipos[0]?.id || "");
+  const [ocupado, setOcupado] = useState(false);
+  useBackClose(true, onClose);
+
+  useEffect(() => {
+    if (!enEquipo) return;
+    let vivo = true;
+    listarMiembros(contexto).then((r) => { if (vivo && r.ok) setMiembros(r.miembros || []); });
+    return () => { vivo = false; };
+  }, [contexto, enEquipo]);
+
+  const correr = async (fn, aviso) => {
+    setOcupado(true);
+    const r = await fn();
+    setOcupado(false);
+    if (!r.ok) return uroToast("Error: " + r.error);
+    uroToast(aviso);
+    onListo(r.paciente);
+  };
+
+  const alternar = (id) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const btn = { width: "100%", padding: 11, fontSize: "var(--fs-2)", fontWeight: 700, borderRadius: 9, cursor: ocupado ? "default" : "pointer", opacity: ocupado ? 0.6 : 1 };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 70 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: "16px 16px 24px", width: "100%", maxWidth: 480, maxHeight: "86dvh", overflowY: "auto" }}>
+        <div style={{ width: 36, height: 4, background: "var(--borde)", borderRadius: 2, margin: "0 auto 12px" }} />
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>{paciente.iniciales}</div>
+        <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)", marginBottom: 14 }}>Cama {paciente.cama || "—"} · {paciente.servicio}</div>
+
+        {enEquipo ? (
+          <>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🔒 Quién lo ve dentro del equipo</div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.45, marginBottom: 10 }}>
+              Sin nadie marcado, lo ve todo el equipo. Al marcar médicos, solo ellos y quien lo creó lo verán.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              {miembros.map((m) => {
+                const id = m.perfiles?.id || m.user_id;
+                const nombre = m.perfiles?.nombre || "Miembro";
+                if (!id) return null;
+                return (
+                  <button key={id} onClick={() => alternar(id)} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", textAlign: "left", fontSize: "var(--fs-1)", background: sel.includes(id) ? "var(--primario-bg)" : "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid " + (sel.includes(id) ? "var(--primario)" : "var(--borde)"), borderRadius: 9, cursor: "pointer" }}>
+                    <span style={{ fontSize: 15 }}>{sel.includes(id) ? "☑️" : "⬜"}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{nombre}{id === currentUser?.id ? " (tú)" : ""}</span>
+                  </button>
+                );
+              })}
+              {miembros.length === 0 && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Cargando miembros…</div>}
+            </div>
+            <button disabled={ocupado} onClick={() => correr(() => restringirPaciente(paciente.id, sel), sel.length ? "Visibilidad restringida" : "Visible para todo el equipo")} style={{ ...btn, background: "var(--primario)", color: "var(--texto-inv)", border: "none", marginBottom: 8 }}>
+              {sel.length ? `Restringir a ${sel.length} médico${sel.length > 1 ? "s" : ""}` : "Dejar visible para todo el equipo"}
+            </button>
+
+            <div style={{ height: 1, background: "var(--borde)", margin: "14px 0" }} />
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>👤 Sacar del equipo</div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.45, marginBottom: 10 }}>
+              Pasa a tu lista personal. Deja de verlo el resto del equipo, incluidas sus evoluciones y exámenes.
+            </div>
+            <button disabled={ocupado} onClick={async () => {
+              if (!(await uroConfirm(`¿Sacar a ${paciente.iniciales} del equipo y pasarlo a tu lista personal? El resto del equipo dejará de verlo.`))) return;
+              correr(() => transferirPacienteAPersonal(paciente.id, currentUser.id), "Paciente movido a tu lista personal");
+            }} style={{ ...btn, background: "var(--superficie)", color: "var(--primario)", border: "0.5px solid var(--primario)" }}>
+              Pasar a mi lista personal
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>👥 Pasar a un equipo</div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.45, marginBottom: 10 }}>
+              Todos los miembros del equipo pasarán a verlo, junto con sus evoluciones y exámenes.
+            </div>
+            {equipos.length === 0 ? (
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>No perteneces a ningún equipo todavía.</div>
+            ) : (
+              <>
+                <select value={equipoDestino} onChange={(e) => setEquipoDestino(e.target.value)} style={{ width: "100%", padding: "9px 11px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", marginBottom: 10 }}>
+                  {equipos.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                </select>
+                <button disabled={ocupado || !equipoDestino} onClick={async () => {
+                  const nom = equipos.find((e) => String(e.id) === String(equipoDestino))?.nombre || "el equipo";
+                  if (!(await uroConfirm(`¿Pasar a ${paciente.iniciales} a ${nom}? Todos sus miembros podrán verlo.`))) return;
+                  correr(() => transferirPacienteAEquipo(paciente.id, equipoDestino), "Paciente movido al equipo");
+                }} style={{ ...btn, background: "var(--primario)", color: "var(--texto-inv)", border: "none" }}>
+                  Pasar al equipo
+                </button>
+              </>
+            )}
+          </>
+        )}
+
+        <button onClick={onClose} style={{ width: "100%", marginTop: 12, padding: 11, fontSize: "var(--fs-2)", background: "none", color: "var(--texto-ter)", border: "none", cursor: "pointer" }}>Cerrar</button>
+      </div>
+    </div>
+  );
+}
+
 function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipos, misServiciosLista, setMisServiciosLista, loadingPacientes, setLoadingPacientes, toolsOpen, soloLectura, ingresoPrefill, setIngresoPrefill }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
@@ -10770,6 +10943,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   // Dictado de la evolución. En modo estructurado reparte en los campos SOAP;
   // en modo libre ordena el texto en párrafos con encabezado.
   const tipoEvoRef = useRef("estructurada");
+  const [estadoSugerido, setEstadoSugerido] = useState(null); // {valor, motivo} propuesto por el dictado
   const dictadoEvo = useDictado(async (texto) => {
     const unir = (a, b) => (b ? (a ? a + "\n" + b : b) : a);
     if (tipoEvoRef.current === "libre") {
@@ -10787,6 +10961,12 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
         indicaciones: unir(prev.indicaciones, soap.indicaciones || ""),
       };
     });
+    // El estado clínico se PROPONE, no se aplica. Es un dato que otros leen
+    // para priorizar la visita, y cambiarlo sin que el médico lo mire sería
+    // dejar que un error de transcripción altere cómo se prioriza un paciente.
+    if (soap?.estado_sugerido && soap.estado_sugerido !== seleccionado?.estado_clinico) {
+      setEstadoSugerido({ valor: soap.estado_sugerido, motivo: soap.estado_motivo || "" });
+    }
   });
   const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
@@ -11212,6 +11392,7 @@ const cargarMiembrosEquipo = async () => {
   }, []);
   const [moverPaciente, setMoverPaciente] = useState(null); // paciente que se está moviendo de servicio
   const [opcionesPaciente, setOpcionesPaciente] = useState(null); // hoja de opciones (mantener presionado)
+  const [ambitoPaciente, setAmbitoPaciente] = useState(null);     // {paciente} transferir / restringir
   const [txPacienteMenu, setTxPacienteMenu] = useState(null);     // Transfusión desde el menú
   const [ingresoPacienteMenu, setIngresoPacienteMenu] = useState(null); // Adjuntar ingreso desde el menú
   const [autoEditId, setAutoEditId] = useState(null);
@@ -13012,6 +13193,19 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       : "Se reparte en los campos de abajo. Revisa siempre cifras y dosis antes de guardar."}
   />
 
+  {/* Sugerencia de estado clínico: se muestra para que la confirmes, nunca se
+      aplica sola. El estado es lo que otros usan para priorizar la visita. */}
+  {estadoSugerido && (
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:10,border:"0.5px solid var(--borde)",background:"var(--fondo-suave)"}}>
+      <span style={{fontSize:"var(--fs-1)",color:"var(--texto)",flex:1,minWidth:170,lineHeight:1.4}}>
+        ¿Marcar como <b>{estadoSugerido.valor==="estable"?"🟢 Estable":estadoSugerido.valor==="regular"?"🟡 Regular":"🔴 De cuidado"}</b>?
+        {estadoSugerido.motivo && <span style={{color:"var(--texto-ter)"}}> — {estadoSugerido.motivo}</span>}
+      </span>
+      <button onClick={()=>{ cambiarEstadoClinico(estadoSugerido.valor); setEstadoSugerido(null); }} style={{padding:"7px 13px",fontSize:"var(--fs-1)",fontWeight:700,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:8,cursor:"pointer"}}>Aplicar</button>
+      <button onClick={()=>setEstadoSugerido(null)} style={{padding:"7px 13px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>No</button>
+    </div>
+  )}
+
   {/* SUBJETIVO */}
   <div>
     <textarea value={evoEstructurada.subjetivo} onChange={e=>setEvoEstructurada({...evoEstructurada,subjetivo:e.target.value})} placeholder="S - Subjetivo (lo que refiere el paciente)" rows={2} style={{...inputStyle,resize:"vertical",marginBottom:3}}/>
@@ -13521,6 +13715,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                 {item("🔀 Cambiar de servicio", ()=>setMoverPaciente(p))}
                 {item("🛏️ Cambiar cama", ()=>{ setCamaInput(p.cama||""); setMoverInfo({ pacienteId:p.id, iniciales:p.iniciales, servicio:p.servicio, prevServicio:p.servicio, prevCama:p.cama, soloCama:true }); })}
                 {item("🩸 Transfusión", ()=>setTxPacienteMenu(p), "var(--peligro)")}
+                {!soloLectura && item(contexto === "personal" ? "👥 Pasar a un equipo" : "🔒 Visibilidad y traspaso", ()=>setAmbitoPaciente(p))}
                 {item("✏️ Editar", ()=>{ abrirFicha(p); setAutoEditId(p.id); })}
                 {item("🗑 Eliminar", ()=>eliminarPacienteDirecto(p), "var(--peligro)")}
               </div>
@@ -13529,6 +13724,25 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </div>
         );
       })()}
+      {ambitoPaciente && (
+        <AmbitoPacienteModal
+          paciente={ambitoPaciente}
+          contexto={contexto}
+          equipos={equipos}
+          currentUser={currentUser}
+          onListo={(actualizado) => {
+            // Si salió del ámbito actual, desaparece de esta lista.
+            setPacientes((prev) => {
+              const fuera = (contexto === "personal" && actualizado.equipo_id) ||
+                            (contexto !== "personal" && String(actualizado.equipo_id || "") !== String(contexto));
+              return fuera ? prev.filter((x) => x.id !== actualizado.id)
+                           : prev.map((x) => (x.id === actualizado.id ? actualizado : x));
+            });
+            setAmbitoPaciente(null);
+          }}
+          onClose={() => setAmbitoPaciente(null)}
+        />
+      )}
       {txPacienteMenu && <OrdenTransfusionModal paciente={txPacienteMenu} currentUser={currentUser} examenes={[]} onClose={()=>setTxPacienteMenu(null)} />}
       {ingresoPacienteMenu && <IngresoModal currentUser={currentUser} contexto={contexto} ingresoExistente={{ datos: { nombre: ingresoPacienteMenu.iniciales, ficha: ingresoPacienteMenu.ficha_clinica || "", rut: ingresoPacienteMenu.rut || "", edad: String(ingresoPacienteMenu.edad || ""), sexo: ingresoPacienteMenu.sexo || "", hipotesis: ingresoPacienteMenu.diagnostico || "" } }} onCreado={()=>{}} onClose={()=>setIngresoPacienteMenu(null)} />}
       {moverInfo && (
