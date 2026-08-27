@@ -940,6 +940,33 @@ function PerfilModal({ currentUser, setCurrentUser, onClose }) {
 // cualquier panel reaccione sin prop-drilling.
 // ============================================================
 const CONFIG_DEFECTO = { chatModo: "verificada", ocultas: [] }; // chatModo: "verificada" | "general"
+
+// ─── Fuente de respuestas: decisión del administrador ─────────────
+// Antes cada usuario elegía si Uros podía responder fuera de la base. Eso es
+// una política clínica del servicio, no una preferencia personal: define si un
+// residente puede recibir contenido no verificado contra la biblioteca. Ahora
+// la fija el admin y rige para todos.
+let MODO_CHAT_GLOBAL = null;   // cache en memoria de la sesión
+async function leerModoChatGlobal() {
+  if (MODO_CHAT_GLOBAL) return MODO_CHAT_GLOBAL;
+  try {
+    const { data } = await supabase.from("ajustes_globales")
+      .select("valor").eq("clave", "chat_modo").maybeSingle();
+    MODO_CHAT_GLOBAL = data?.valor === "general" ? "general" : "verificada";
+  } catch {
+    // Sin la tabla o sin red: el modo seguro es limitarse a la base.
+    MODO_CHAT_GLOBAL = "verificada";
+  }
+  return MODO_CHAT_GLOBAL;
+}
+async function guardarModoChatGlobal(valor) {
+  const v = valor === "general" ? "general" : "verificada";
+  const { error } = await supabase.from("ajustes_globales")
+    .upsert({ clave: "chat_modo", valor: v }, { onConflict: "clave" });
+  if (error) return { ok: false, error: error.message };
+  MODO_CHAT_GLOBAL = v;
+  return { ok: true };
+}
 function cargarConfig() {
   try { return { ...CONFIG_DEFECTO, ...(JSON.parse(localStorage.getItem("uro_config")) || {}) }; }
   catch { return { ...CONFIG_DEFECTO }; }
@@ -1760,6 +1787,10 @@ function ConfigModal({ onClose, currentUser }) {
   };
 
   const aplicar = (nueva) => { setCfg(nueva); guardarConfig(nueva); };
+  const esAdmin = currentUser?.rol === "admin";
+  const [modoGlobal, setModoGlobal] = useState("verificada");
+  const [guardandoModo, setGuardandoModo] = useState(false);
+  useEffect(() => { leerModoChatGlobal().then(setModoGlobal); }, []);
   const toggleFn = (id) => {
     const ocultas = fnOculta(cfg, id) ? cfg.ocultas.filter(x => x !== id) : [...(cfg.ocultas || []), id];
     aplicar({ ...cfg, ocultas });
@@ -1806,14 +1837,26 @@ function ConfigModal({ onClose, currentUser }) {
           )}
         </div>
 
-        {/* Modo del chat */}
-        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>🤖 Fuente de respuestas del chat</div>
+        {/* Fuente de respuestas: SOLO el administrador. Es una política del
+            servicio —si un residente puede recibir contenido no verificado
+            contra la biblioteca—, no una preferencia de cada usuario. */}
+        {esAdmin && (<>
+        <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>🤖 Fuente de respuestas del chat</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 6, lineHeight: 1.45 }}>Solo administradores. Rige para todos los usuarios de UroSearch.</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-          {[["verificada", "📚 Solo base de datos verificada", "Uros responde únicamente con documentos de UroSearch. Si no encuentra nada, te ofrece usar su conocimiento y tú decides."],
-            ["general", "🧠 Base + conocimiento general de la IA", "Si no hay documentos en la base, Uros responde directo con su conocimiento clínico (marcado como fuera de la base)."]].map(([id, label, desc]) => {
-            const on = (cfg.chatModo || "verificada") === id;
+          {[["verificada", "📚 Solo base de datos verificada", "Uros responde únicamente con documentos de la biblioteca. Si no encuentra nada, ofrece usar su conocimiento y el usuario decide caso a caso."],
+            ["general", "🧠 Base + conocimiento general de la IA", "Si no hay documentos en la base, Uros responde directo con su conocimiento clínico, marcado como fuera de la base."]].map(([id, label, desc]) => {
+            const on = modoGlobal === id;
             return (
-              <div key={id} onClick={() => aplicar({ ...cfg, chatModo: id })} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10, cursor: "pointer", background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)" }}>
+              <div key={id} onClick={async () => {
+                if (guardandoModo) return;
+                setGuardandoModo(true);
+                const r = await guardarModoChatGlobal(id);
+                setGuardandoModo(false);
+                if (!r.ok) return uroToast("No se pudo guardar: " + r.error);
+                setModoGlobal(id);
+                uroToast(id === "general" ? "Uros podrá usar conocimiento general" : "Uros se limitará a la biblioteca");
+              }} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10, cursor: guardandoModo ? "default" : "pointer", opacity: guardandoModo ? 0.6 : 1, background: on ? "var(--est-prog-bg)" : "var(--superficie)", border: on ? "1px solid var(--primario)" : "0.5px solid var(--borde)" }}>
                 <span style={{ width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 2, border: "2px solid " + (on ? "var(--primario)" : "var(--borde)"), background: on ? "var(--primario)" : "transparent", boxShadow: on ? "inset 0 0 0 3px var(--superficie)" : "none" }} />
                 <div>
                   <div style={{ fontSize: "var(--fs-2)", fontWeight: 600, color: "var(--texto)" }}>{label}</div>
@@ -1823,6 +1866,7 @@ function ConfigModal({ onClose, currentUser }) {
             );
           })}
         </div>
+        </>)}
 
         {/* Vista de pacientes */}
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>👥 Vista de pacientes</div>
@@ -2973,7 +3017,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.9.4";
+const VERSION = "v3.0.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -15494,6 +15538,10 @@ if (imgsResult.ok) {
   // acción de la sesión es preguntar en el chat, la lista en memoria está
   // vacía y el chat respondía "no tienes pacientes" teniéndolos: acá se van a
   // buscar directo antes de decidir.
+  // Política de fuente definida por el administrador. Si la lectura falla, el
+  // valor por defecto es el conservador: limitarse a la biblioteca.
+  const modoChatVigente = await leerModoChatGlobal();
+
   let listaPacChat = pacientes;
   if ((!listaPacChat || listaPacChat.length === 0) && currentUser) {
     try {
@@ -15724,7 +15772,7 @@ if (imgsResult.ok) {
     } else if (tieneFuentes) {
       ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,5000)}`).join("\n\n");
     } else if (!consultaCirugias && !consultaPacientes) {
-      if ((config.chatModo || "verificada") === "general") {
+      if (modoChatVigente === "general") {
         // Configuración "conocimiento general": responde directo con conocimiento
         // propio, marcado como fuera de la base, sin pedir permiso cada vez.
         ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE (MODO CONOCIMIENTO GENERAL ACTIVADO) ===\n"
@@ -15803,7 +15851,7 @@ if (imgsResult.ok) {
     const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
     // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
-    if (!esCharla && !usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && (config.chatModo || "verificada") !== "general") {
+    if (!esCharla && !usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && modoChatVigente !== "general") {
       respuesta.ofrecioConocimiento = true;
     }
     if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
