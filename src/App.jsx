@@ -643,7 +643,8 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
   const data = await res.json();
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
   const clean = txt.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  // El modelo puede devolver prosa en vez de JSON: null degrada bien, lanzar no.
+  try { return JSON.parse(clean); } catch { return null; }
 }
 
 // Une los campos clínicos extraídos en un texto de historia legible y editable.
@@ -699,7 +700,8 @@ Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre complet
   const data = await res.json();
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
   const clean = txt.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  let parsed = null;
+  try { parsed = JSON.parse(clean); } catch { return null; }
   return Array.isArray(parsed?.cirugias) ? parsed.cirugias : [];
 }
 
@@ -2971,7 +2973,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.9.0";
+const VERSION = "v2.9.3";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -15286,20 +15288,29 @@ if (imgsResult.ok) {
  const userInitials = currentUser ? currentUser.nombre.split(" ").map(p=>p[0]||"").filter(c=>c && c.match(/[A-Z]/i)).slice(0,2).join("").toUpperCase() : "";
 
   const buscarVideosRelevantes = (consulta) => {
-    const q = consulta.toLowerCase();
+    const q = (consulta || "").toLowerCase();
     const palabras = ["técnica","tecnica","cómo se hace","como se hace","procedimiento","cirugía","cirugia","operación","video","quirúrgico"];
     const esTec = palabras.some(p => q.includes(p));
     if (!esTec) return [];
-    return videos.filter(v => v.keywords.some(k => q.includes(k.toLowerCase())) || q.includes(v.titulo.toLowerCase().split(" ")[0])).slice(0,3);
+    // `keywords` y `titulo` pueden venir nulos desde la base: un solo video sin
+    // esas columnas lanzaba TypeError y, como esto corre ANTES del try de
+    // sendMsg, el chat quedaba colgado en "Consultando…" para siempre. Nada
+    // opcional debe poder tumbar la consulta entera.
+    return (videos || []).filter(v => {
+      const claves = Array.isArray(v?.keywords) ? v.keywords : [];
+      const titulo = (v?.titulo || "").toLowerCase();
+      return claves.some(k => q.includes(String(k).toLowerCase()))
+        || (titulo && q.includes(titulo.split(" ")[0]));
+    }).slice(0,3);
   };
 
   // Detecta si la consulta es sobre programación quirúrgica y devuelve cirugías relevantes
   const buscarCirugiasRelevantes = (consulta) => {
-    const q = consulta.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    const q = (consulta || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
     // Palabras clave que indican consulta sobre programación
     const palabrasProgramacion = ["operar","opera","cirugia","cirugía","quirurgic","quirúrgic","programad","tabla","pabellon","pabellón","pabellones","intervenc","procedimient","planificacion","planificación","planning","planner","agenda","semana","mañana","manana","hoy","proxim","próxim","viernes","lunes","martes","miercoles","miércoles","jueves","sabado","sábado","domingo","cuando","cuándo","cuanto","cuánto","cuantas","cuántas"];
     const esConsulta = palabrasProgramacion.some(p => q.includes(p));
-    if (!esConsulta || tablaCirugias.length === 0) return null;
+    if (!esConsulta || !Array.isArray(tablaCirugias) || tablaCirugias.length === 0) return null;
 
     // Determinar rango de fechas según la consulta
     const hoy = new Date();
@@ -15462,6 +15473,17 @@ if (imgsResult.ok) {
     setLoading(false);
   };
   const relojChat = setTimeout(() => fallar("timeout"), 75000);
+
+  // ── Frontera de protección ──
+  // TODO lo que sigue —detección de pacientes, cirugías, videos, logbook,
+  // protocolos, RAG y la llamada al modelo— corre dentro de este try. La serie
+  // de cuelgues en "Consultando…" tuvo siempre la misma anatomía: un campo
+  // nulo de la base (keywords de un video, iniciales de un paciente) lanzaba
+  // en el tramo previo al try y la excepción escapaba. Al mover la frontera
+  // acá, cualquier fallo de armado de la consulta produce la respuesta
+  // estándar de error en vez de un chat colgado. Los datos opcionales de la
+  // base NUNCA deben poder tumbar la consulta.
+  try {
   
   // ── Detección de intención ANTES de todo ──────────────────────
   // Permite saltarse búsquedas innecesarias (respuesta más rápida) y no citar
@@ -15665,7 +15687,6 @@ if (imgsResult.ok) {
     }
   }
 
-  try {
     const modoIns = modo === "precisa"
       ? "\n\nMODO PRECISA: Responde en máximo 3-4 líneas (aproximadamente 50 palabras). Sé estricto con esta extensión: solo lo esencial, directo al grano, sin introducción ni rodeos. NO te extiendas."
       : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
@@ -15832,7 +15853,8 @@ if (imgsResult.ok) {
       const data = await res.json();
       const txt = data.content?.find(b => b.type==="text")?.text || "";
       const clean = txt.replace(/```json|```/g,"").trim();
-      setMapaActual(JSON.parse(clean));
+      try { setMapaActual(JSON.parse(clean)); }
+      catch { uroToast("El mapa no se pudo generar esta vez; intenta de nuevo."); }
     } catch(e) {
       setMapaActual({titulo:tema, nodo_central:tema, ramas:[{rama:"Error",subnodos:["No se pudo generar"]}]});
     }
