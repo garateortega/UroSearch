@@ -2973,7 +2973,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v2.9.3";
+const VERSION = "v2.9.4";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -15504,7 +15504,17 @@ if (imgsResult.ok) {
   const consultaPacientes = buscarPacientesRelevantes(txt, listaPacChat);
   const necesitaBase = !esCharla && !consultaCirugias && !consultaPacientes;
   // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
-  const busquedaPromise = necesitaBase ? buscarChunks(expandirSiglas(txt), 8) : Promise.resolve({ ok: true, chunks: [] });
+  // Si la RPC falla (esquema en caché de PostgREST, permisos, firma cambiada),
+  // buscarChunks devuelve {ok:false} y el chat respondía "no encontré nada en
+  // la base" — indistinguible de una búsqueda legítimamente vacía. Ese error
+  // silencioso costó una sesión entera de diagnóstico: ahora queda registrado.
+  const busquedaPromise = necesitaBase
+    ? buscarChunks(expandirSiglas(txt), 8).then((r) => {
+        if (!r.ok) logDiag(`biblioteca: la búsqueda FALLÓ → ${r.error}`);
+        else logDiag(`biblioteca: ${r.chunks.length} fragmentos para "${txt.slice(0, 40)}"`);
+        return r;
+      }).catch((e) => { logDiag(`biblioteca: excepción → ${e?.message || e}`); return { ok: false, chunks: [] }; })
+    : Promise.resolve({ ok: true, chunks: [] });
   
   // ============================================
   // PERSISTENCIA: obtener sesión actual de Supabase
@@ -15569,7 +15579,13 @@ if (imgsResult.ok) {
   // no se usan ni se citan.
   let docsRelevantes = [];
   const busqueda = await busquedaPromise;
-  if (busqueda.ok) docsRelevantes = filtrarChunksRelevantes(txt, busqueda.chunks || []);
+  if (busqueda.ok) {
+    docsRelevantes = filtrarChunksRelevantes(txt, busqueda.chunks || []);
+    // El segundo filtro es local y puede descartar todo lo que trajo la base:
+    // conviene ver ambos números para saber cuál de los dos dejó al chat sin
+    // material.
+    logDiag(`biblioteca: ${(busqueda.chunks || []).length} de la base → ${docsRelevantes.length} tras el filtro local`);
+  }
   const tieneFuentes = docsRelevantes.length > 0;
   // Contexto del logbook quirúrgico si la pregunta lo amerita
   let ctxLogbook = "";
