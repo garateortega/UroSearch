@@ -384,6 +384,7 @@ function useDictado(onTexto) {
   // que onstop lo vea y no gaste una llamada a la API con algo que el usuario
   // ya decidió botar.
   const cancelar = () => {
+    registrarEvento("dictado_cancelado");
     if (ref.current) ref.current.cancelado = true;
     try { ref.current?.recorder?.stop(); } catch {}
     setEstado("inactivo");
@@ -415,7 +416,9 @@ function useDictado(onTexto) {
       setEstado("procesando");
       try {
         const ext = tipo.includes("mp4") ? "m4a" : tipo.includes("mpeg") ? "mp3" : tipo.includes("ogg") ? "ogg" : "webm";
+        const t0 = Date.now();
         const texto = await transcribirAudio(blob, ext);
+        registrarEvento("dictado", { ms: Date.now() - t0, kb: Math.round(blob.size / 1024), chars: texto.length });
         await cbRef.current(texto);
         setEstado("inactivo");
       } catch (err) {
@@ -2517,6 +2520,7 @@ function ProtocolosPanel({ currentUser, isAdmin, contexto, equipos = [] }) {
       } catch { /* sin texto: el protocolo igual se sube y se descarga normal */ }
     }
     const r = await crearProtocolo(currentUser.id, { titulo: form.titulo.trim(), categoria: form.categoria.trim() || "General", archivo: form.archivo, equipoId: destino || null, contenidoTexto });
+    if (r.ok) registrarEvento("protocolo_subido", { equipo: !!destino, con_texto: !!contenidoTexto });
     setSubiendo(false);
     if (r.ok) { setForm({ titulo: "", categoria: "", archivo: null, archivoNombre: "" }); if (fileRef.current) fileRef.current.value = ""; setMsg("✓ Protocolo subido."); cargar(); }
     else setMsg("⚠️ " + r.error);
@@ -3026,7 +3030,42 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.1.0";
+const VERSION = "v3.2.0";
+
+// ─── Registro de uso ──────────────────────────────────────────────
+// Mide qué funciones se usan de verdad. Antes la actividad se infería de las
+// tablas clínicas, lo que subestimaba el uso —una consulta al chat o un
+// dictado no dejaban rastro— y no servía para un estudio: sin denominador,
+// sin tiempos, sin funciones.
+//
+// NO se guarda el texto de las consultas ni dato alguno de paciente: una
+// consulta clínica puede contener información identificable, y un registro
+// que no la tiene es un registro que no hay que explicarle a nadie. Solo
+// métricas anónimas: latencia, número de fuentes, longitudes.
+//
+// Nunca lanza ni bloquea: si el registro falla, la app sigue igual.
+let EVENTO_CTX = { userId: null, equipoId: null };
+function configurarEventos(userId, equipoId) {
+  EVENTO_CTX = { userId: userId || null, equipoId: equipoId && equipoId !== "personal" ? equipoId : null };
+}
+// Puente para los módulos que no importan este helper: emiten un CustomEvent
+// y acá se traduce a registro. Evita tener que pasar la función por props a
+// través de varios componentes.
+try {
+  window.addEventListener("uro-evento", (e) => {
+    if (e?.detail?.evento) registrarEvento(e.detail.evento, e.detail.detalle || null);
+  });
+} catch {}
+
+function registrarEvento(evento, detalle = null) {
+  const { userId, equipoId } = EVENTO_CTX;
+  if (!userId || !evento) return;
+  try {
+    supabase.from("eventos_uso")
+      .insert({ user_id: userId, evento, detalle, equipo_id: equipoId })
+      .then(() => {}, () => {});   // silencioso a propósito
+  } catch {}
+}
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -9976,7 +10015,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
           <div style={{ marginBottom: 8 }}>
             <label style={lbl}>Carpeta</label>
             <SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} />
-            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); setGuardando(false); limpiarBorradorIngreso(); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
+            <button onClick={async () => { setGuardando(true); await onGuardarIngreso({ ...f, historia_compuesta: historiaTexto() }, carpeta.trim(), ingresoExistente?.id); registrarEvento("ingreso_guardado"); setGuardando(false); limpiarBorradorIngreso(); onClose(); }} disabled={guardando} style={{ width: "100%", padding: "12px", fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1, marginTop: 10 }}>💾 Guardar</button>
           </div>
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
@@ -10248,7 +10287,7 @@ function ComiteModal({ comiteExistente, onGuardar, onClose, carpetas = [], curre
         <label style={lbl}>Carpeta</label>
         <div style={{ marginBottom: 8 }}><SelectorCarpetaCascada value={carpeta} onChange={setCarpeta} carpetas={carpetas} /></div>
         {msg && <div style={{ ...estiloMsg(false), marginBottom: 8 }}>{msg}</div>}
-        <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); setGuardando(false); limpiarBorrador(); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
+        <button onClick={async () => { if (!f.nombre.trim()) { setMsg("⚠️ Ingresa el nombre del paciente."); return; } setGuardando(true); await onGuardar(f, carpeta.trim(), comiteExistente?.id); registrarEvento("comite_guardado", { edicion: !!comiteExistente?.id, con_tnm: !!f.tnm?.catalogo, con_escala: !!f.escalaValor }); setGuardando(false); limpiarBorrador(); onClose(); }} disabled={guardando} style={{ width: "100%", padding: 12, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--exito)", color: "#fff", border: "none", borderRadius: 9, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "Guardando…" : "💾 Guardar comité"}</button>
       </div>
     </div>
   );
@@ -11003,6 +11042,7 @@ function ImagenesPaciente({ paciente, currentUser, soloLectura }) {
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const r = await subirImagenPaciente(paciente.id, currentUser.id, new Blob([bytes], { type: "image/jpeg" }));
+        if (r.ok) registrarEvento("imagen_paciente");
         if (!r.ok) setError(r.error);
       } catch (err) { setError(err?.message || "No se pudo subir la imagen"); }
     }
@@ -12499,6 +12539,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     }
 
     const result = await crearEvolucion(seleccionado.id, currentUser.id, texto, tipoEvo);
+    if (result.ok) registrarEvento("evolucion_guardada", { tipo: tipoEvo, chars: texto.length });
     if (!result.ok) {
       // Sin conexión: guarda localmente y encola para sincronizar al reconectar.
       encolar("crearEvolucion", { pacienteId: seleccionado.id, autorId: currentUser.id, texto, tipo: tipoEvo });
@@ -12580,6 +12621,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     };
 
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
+    if (result.ok) registrarEvento("examen_creado", { tipo: datos.tipo });
     if (!result.ok) {
       // Sin conexión: guarda local y encola para sincronizar al reconectar.
       encolar("crearExamen", { pacienteId: seleccionado.id, autorId: currentUser.id, datos });
@@ -15043,6 +15085,14 @@ useEffect(() => {
   }, [messages, loading]);
 
   const isAdmin = currentUser?.rol === "admin";
+  // El registro de uso necesita saber quién y en qué equipo, y cambia al
+  // moverse entre contextos.
+  useEffect(() => {
+    configurarEventos(currentUser?.id, contexto);
+    // Un evento por apertura: es el denominador de todas las métricas de
+    // adopción (¿cuántos abrieron la app hoy?).
+    if (currentUser?.id) registrarEvento("sesion_abierta", { version: VERSION });
+  }, [currentUser?.id, contexto]);
 
   // ── Aceptación de documentos legales del piloto ──
   // El documento vive en la base (documentos_legales) y el gate solo se activa
@@ -15564,6 +15614,10 @@ if (imgsResult.ok) {
     setLoading(false);
   };
   const relojChat = setTimeout(() => fallar("timeout"), 75000);
+  const t0Chat = Date.now();
+  // Declaradas acá y no dentro del try: el bloque finally que registra la
+  // métrica está fuera de ese alcance y no podría leerlas.
+  let mtDocs = 0, mtPac = false, mtLog = false, mtProto = false;
 
   // ── Frontera de protección ──
   // TODO lo que sigue —detección de pacientes, cirugías, videos, logbook,
@@ -15597,6 +15651,7 @@ if (imgsResult.ok) {
     } catch {}
   }
   const consultaPacientes = buscarPacientesRelevantes(txt, listaPacChat);
+  mtPac = !!consultaPacientes;
   // Una pregunta puede ser sobre pacientes Y necesitar la biblioteca a la vez
   // ("indicaciones de RTU de próstata" con un paciente prostático en la lista).
   // Antes, detectar pacientes CANCELABA la búsqueda documental y el chat
@@ -15684,6 +15739,7 @@ if (imgsResult.ok) {
     // conviene ver ambos números para saber cuál de los dos dejó al chat sin
     // material.
     logDiag(`biblioteca: ${(busqueda.chunks || []).length} de la base → ${docsRelevantes.length} tras el filtro local`);
+    mtDocs = docsRelevantes.length;
   }
   const tieneFuentes = docsRelevantes.length > 0;
   // Contexto del logbook quirúrgico si la pregunta lo amerita
@@ -15873,8 +15929,8 @@ if (imgsResult.ok) {
     }
     // Contexto de pacientes en seguimiento (si la pregunta lo amerita)
     if (ctxSeguimiento) ctx += `\n\n${ctxSeguimiento}`;
-    if (ctxLogbook) ctx += ctxLogbook;
-    if (ctxProtocolos) ctx += ctxProtocolos;
+    if (ctxLogbook) { ctx += ctxLogbook; mtLog = true; }
+    if (ctxProtocolos) { ctx += ctxProtocolos; mtProto = true; }
     // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
     const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
     const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon + ctxImagenes;
@@ -15950,6 +16006,18 @@ if (imgsResult.ok) {
     clearTimeout(relojChat);
     respondido = true;
     setLoading(false);
+    // Métrica de la consulta. Sin el texto: solo tamaño, latencia y de dónde
+    // salió la respuesta. `fuentes` es la señal clave de si la biblioteca
+    // está sirviendo o el chat responde de memoria.
+    registrarEvento("chat_consulta", {
+      ms: Date.now() - t0Chat,
+      modo,
+      largo: txt.length,
+      fuentes: mtDocs,
+      con_pacientes: mtPac,
+      con_logbook: mtLog,
+      con_protocolos: mtProto,
+    });
   }
 };
 

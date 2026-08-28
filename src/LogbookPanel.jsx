@@ -899,6 +899,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (result.ok) setRegistros((prev) => prev.map((r) => (r.id === editId ? result.registro : r)));
     } else {
       result = await crearRegistroLogbook({ ...datos, user_id: currentUser.id, foto_path });
+      if (result?.ok) window.dispatchEvent(new CustomEvent("uro-evento", { detail: { evento: "cirugia_registrada", detalle: { lugar: datos.lugar || "pabellon", rol: datos.rol, con_foto: !!foto_path } } }));
       if (result.ok) setRegistros((prev) => [result.registro, ...prev].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")));
     }
     setGuardando(false);
