@@ -3026,7 +3026,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.0.1";
+const VERSION = "v3.0.2";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -15787,7 +15787,12 @@ if (imgsResult.ok) {
       // El usuario rechazó la oferta de conocimiento propio
       ctx += "\n\n=== EL USUARIO DECLINÓ ===\nEl usuario NO quiere que uses conocimiento fuera de la base. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar información clínica: \"De acuerdo, me limito a la base de conocimiento de UroSearch. ¿Puedo ayudarte con otra consulta?\"";
     } else if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,5000)}`).join("\n\n");
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n"
+        // La búsqueda puede traer documentos de OTRA patología que comparten
+        // vocabulario ("vigilancia activa" existe en próstata y en testículo).
+        // Sin esta regla el modelo los fusionaba en un solo párrafo y terminaba
+        // atribuyéndole al paciente una enfermedad que no tiene.
+        + "REGLA CRÍTICA: algunos documentos pueden ser de una patología DISTINTA a la preguntada, porque comparten vocabulario. Identifica primero de qué órgano y patología trata la consulta y usa SOLO los documentos que correspondan a esa patología. IGNORA por completo los demás: no los cites, no los mezcles y no traslades sus criterios. Si ninguno corresponde, dilo. NUNCA combines criterios de patologías diferentes en una misma respuesta.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,5000)}`).join("\n\n");
     } else if (!consultaCirugias && !consultaPacientes) {
       if (modoChatVigente === "general") {
         // Configuración "conocimiento general": responde directo con conocimiento
@@ -15812,6 +15817,7 @@ if (imgsResult.ok) {
       }
     }
     if (consultaPacientes) {
+      ctx += "\n\nREGLA: los datos de pacientes son solo contexto. NO mezcles la información de un paciente con la respuesta clínica general, ni atribuyas a un paciente una patología o un hallazgo que no figure explícitamente en su ficha.";
       ctx += "\n\n=== PACIENTES DEL USUARIO ===\nEl usuario está preguntando sobre sus pacientes. Responde con detalle. ";
       if (consultaPacientes.ningun) {
         ctx += "El usuario no tiene pacientes registrados aún.";
