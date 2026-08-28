@@ -3026,7 +3026,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.0.2";
+const VERSION = "v3.1.0";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -3122,11 +3122,45 @@ function VideoThumb({ url, style }) {
   return <img src={thumb} alt="" style={style} />;
 }
 
-// Trocea un texto en chunks de ~tamano caracteres, respetando límites de párrafo/frase
-// y con un pequeño solapamiento para no cortar ideas a la mitad.
-function trocearTexto(texto, tamano = 1500, solape = 200) {
+// Limpia el ruido editorial que traen los PDF descargados de plataformas
+// académicas. En la base había 12.743 fragmentos donde este aviso ocupaba ~280
+// de sus ~1.290 caracteres: un quinto del espacio útil, repetido en cada uno,
+// compitiendo además en el ranking de búsqueda.
+function limpiarRuidoEditorial(texto) {
+  return (texto || "")
+    // Un solo barrido desde "Descargado para" hasta el final del aviso. El
+    // patrón acotado con [^.] fallaba: se cortaba en el punto del correo
+    // electrónico del usuario y dejaba el resto del aviso intacto.
+    .replace(/Descargado para[\s\S]{0,400}?derechos reservados\./gi, " ")
+    .replace(/Descargado para[\s\S]{0,300}?por Elsevier[^\n]{0,80}/gi, " ")
+    .replace(/Para uso personal exclusivamente\./gi, " ")
+    .replace(/No se permiten otros usos sin autorizaci[óo]n\./gi, " ")
+    .replace(/Copyright\s*©?\s*\d{4}[\s\S]{0,120}?derechos reservados\./gi, " ")
+    .replace(/Copyright\s*©?\s*\d{4}\.?\s*Elsevier[^\n]{0,80}/gi, " ")
+    // Fragmentos que empiezan a MITAD del aviso (el troceado anterior lo
+    // partió): "…versity de ClinicalKey.es por Elsevier en agosto 23, 2026."
+    // Avisos que el troceado anterior partió por la mitad. Los patrones se
+    // anclan al TEXTO DEL AVISO y nada más: un patrón amplio llegó a borrar
+    // texto clínico legítimo en las pruebas, que en una biblioteca médica es
+    // peor que dejar el ruido.
+    .replace(/[^\s]{0,20}versity de ClinicalKey\.es por Elsevier en \w+ \d{1,2}, \d{4}\./gi, " ")
+    .replace(/ClinicalKey\.es por Elsevier en \w+ \d{1,2}, \d{4}\./gi, " ")
+    .replace(/No se permiten otros usos s(in autorizaci[óo]n)?\.?/gi, " ")
+    .replace(/---\s*P[áa]gina\s*\d+\s*---/gi, " ")
+    .replace(/[ \t]{2,}/g, " ");
+}
+
+// Trocea un texto en fragmentos, respetando límites de párrafo/frase y con
+// solapamiento para no cortar ideas a la mitad.
+//
+// El tamaño subió de 1.500 a 2.800 caracteres: con 1.500, las tablas de
+// tratamiento —antibiótico, dosis, duración— quedaban partidas en fragmentos
+// distintos, y el chat recibía el fármaco sin su posología. El solapamiento
+// subió en proporción para que una tabla partida aparezca completa en al
+// menos uno de los dos fragmentos.
+function trocearTexto(texto, tamano = 2800, solape = 400) {
   if (!texto) return [];
-  const limpio = texto.replace(/\r/g, "");
+  const limpio = limpiarRuidoEditorial(texto).replace(/\r/g, "");
   if (limpio.length <= tamano) return [limpio.trim()].filter(Boolean);
   const chunks = [];
   let inicio = 0;
