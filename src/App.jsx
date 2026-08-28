@@ -946,14 +946,22 @@ const CONFIG_DEFECTO = { chatModo: "verificada", ocultas: [] }; // chatModo: "ve
 // una política clínica del servicio, no una preferencia personal: define si un
 // residente puede recibir contenido no verificado contra la biblioteca. Ahora
 // la fija el admin y rige para todos.
-let MODO_CHAT_GLOBAL = null;   // cache en memoria de la sesión
+// Cache breve: si el admin cambia la política desde otro dispositivo, los
+// usuarios con la app abierta la tomaban recién al recargar. 60 s es
+// suficiente para no consultar en cada mensaje y bastante rápido para que un
+// cambio de política se propague solo.
+let MODO_CHAT_GLOBAL = null;
+let MODO_CHAT_LEIDO_EN = 0;
 async function leerModoChatGlobal() {
-  if (MODO_CHAT_GLOBAL) return MODO_CHAT_GLOBAL;
+  if (MODO_CHAT_GLOBAL && Date.now() - MODO_CHAT_LEIDO_EN < 60000) return MODO_CHAT_GLOBAL;
   try {
     const { data } = await supabase.from("ajustes_globales")
       .select("valor").eq("clave", "chat_modo").maybeSingle();
     MODO_CHAT_GLOBAL = data?.valor === "general" ? "general" : "verificada";
-  } catch {
+    MODO_CHAT_LEIDO_EN = Date.now();
+    logDiag(`chat: política de fuente = ${MODO_CHAT_GLOBAL}`);
+  } catch (e) {
+    logDiag(`chat: no se pudo leer la política de fuente (${e?.message || e}); se usa "verificada"`);
     // Sin la tabla o sin red: el modo seguro es limitarse a la base.
     MODO_CHAT_GLOBAL = "verificada";
   }
@@ -965,6 +973,7 @@ async function guardarModoChatGlobal(valor) {
     .upsert({ clave: "chat_modo", valor: v }, { onConflict: "clave" });
   if (error) return { ok: false, error: error.message };
   MODO_CHAT_GLOBAL = v;
+  MODO_CHAT_LEIDO_EN = Date.now();
   return { ok: true };
 }
 function cargarConfig() {
@@ -3017,7 +3026,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.0.0";
+const VERSION = "v3.0.1";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -15456,7 +15465,11 @@ if (imgsResult.ok) {
       if (p.servicio && q.includes(norm(p.servicio)) && norm(p.servicio).length >= 4) sumar(p, 1);
       if (p.ficha_clinica && q.includes(String(p.ficha_clinica).toLowerCase())) sumar(p, 4);
     });
-    const concretos = misPacientes.filter((p) => (puntaje.get(p.id) || 0) >= 2)
+    // Umbral 3: el diagnóstico solo aporta 2, así que "próstata" o "litiasis"
+    // en una pregunta general ya NO arrastra la ficha de un paciente. Nombre
+    // (3), cama (3) y ficha (4) siguen bastando por sí solos, y diagnóstico +
+    // cualquier otra señal también.
+    const concretos = misPacientes.filter((p) => (puntaje.get(p.id) || 0) >= 3)
       .sort((a, b) => (puntaje.get(b.id) || 0) - (puntaje.get(a.id) || 0));
 
     // ── 2. Consulta general sobre la lista ──
@@ -15550,7 +15563,11 @@ if (imgsResult.ok) {
     } catch {}
   }
   const consultaPacientes = buscarPacientesRelevantes(txt, listaPacChat);
-  const necesitaBase = !esCharla && !consultaCirugias && !consultaPacientes;
+  // Una pregunta puede ser sobre pacientes Y necesitar la biblioteca a la vez
+  // ("indicaciones de RTU de próstata" con un paciente prostático en la lista).
+  // Antes, detectar pacientes CANCELABA la búsqueda documental y el chat
+  // respondía "no tengo el documento" sin haber buscado nunca.
+  const necesitaBase = !esCharla;
   // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
   // Si la RPC falla (esquema en caché de PostgREST, permisos, firma cambiada),
   // buscarChunks devuelve {ok:false} y el chat respondía "no encontré nada en
