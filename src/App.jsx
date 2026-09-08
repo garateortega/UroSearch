@@ -3030,7 +3030,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.2.0";
+const VERSION = "v3.3.0";
 
 // ─── Registro de uso ──────────────────────────────────────────────
 // Mide qué funciones se usan de verdad. Antes la actividad se infería de las
@@ -3044,6 +3044,27 @@ const VERSION = "v3.2.0";
 // métricas anónimas: latencia, número de fuentes, longitudes.
 //
 // Nunca lanza ni bloquea: si el registro falla, la app sigue igual.
+// ─── Membrete por equipo ──────────────────────────────────────────
+// Los PDF (ingreso, transfusión, preanestesia, interconsulta) llevaban el
+// membrete del Hospital Base Valdivia escrito a mano en 8 lugares. Al abrir
+// la app a otros centros, cada equipo define el suyo una vez y todos sus
+// documentos salen con él. Sin configurar, se usan los valores del HBV, así
+// que nada cambia para Valdivia.
+const MEMBRETE_HBV = {
+  linea1: "MINISTERIO DE SALUD",
+  linea2: "SERVICIO DE SALUD VALDIVIA",
+  linea3: "HOSPITAL BASE VALDIVIA",
+  linea4: "SERVICIO UROLOGIA.",
+  region: "REGION DE LOS RIOS",
+  direccionTitulo: "DIRECCION HOSPITAL BASE VALDIVIA",
+  hospital: "HOSPITAL BASE VALDIVIA",
+};
+let MEMBRETE_ACTIVO = { ...MEMBRETE_HBV };
+function membrete() { return MEMBRETE_ACTIVO; }
+function fijarMembrete(m) {
+  MEMBRETE_ACTIVO = { ...MEMBRETE_HBV, ...(m && typeof m === "object" ? m : {}) };
+}
+
 let EVENTO_CTX = { userId: null, equipoId: null };
 function configurarEventos(userId, equipoId) {
   EVENTO_CTX = { userId: userId || null, equipoId: equipoId && equipoId !== "personal" ? equipoId : null };
@@ -7386,6 +7407,59 @@ const SERVICIOS_SUGERIDOS = ["Medicina", "Urología", "Cirugía", "UTI", "UCI", 
 const PENDIENTES_SUGERIDOS = ["Pasar visita", "Revisar exámenes", "Llamar a familia", "Solicitar interconsulta", "Programar pabellón", "Indicar alta", "Revisar imágenes", "Curación de catéter", "Cambio de Foley", "Retirar drenaje", "Control de signos vitales", "Solicitar urocultivo"];
 
 // ---------- EQUIPOS ----------
+// ─── Membrete del equipo: encabezado de todos sus PDF ───
+function MembreteEquipo({ equipo, onGuardado }) {
+  const base = { ...MEMBRETE_HBV, ...(equipo?.membrete || {}) };
+  const [f, setF] = useState(base);
+  const [abierto, setAbierto] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { setF({ ...MEMBRETE_HBV, ...(equipo?.membrete || {}) }); setAbierto(false); }, [equipo?.id]);
+
+  const guardar = async () => {
+    setGuardando(true);
+    const limpio = Object.fromEntries(Object.entries(f).map(([k, v]) => [k, (v || "").trim()]));
+    const { error } = await supabase.from("equipos").update({ membrete: limpio }).eq("id", equipo.id);
+    setGuardando(false);
+    if (error) return uroToast("No se pudo guardar: " + error.message);
+    uroToast("Membrete guardado: los próximos PDF saldrán con él");
+    onGuardado(limpio);
+  };
+
+  const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)", marginBottom: 6 };
+  const campos = [
+    ["linea1", "Línea 1 (ej: MINISTERIO DE SALUD)"],
+    ["linea2", "Línea 2 (ej: SERVICIO DE SALUD …)"],
+    ["linea3", "Línea 3 (ej: HOSPITAL …)"],
+    ["linea4", "Línea 4 (ej: SERVICIO UROLOGÍA)"],
+    ["region", "Región (para la preanestesia)"],
+    ["hospital", "Nombre corto del hospital"],
+    ["direccionTitulo", "Título de dirección (transfusión)"],
+  ];
+
+  return (
+    <div style={{ marginBottom: 12, border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)" }}>
+      <button onClick={() => setAbierto(!abierto)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+        <span style={{ fontSize: 15 }}>🏥</span>
+        <span style={{ flex: 1, fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)" }}>Membrete de los documentos</span>
+        <span style={{ color: "var(--texto-ter)", fontSize: 12 }}>{abierto ? "▲" : "▼"}</span>
+      </button>
+      {abierto && (
+        <div style={{ padding: "0 12px 12px" }}>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.45, marginBottom: 8 }}>
+            Encabezado con que salen los PDF de este equipo: ingresos, órdenes de transfusión, preanestesia e interconsultas. Se aplica a los documentos que se generen desde ahora.
+          </div>
+          {campos.map(([k, ph]) => (
+            <input key={k} value={f[k] || ""} onChange={(e) => setF({ ...f, [k]: e.target.value })} placeholder={ph} style={inp} />
+          ))}
+          <button onClick={guardar} disabled={guardando} style={{ width: "100%", padding: 10, fontSize: "var(--fs-2)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>
+            {guardando ? "Guardando…" : "Guardar membrete"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitacionesPendientes, currentUser, onCerrar }) {
   const [vista, setVista] = useState("lista");
   const [seleccionado, setSeleccionado] = useState(null);
@@ -7585,6 +7659,15 @@ function EquiposPanel({ equipos, setEquipos, invitacionesPendientes, setInvitaci
               </div>
             )}
           </div>
+        )}
+
+        {/* Membrete de los documentos: el encabezado con que salen los PDF del
+            equipo. Solo el dueño lo edita; sin configurar, sale el del HBV. */}
+        {esDueño && (
+          <MembreteEquipo equipo={seleccionado} onGuardado={(m)=>{
+            setEquipos((prev)=>prev.map((e)=>e.id===seleccionado.id?{...e,membrete:m}:e));
+            fijarMembrete(m);
+          }} />
         )}
 
         <div style={{display:"flex",gap:6}}>
@@ -9590,7 +9673,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     try { const wm = await logoWatermarkDataUrl(); if (wm) doc.addImage(wm, "PNG", W - M - 22, 13, 20, 20); } catch {}
     doc.setTextColor(0, 0, 0);
     doc.setFont("times", "bold"); doc.setFontSize(10);
-    ["MINISTERIO DE SALUD", "SERVICIO DE SALUD VALDIVIA", "HOSPITAL BASE VALDIVIA", "SERVICIO UROLOGIA."].forEach(t => { doc.text(t, M, y); y += 4.3; });
+    { const mb = membrete(); [mb.linea1, mb.linea2, mb.linea3, mb.linea4].filter(Boolean).forEach(t => { doc.text(t, M, y); y += 4.3; }); }
     y += 3; doc.setFontSize(12); doc.text("INGRESO AL SERVICIO DE UROLOGIA", W / 2, y, { align: "center" });
     const tw = doc.getTextWidth("INGRESO AL SERVICIO DE UROLOGIA"); doc.setLineWidth(0.3); doc.line(W / 2 - tw / 2, y + 1, W / 2 + tw / 2, y + 1);
     y += 9; doc.setFontSize(10.5);
@@ -9668,7 +9751,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     doc.line(c1, y, c1, y + hT); doc.line(c2, y, c2, y + hT);
     // Celda del logo: se deja vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
     doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-    doc.text("DIRECCION HOSPITAL BASE VALDIVIA", (c1 + c2) / 2, y + 4, { align: "center" });
+    doc.text(membrete().direccionTitulo, (c1 + c2) / 2, y + 4, { align: "center" });
     doc.setFont("helvetica", "italic"); doc.setFontSize(7);
     doc.text("CONSENTIMIENTO INFORMADO DE PACIENTE PARA LA EJECUCIÓN", (c1 + c2) / 2, y + 9, { align: "center" });
     doc.text("DE PROCEDIMIENTOS DE MAYOR RIESGO.", (c1 + c2) / 2, y + 12.5, { align: "center" });
@@ -9744,8 +9827,9 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     // Encabezado
     let y = 8; doc.rect(M, y, R - M, 15); doc.line(R - 70, y, R - 70, y + 15);
     // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
-    T("MINISTERIO DE SALUD", M + 16, y + 3.5, true, 7); T("REGION DE LOS RIOS", M + 16, y + 6.5, true, 7);
-    T("SERVICIO SALUD VALDIVIA", M + 16, y + 9.5, true, 7); T("HOSPITAL BASE VALDIVIA", M + 16, y + 12.5, true, 7);
+    { const mb = membrete();
+      T(mb.linea1, M + 16, y + 3.5, true, 7); T(mb.region || mb.linea2, M + 16, y + 6.5, true, 7);
+      T(mb.linea2, M + 16, y + 9.5, true, 7); T(mb.linea3, M + 16, y + 12.5, true, 7); }
     doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.text("EVALUACION PREANESTESIA ANEXO II", R - 35, y + 8.5, { align: "center", maxWidth: 66 });
     y += 15;
     // Fila NOMBRE / RUT
@@ -9808,7 +9892,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const chk = (x, yy) => { doc.setDrawColor(0, 0, 0); doc.rect(x, yy - 2.8, 3.2, 3.2); };
     let y = 12;
     // Celda del logo: vacía para ser fiel al formato oficial del HBV (sin logo UroSearch).
-    T("HOSPITAL BASE VALDIVIA", M + 16, y + 6, true, 9); y += 14;
+    T(membrete().hospital, M + 16, y + 6, true, 9); y += 14;
     T("ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)", W / 2, y, true, 9.5); doc.setFontSize(9.5); 
     { const t = "ANEXO N° 1: CATEGORIZACION DE RIESGO DE ENFERMEDAD TROMBOEMBOLICA (ETE)"; doc.text(t, W / 2, y, { align: "center", maxWidth: R - M }); } y += 8;
     const line = (x, yy, w) => { doc.setDrawColor(0, 0, 0); doc.line(x, yy, x + w, yy); };
@@ -9926,7 +10010,7 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
     const box = (x, yy) => { doc.setDrawColor(90, 90, 90); doc.rect(x, yy - 3, 3.5, 3.5); };
     // Sin logo UroSearch: estos anexos son formularios oficiales del HBV.
     let y = 18; doc.setFont("helvetica", "bold"); doc.setFontSize(11);
-    doc.text("HOSPITAL BASE VALDIVIA", M, y); y += 5;
+    doc.text(membrete().hospital, M, y); y += 5;
     doc.text("ANEXO N°1: RIESGO DE ENFERMEDAD TROMBOEMBÓLICA (ETE)", M, y, { maxWidth: W - 2 * M }); y += 8;
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
     doc.text(`Paciente: ${f.nombre || ""}`, M, y); doc.text(`RUN: ${f.rut || ""}`, W - M - 55, y); y += 5;
@@ -10613,7 +10697,7 @@ function OrdenTransfusionModal({ paciente, currentUser, examenes, onClose }) {
       // Encabezado institucional
       doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(30, 30, 30);
       doc.text("MINISTERIO DE SALUD", M, y); y += 3.6;
-      doc.text("SERVICIO DE SALUD VALDIVIA", M, y); y += 3.6;
+      doc.text(membrete().linea2, M, y); y += 3.6;
       doc.text(establecimiento.toUpperCase().slice(0, 48), M, y); y += 3.6;
       doc.text("UNIDAD DE BANCO DE SANGRE", M, y);
       doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90);
@@ -15089,10 +15173,16 @@ useEffect(() => {
   // moverse entre contextos.
   useEffect(() => {
     configurarEventos(currentUser?.id, contexto);
+    // El membrete de los PDF sigue al equipo activo. En contexto personal se
+    // usa el del primer equipo del usuario, y sin equipos, el del HBV.
+    const eq = contexto !== "personal"
+      ? equipos.find((e) => String(e.id) === String(contexto))
+      : equipos[0];
+    fijarMembrete(eq?.membrete);
     // Un evento por apertura: es el denominador de todas las métricas de
     // adopción (¿cuántos abrieron la app hoy?).
     if (currentUser?.id) registrarEvento("sesion_abierta", { version: VERSION });
-  }, [currentUser?.id, contexto]);
+  }, [currentUser?.id, contexto, equipos]);
 
   // ── Aceptación de documentos legales del piloto ──
   // El documento vive en la base (documentos_legales) y el gate solo se activa
