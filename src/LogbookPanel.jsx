@@ -24,6 +24,21 @@ async function tokenFuncionIA() {
   return import.meta.env.VITE_SUPABASE_ANON_KEY;
 }
 
+// Consumo de IA: se avisa a App.jsx por el puente de eventos (registrarEvento
+// no se importa aquí) para que el administrador vea cuántos tokens gasta cada
+// función. Silencioso si algo falla.
+function anotarUsoIALogbook(data, que) {
+  try {
+    const u = data?.usage;
+    if (!u) return;
+    window.dispatchEvent(new CustomEvent("uro-evento", { detail: { evento: "ia_uso", detalle: {
+      que, modelo: data?.model || null,
+      tokens_in: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
+      tokens_out: u.output_tokens || 0,
+    } } }));
+  } catch {}
+}
+
 const CATEGORIAS_LOGBOOK = ["Endourología", "Laparoscopía", "Cirugía abierta", "Cistoscopía", "Biopsia prostática", "Uretra / genital", "Procedimiento de box", "Otro"];
 
 // ─── Lugar de realización ─────────────────────────────────────────
@@ -415,6 +430,7 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
   }
   let data;
   try { data = await res.json(); } catch { throw new Error("respuesta vacía del servidor de IA"); }
+  anotarUsoIALogbook(data, "protocolo_foto");
   const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   if (!txt) throw new Error("la IA no devolvió texto (imagen ilegible o límite alcanzado)");
   // Aísla el objeto JSON aunque venga con backticks o texto alrededor, y tolera
@@ -1559,6 +1575,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       });
       if (!res.ok) throw new Error(`el servidor respondió ${res.status}`);
       const data = await res.json();
+      anotarUsoIALogbook(data, "logbook_resumen");
       const txt = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
       if (!txt) throw new Error("respuesta vacía");
       setResumenIA(txt);
@@ -1935,7 +1952,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
           )}
 
           {filtrados.map((r) => (
-            <div key={r.id} {...gestosPulsacion(r)} style={{ ...card, cursor: "pointer", WebkitTouchCallout: "none" }} onClick={() => { if (consumioPulsacionLarga()) return; setAbierto(abierto === r.id ? null : r.id); }}>
+            <div key={r.id} {...gestosPulsacion(r)} style={{ ...card, cursor: "pointer", WebkitTouchCallout: "none", minWidth: 0, maxWidth: "100%", overflow: "hidden" }} onClick={() => { if (consumioPulsacionLarga()) return; setAbierto(abierto === r.id ? null : r.id); }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>
@@ -1972,7 +1989,10 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               </div>
 
               {abierto === r.id && (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--borde)", fontSize: "var(--fs-1)", color: "var(--texto)", display: "flex", flexDirection: "column", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--borde)", fontSize: "var(--fs-1)", color: "var(--texto)", display: "flex", flexDirection: "column", gap: 4, minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }} onClick={(e) => e.stopPropagation()}>
+                  {/* En el celular esta tarjeta desbordaba: la fila de 5 botones no
+                      hacía wrap y su ancho mínimo (~600 px) ensanchaba la tarjeta
+                      entera, que quedaba cortada por ambos lados. */}
                   {r.categoria && <div><b>Categoría:</b> {r.categoria}</div>}
                   {r.diagnostico_pre && <div><b>Dg. preop:</b> {r.diagnostico_pre}</div>}
                   {r.diagnostico_post && <div><b>Dg. postop:</b> {r.diagnostico_post}</div>}
@@ -1991,7 +2011,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                   {r.tecnica && <div><b>Técnica:</b> {r.tecnica}</div>}
                   {r.detalles_complicacion && <div style={{ color: esIncidente(r) ? "var(--texto-sec)" : "var(--peligro)" }}><b>{esIncidente(r) ? "Incidente" : `Complicación (${etiquetaEvento(r)})`}:</b> {r.detalles_complicacion}</div>}
                   {r.observaciones && <div><b>Obs:</b> {r.observaciones}</div>}
-                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                     {r.foto_path && <button onClick={() => verFoto(r.foto_path)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>🖼 Ver protocolo</button>}
                     <button onClick={() => empezarEdicion(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)" }}>✏️ Editar</button>
                     <button onClick={() => abrirPatRapida(r)} style={{ ...btnSec, padding: "6px 12px", fontSize: "var(--fs-1)", color: "var(--primario)", fontWeight: 700 }}>➕ Biopsia / control</button>

@@ -168,6 +168,7 @@ Tienes explícita y estrictamente PROHIBIDO emitir diagnósticos de pacientes, r
 
 REGLA FUNDAMENTAL — FUENTE DE INFORMACIÓN:
 Solo puedes responder consultas clínicas usando la información de la base de conocimiento de UroSearch que se te proporciona en cada consulta. NO debes usar tu conocimiento médico general ni información externa para responder preguntas clínicas o teóricas. Si la base de conocimiento no contiene información relevante para la pregunta, debes indicar claramente que no tienes esa información en tu base, sin inventar ni completar con conocimiento propio. (Esta regla no aplica a las consultas sobre los pacientes o la tabla quirúrgica del propio usuario, que se responden con los datos entregados.)
+EXCEPCIÓN: cuando el contexto de la consulta diga que el MODO CONOCIMIENTO GENERAL está activado, o que el usuario AUTORIZÓ responder con conocimiento propio, esa instrucción prevalece sobre esta regla y debes responder con tu conocimiento clínico, marcando la respuesta como se te indique. Nunca digas que "no puedes saltarte" la regla cuando el contexto te autoriza.
 
 CONVERSACIÓN:
 Los saludos, agradecimientos y comentarios sociales NO son consultas clínicas: respóndelos de forma natural, breve y cercana, sin exigir documentos de la base y sin agregar información clínica. Cuando aporte, puedes cerrar tu respuesta con UNA pregunta corta de seguimiento (ej: "¿quieres que revisemos el manejo de tu paciente?") o sugerir qué más puedes hacer. Nunca hagas más de una pregunta por respuesta.
@@ -216,6 +217,12 @@ function esCharlaBasica(txt) {
   return patrones.test(q);
 }
 
+// ─── Petición explícita de responder fuera de la base ───
+// Se evalúa sobre el texto sin tildes y en minúsculas.
+const PIDE_CONOCIMIENTO_GENERAL = /(conocimiento\s+(general|propio|clinico\s+general)|modo\s+general|tu\s+(propio\s+)?conocimiento|lo\s+que\s+(tu\s+)?sep[ae]s|con\s+lo\s+que\s+sab[ae]s|fuera\s+de\s+la\s+base|sin\s+(usar\s+)?la\s+base|aunque\s+no\s+este\s+en\s+la\s+base|responde\s+(igual|de\s+todas\s+(formas|maneras)|no\s+mas|nomas)|segun\s+(las\s+)?guias\s+(eau|aua|europeas|americanas)|olvida\s+la\s+base|salt[ae]te\s+la\s+base|activa\s+(el\s+)?(modo\s+)?(conocimiento\s+)?general)/;
+// Primera línea que pone el modelo cuando responde con conocimiento propio.
+const MARCA_RESPUESTA_GENERAL = "ℹ️ Respuesta basada en conocimiento clínico general";
+
 // ─── Filtro de relevancia de los fragmentos de la base ───
 // La RPC devuelve hasta 8 chunks aunque el calce sea pobre; aquí se exige que
 // los términos sustantivos de la consulta aparezcan de verdad en el fragmento,
@@ -259,23 +266,166 @@ function expandirSiglas(texto) {
   return extras.length ? `${texto} ${extras.join(" ")}` : texto;
 }
 
+// ─── Diccionario ES→EN de términos urológicos ─────────────────────
+// La biblioteca mezcla libros en inglés (Campbell, Hinman, guías EAU) con
+// manuales en español. Tanto la función SQL como el filtro local trabajan por
+// coincidencia literal de palabras: "epididimitis" no calza con
+// "epididymitis", y la base parecía vacía teniendo el capítulo entero. Cada
+// término en español se acompaña de sus equivalentes en inglés al buscar y al
+// filtrar. Claves sin tildes y en minúsculas; se aceptan plurales simples.
+// Solo términos ESPECÍFICOS (anatomía, patología, procedimientos, estudios):
+// las palabras genéricas (tratamiento, manejo…) no se traducen a propósito,
+// porque "treatment" calzaría con cualquier capítulo y ensuciaría el ranking.
+const TERMINOS_EN = {
+  // Infección / inflamación
+  epididimitis: ["epididymitis"], orquitis: ["orchitis"],
+  orquiepididimitis: ["epididymo-orchitis", "epididymoorchitis", "orchiepididymitis"],
+  prostatitis: ["prostatitis"], pielonefritis: ["pyelonephritis"], cistitis: ["cystitis"],
+  uretritis: ["urethritis"], balanitis: ["balanitis"], balanopostitis: ["balanoposthitis"],
+  gangrena: ["gangrene"], absceso: ["abscess"], urosepsis: ["urosepsis"], sepsis: ["sepsis"],
+  infeccion: ["infection"], infecciosa: ["infectious"], infeccioso: ["infectious"],
+  urinaria: ["urinary"], urinario: ["urinary"], urinarias: ["urinary"], urinarios: ["urinary"],
+  bacteriuria: ["bacteriuria"], piuria: ["pyuria"], urocultivo: ["urine culture"], cultivo: ["culture"],
+  antibiotico: ["antibiotic"], antibioticos: ["antibiotics"], profilaxis: ["prophylaxis"],
+  // Síntomas
+  hematuria: ["hematuria", "haematuria"], disuria: ["dysuria"], polaquiuria: ["frequency", "pollakiuria"],
+  nicturia: ["nocturia"], retencion: ["retention"], incontinencia: ["incontinence"],
+  urgencia: ["urgency"], urgeincontinencia: ["urge incontinence"], enuresis: ["enuresis"],
+  hematospermia: ["hematospermia"], hemospermia: ["hematospermia"], dolor: ["pain"], fiebre: ["fever"],
+  colico: ["colic"], obstruccion: ["obstruction"], obstructiva: ["obstructive"], obstructivo: ["obstructive"],
+  // Anatomía
+  rinon: ["kidney", "renal"], riñon: ["kidney", "renal"], rinones: ["kidneys", "renal"], renal: ["renal", "kidney"],
+  ureter: ["ureter"], ureteres: ["ureters"], ureteral: ["ureteral", "ureteric"],
+  vejiga: ["bladder"], vesical: ["bladder", "vesical"], uretra: ["urethra"], uretral: ["urethral"],
+  prostata: ["prostate"], prostatico: ["prostatic", "prostate"], prostatica: ["prostatic", "prostate"],
+  testiculo: ["testis", "testicle"], testiculos: ["testes", "testicles"], testicular: ["testicular"],
+  escroto: ["scrotum"], escrotal: ["scrotal"], pene: ["penis", "penile"], peneano: ["penile"], peneana: ["penile"],
+  prepucio: ["foreskin", "prepuce"], glande: ["glans"], suprarrenal: ["adrenal"], adrenal: ["adrenal"],
+  pelvis: ["pelvis", "pelvic"], pelvica: ["pelvic"], pelvico: ["pelvic"], retroperitoneo: ["retroperitoneum"],
+  ganglio: ["lymph node"], ganglios: ["lymph nodes"], esfinter: ["sphincter"], vesiculas: ["seminal vesicles"],
+  // Litiasis
+  litiasis: ["lithiasis", "stone", "calculi", "urolithiasis"], calculo: ["stone", "calculus"], calculos: ["stones", "calculi"],
+  nefrolitiasis: ["nephrolithiasis"], urolitiasis: ["urolithiasis"], ureterolitiasis: ["ureteral stone", "ureterolithiasis"],
+  piedra: ["stone"], piedras: ["stones"], hidronefrosis: ["hydronephrosis"], hidroureteronefrosis: ["hydroureteronephrosis"],
+  litotricia: ["lithotripsy"], extracorporea: ["extracorporeal", "shock wave"], percutanea: ["percutaneous"],
+  ureteroscopia: ["ureteroscopy"], nefrolitotomia: ["nephrolithotomy"], pielolitotomia: ["pyelolithotomy"],
+  // Oncología
+  cancer: ["cancer", "carcinoma"], tumor: ["tumor", "tumour"], tumores: ["tumors", "tumours"],
+  carcinoma: ["carcinoma"], adenocarcinoma: ["adenocarcinoma"], urotelial: ["urothelial"], seminoma: ["seminoma"],
+  germinal: ["germ cell"], germinales: ["germ cell"], metastasis: ["metastasis", "metastatic"], metastasico: ["metastatic"],
+  estadificacion: ["staging"], etapificacion: ["staging"], vigilancia: ["surveillance"], activa: ["active"],
+  biopsia: ["biopsy"], quimioterapia: ["chemotherapy"], radioterapia: ["radiotherapy", "radiation"],
+  braquiterapia: ["brachytherapy"], hormonal: ["hormonal", "hormone"], androgenica: ["androgen"], androgenico: ["androgen"],
+  castracion: ["castration"], antiandrogeno: ["antiandrogen"], antiandrogenos: ["antiandrogens"],
+  inmunoterapia: ["immunotherapy"], intravesical: ["intravesical"], recidiva: ["recurrence"], recurrencia: ["recurrence"],
+  sobrevida: ["survival"], supervivencia: ["survival"], mortalidad: ["mortality"], gleason: ["gleason"],
+  quiste: ["cyst"], quistes: ["cysts"], angiomiolipoma: ["angiomyolipoma"], oncocitoma: ["oncocytoma"],
+  feocromocitoma: ["pheochromocytoma"], incidentaloma: ["incidentaloma"], masa: ["mass"], nodulo: ["nodule"],
+  linfadenectomia: ["lymphadenectomy", "lymph node dissection"], hiperplasia: ["hyperplasia"], benigna: ["benign"], benigno: ["benign"],
+  // Genital / andrología / pediátrica
+  torsion: ["torsion"], varicocele: ["varicocele"], hidrocele: ["hydrocele"], espermatocele: ["spermatocele"],
+  criptorquidia: ["cryptorchidism", "undescended testis"], fimosis: ["phimosis"], parafimosis: ["paraphimosis"],
+  priapismo: ["priapism"], peyronie: ["peyronie"], erectil: ["erectile"], disfuncion: ["dysfunction"],
+  eyaculacion: ["ejaculation"], infertilidad: ["infertility"], fertilidad: ["fertility"], hipogonadismo: ["hypogonadism"],
+  testosterona: ["testosterone"], espermiograma: ["semen analysis"], vasectomia: ["vasectomy"],
+  hipospadias: ["hypospadias"], epispadias: ["epispadias"], extrofia: ["exstrophy"], valvas: ["valves"],
+  reflujo: ["reflux"], vesicoureteral: ["vesicoureteral"], pediatrico: ["pediatric"], pediatrica: ["pediatric"],
+  infantil: ["pediatric", "children"], niño: ["child"], nino: ["child"], ninos: ["children"], niños: ["children"],
+  embarazo: ["pregnancy"], embarazada: ["pregnant"], gestacion: ["pregnancy"], circuncision: ["circumcision"],
+  orquidopexia: ["orchiopexy", "orchidopexy"], orquiectomia: ["orchiectomy", "orchidectomy"],
+  // Funcional
+  neurogenica: ["neurogenic"], neurogena: ["neurogenic"], hiperactiva: ["overactive"], hiperactividad: ["overactivity", "overactive"],
+  urodinamia: ["urodynamics", "urodynamic"], urodinamico: ["urodynamic"], uroflujometria: ["uroflowmetry"],
+  residuo: ["residual"], postmiccional: ["post-void", "postvoid"], miccion: ["voiding", "micturition"], miccional: ["voiding"],
+  vaciamiento: ["emptying", "voiding"], prolapso: ["prolapse"], cabestrillo: ["sling"], sling: ["sling"],
+  fistula: ["fistula"], vesicovaginal: ["vesicovaginal"], estenosis: ["stricture", "stenosis"], estrechez: ["stricture"],
+  // Trauma / urgencias
+  trauma: ["trauma", "injury"], traumatismo: ["trauma", "injury"], lesion: ["injury", "lesion"], fractura: ["fracture"],
+  hemorragia: ["hemorrhage", "bleeding"], sangrado: ["bleeding"], transfusion: ["transfusion"],
+  anticoagulacion: ["anticoagulation"], anticoagulante: ["anticoagulant"], anticoagulantes: ["anticoagulants"],
+  // Trasplante / nefrología
+  trasplante: ["transplant", "transplantation"], transplante: ["transplant"], donante: ["donor"], receptor: ["recipient"],
+  rechazo: ["rejection"], dialisis: ["dialysis"], insuficiencia: ["failure", "insufficiency"],
+  // Procedimientos
+  sonda: ["catheter"], cateter: ["catheter"], cateterismo: ["catheterization"], nefrostomia: ["nephrostomy"],
+  cistostomia: ["cystostomy"], cistoscopia: ["cystoscopy"], nefrectomia: ["nephrectomy"], prostatectomia: ["prostatectomy"],
+  cistectomia: ["cystectomy"], adenomectomia: ["adenomectomy", "simple prostatectomy"], pieloplastia: ["pyeloplasty"],
+  reimplante: ["reimplantation"], ureterectomia: ["ureterectomy"], nefroureterectomia: ["nephroureterectomy"],
+  laparoscopica: ["laparoscopic"], laparoscopico: ["laparoscopic"], laparoscopia: ["laparoscopy"], robotica: ["robotic"],
+  transuretral: ["transurethral"], reseccion: ["resection"], enucleacion: ["enucleation"], endoscopica: ["endoscopic"],
+  endoscopico: ["endoscopic"], derivacion: ["diversion"], neovejiga: ["neobladder"], conducto: ["conduit"], ileal: ["ileal"],
+  uretroplastia: ["urethroplasty"], uretrotomia: ["urethrotomy"], dilatacion: ["dilation", "dilatation"],
+  // Estudios
+  ecografia: ["ultrasound", "sonography"], ecografico: ["ultrasound"], tomografia: ["computed tomography"],
+  resonancia: ["magnetic resonance", "mri"], cintigrama: ["scintigraphy", "renal scan"], gammagrafia: ["scintigraphy"],
+  urografia: ["urography"], cistografia: ["cystography"], uretrocistografia: ["cystourethrography"],
+  creatinina: ["creatinine"], sedimento: ["urinalysis", "sediment"], orina: ["urine"], antigeno: ["antigen"],
+  // Clínica frecuente
+  aguda: ["acute"], agudo: ["acute"], cronica: ["chronic"], cronico: ["chronic"], recurrente: ["recurrent"],
+  complicada: ["complicated"], complicado: ["complicated"], nocturna: ["nocturnal"], perioperatorio: ["perioperative"],
+  postoperatorio: ["postoperative"], preoperatorio: ["preoperative"], anciano: ["elderly"], geriatrico: ["geriatric"],
+  varon: ["male", "men"], varones: ["male", "men"], mujer: ["female", "women"], mujeres: ["female", "women"],
+};
+
+// Variantes (español + inglés) de una palabra ya normalizada (sin tildes,
+// minúsculas). Prueba también el singular para "calculos", "infecciones".
+function variantesTermino(w) {
+  const claves = [w];
+  if (w.endsWith("es") && w.length > 5) claves.push(w.slice(0, -2));
+  if (w.endsWith("s") && w.length > 4) claves.push(w.slice(0, -1));
+  const out = new Set([w]);
+  for (const k of claves) (TERMINOS_EN[k] || []).forEach((v) => out.add(v));
+  return Array.from(out);
+}
+
+// Suma a la consulta los equivalentes en inglés de sus términos (después de
+// expandir las siglas, para que "ITU" también llegue como "infection").
+function expandirConsulta(texto) {
+  const conSiglas = expandirSiglas(texto);
+  const extras = new Set();
+  sinTildes(conSiglas).split(/[^a-z0-9]+/).filter((w) => w.length >= 4).forEach((w) => {
+    variantesTermino(w).forEach((v) => { if (v !== w) extras.add(v); });
+  });
+  return extras.size ? `${conSiglas} ${Array.from(extras).join(" ")}` : conSiglas;
+}
+
+// Palabras que aparecen en cualquier capítulo y por eso NO cuentan como
+// acierto por sí solas al filtrar fragmentos: "tratamiento de la epididimitis"
+// no debe traer un manual de endourología solo porque dice "tratamiento".
+const GENERICOS_CLINICOS = new Set(["tratamiento","tratamientos","diagnostico","diagnosticos","manejo","paciente","pacientes","sintoma","sintomas","signo","signos","indicacion","indicaciones","contraindicacion","contraindicaciones","complicacion","complicaciones","cirugia","cirugias","quirurgico","quirurgica","clinica","clinico","clinicos","clinicas","evaluacion","general","generales","estudio","estudios","examen","examenes","laboratorio","imagen","imagenes","criterio","criterios","definicion","causa","causas","etiologia","fisiopatologia","epidemiologia","factores","factor","riesgo","riesgos","pronostico","seguimiento","control","controles","dosis","medicamento","medicamentos","farmaco","farmacos","urgencias","ingreso","hospital","hospitalizado","protocolo","protocolos","guia","guias","recomendacion","recomendaciones","algoritmo","esquema","tabla","base","datos","conocimiento","busca","buscar","respuesta","pregunta","enfermedad","enfermedades","patologia","patologias","terapia","terapias","procedimiento","procedimientos","tecnica","tecnicas","abordaje","opciones","opcion","alternativas","alternativa","diferencias","diferencia","ventajas","desventajas","primera","segunda","linea","inicial","actual","actualizado","nuevo","nueva","adulto","adultos","hombre","edad","anos","años","tiempo","dias","semanas","meses","valor","valores","normal","normales","alto","alta","bajo","baja","mayor","menor","importante","principal","principales","frecuente","frecuentes","comun","comunes","habitual","siempre","nunca","evidencia","literatura","resumen","propio","responde","quiero"]);
+
 const STOP_CHAT = new Set(["para","como","cual","cuales","donde","cuando","sobre","entre","desde","hasta","este","esta","estos","estas","tiene","tienen","hacer","puede","pueden","puedo","segun","cada","tras","pero","porque","tambien","cuanto","cuanta","cuantos","cuantas","dime","dame","quiero","necesito","favor","podrias","puedes","explica","explicame","resume","resumen","informacion","sirve","sirven","tipo","tipos","cosa","cosas","tema","acerca","respecto","manejo","cuadro","caso","casos","mejor","peor","debe","deben","deberia","seria","estan","esta","hay","que","con","por","los","las","del","una","uno","unos","unas"]);
 function terminosConsulta(txt) {
   const norm = (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return Array.from(new Set(norm.split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !STOP_CHAT.has(w))));
 }
 function filtrarChunksRelevantes(consulta, chunks) {
-  const terms = terminosConsulta(consulta);
-  if (!terms.length) return [];
-  const puntuados = (chunks || []).map(c => {
-    const cont = (((c.titulo || "") + " " + (c.contenido || ""))).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    let hits = 0, score = 0;
-    terms.forEach(t => { if (cont.includes(t)) { hits++; score += t.length; } });
-    return { c, hits, score };
+  // Cada término de la consulta es un GRUPO: la palabra en español y sus
+  // equivalentes en inglés; basta con que aparezca cualquiera de ellas.
+  const grupos = terminosConsulta(consulta).map((t) => ({ t, variantes: variantesTermino(t), generico: GENERICOS_CLINICOS.has(t) }));
+  if (!grupos.length) return [];
+  const especificos = grupos.filter((g) => !g.generico);
+  const puntuados = (chunks || []).map((c) => {
+    const cont = sinTildes((c.titulo || "") + " " + (c.contenido || ""));
+    let hitsEsp = 0, hitsGen = 0, score = 0;
+    grupos.forEach((g) => {
+      if (!g.variantes.some((v) => cont.includes(v))) return;
+      if (g.generico) { hitsGen++; score += 1; } else { hitsEsp++; score += g.t.length; }
+    });
+    return { c, hitsEsp, hitsGen, score };
   });
-  // Con 3+ términos sustantivos se exige que calcen al menos 2; con menos, basta 1.
-  const minHits = terms.length >= 3 ? 2 : 1;
-  return puntuados.filter(s => s.hits >= minHits).sort((a, b) => b.score - a.score).slice(0, 5).map(s => s.c);
+  let filtrados;
+  if (especificos.length > 0) {
+    // Con términos específicos (epididimitis, litiasis…) al menos uno de ELLOS
+    // debe estar en el fragmento; las palabras genéricas solo ordenan.
+    const minEsp = especificos.length >= 3 ? 2 : 1;
+    filtrados = puntuados.filter((s) => s.hitsEsp >= minEsp);
+  } else {
+    // Consulta hecha solo de palabras genéricas: regla antigua.
+    const minHits = grupos.length >= 3 ? 2 : 1;
+    filtrados = puntuados.filter((s) => s.hitsGen >= minHits);
+  }
+  return filtrados.sort((a, b) => b.score - a.score).slice(0, 5).map((s) => s.c);
 }
 
 // Estilo de ALTO CONTRASTE para los mensajes de confirmación/error de formularios.
@@ -339,6 +489,26 @@ async function archivoAImagenesB64(file, maxPaginas = 5) {
     salida.push(canvas.toDataURL("image/jpeg", 0.85).split(",")[1]);
   }
   return salida;
+}
+
+// Adjunta a la ficha del paciente las imágenes (JPEG base64) que ya se usaron
+// para la extracción por IA: la hoja de ingreso queda visible en 📷 Imágenes.
+function b64ABlobJpeg(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "image/jpeg" });
+}
+async function adjuntarImagenesPaciente(pacienteId, userId, b64s) {
+  let ok = 0;
+  for (const b of (b64s || []).slice(0, 6)) {
+    try {
+      const r = await subirImagenPaciente(pacienteId, userId, b64ABlobJpeg(b));
+      if (r.ok) { ok++; registrarEvento("imagen_paciente", { origen: "ingreso" }); }
+      else logDiag(`imagen: no se pudo adjuntar la hoja de ingreso → ${r.error}`);
+    } catch (e) { logDiag(`imagen: excepción al adjuntar → ${e?.message || e}`); }
+  }
+  return ok;
 }
 
 // ─── Dictado de voz ───────────────────────────────────────────────
@@ -408,6 +578,7 @@ function useDictado(onTexto) {
       // debe desaparecer al soltar, no al terminar.
       stream.getTracks().forEach((t) => t.stop());
       const seCancelo = !!ref.current?.cancelado;
+      const segGrabados = ref.current?.inicio ? Math.round((Date.now() - ref.current.inicio) / 1000) : null;
       ref.current = null;
       if (seCancelo) { setEstado("inactivo"); return; }
       const tipo = recorder.mimeType || mime || "audio/webm";
@@ -418,7 +589,7 @@ function useDictado(onTexto) {
         const ext = tipo.includes("mp4") ? "m4a" : tipo.includes("mpeg") ? "mp3" : tipo.includes("ogg") ? "ogg" : "webm";
         const t0 = Date.now();
         const texto = await transcribirAudio(blob, ext);
-        registrarEvento("dictado", { ms: Date.now() - t0, kb: Math.round(blob.size / 1024), chars: texto.length });
+        registrarEvento("dictado", { ms: Date.now() - t0, kb: Math.round(blob.size / 1024), chars: texto.length, seg: segGrabados });
         await cbRef.current(texto);
         setEstado("inactivo");
       } catch (err) {
@@ -426,7 +597,7 @@ function useDictado(onTexto) {
         setError(err?.message || "No se pudo transcribir.");
       }
     };
-    ref.current = { recorder, stream };
+    ref.current = { recorder, stream, inicio: Date.now() };
     recorder.start();
     setEstado("grabando");
   };
@@ -534,6 +705,7 @@ Dictado:
       }),
     });
     const data = await res.json();
+    anotarUsoIA(data, "dictado_parrafos");
     const t = (data.content?.find((b) => b.type === "text")?.text || "").trim();
     return t || texto; // si la IA no responde, no se pierde el dictado
   } catch { return texto; }
@@ -597,6 +769,7 @@ Dictado:
       }),
     });
     const data = await res.json();
+    anotarUsoIA(data, "dictado_soap");
     const txt = data.content?.find((b) => b.type === "text")?.text || "";
     return JSON.parse(txt.replace(/```json|```/g, "").trim());
   } catch { return null; }
@@ -644,6 +817,7 @@ IMPORTANTE: transcribe los datos tal cual aparecen en el documento; no inventes 
     }),
   });
   const data = await res.json();
+  anotarUsoIA(data, "ingreso_foto");
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
   const clean = txt.replace(/```json|```/g, "").trim();
   // El modelo puede devolver prosa en vez de JSON: null degrada bien, lanzar no.
@@ -659,53 +833,91 @@ function componerHistoriaIngreso(x) {
   return partes.join("\n\n");
 }
 
-// ─── Extracción de una TABLA quirúrgica desde foto(s): devuelve arreglo ───
-async function extraerTablaCirugias(imagenesBase64) {
+// ─── Extracción de una TABLA quirúrgica desde foto(s) o planilla ───
+// Sirve para las fotos de la tabla y para los Excel cuyo formato no es el del
+// HBV (la planilla llega convertida a texto). Devuelve un arreglo de filas
+// crudas; la normalización y la vista previa las hace el panel.
+//
+// Dos causas de "no se pudo extraer ninguna cirugía" que esto corrige:
+//  · max_tokens 3000 cortaba el JSON con tablas grandes (una semana de 40
+//    cirugías lo supera con holgura) y el corte se reportaba como fallo total.
+//    Ahora hay 8000 tokens, el JSON va compacto (sin nulls) y, si igual se
+//    trunca, se rescatan las cirugías completas en vez de perder todo.
+//  · Sin fecha de referencia, "LUNES 06" caía en el mes equivocado.
+function formatearRut(v) {
+  const limpio = String(v || "").replace(/[.\s\-]/g, "").toUpperCase();
+  if (!/^\d{7,8}[0-9K]$/.test(limpio)) return v ? String(v).trim().slice(0, 15) : null;
+  const cuerpo = limpio.slice(0, -1), dv = limpio.slice(-1);
+  return `${cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${dv}`;
+}
+function rescatarCirugiasJSON(txt) {
+  const clean = String(txt || "").replace(/```json|```/g, "").trim();
+  try {
+    const p = JSON.parse(clean);
+    if (Array.isArray(p?.cirugias)) return p.cirugias;
+    if (Array.isArray(p)) return p;
+  } catch {}
+  // Truncado o con basura alrededor: objeto por objeto desde el primer "[".
+  const arr = parsearArrayPreguntasIA(clean);
+  return Array.isArray(arr) ? arr.filter((o) => o && typeof o === "object") : [];
+}
+async function extraerTablaCirugias(imagenesBase64, textoPlanilla, fechaReferencia) {
   const hoy = hoyLocalISO();
-  const instrucciones = `Analiza la(s) foto(s) de esta tabla/programación quirúrgica de urología y extrae TODAS las cirugías en JSON.
-Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional.
-Si un dato no aparece, usa null. NO inventes datos. La fecha de referencia de hoy es ${hoy}.
+  const ref = fechaReferencia || hoy;
+  const fuente = textoPlanilla ? "esta planilla Excel convertida a texto (una fila por línea, celdas separadas por \" | \")" : "la(s) foto(s) de esta tabla";
+  const instrucciones = `Analiza ${fuente} de programación quirúrgica de urología y extrae TODAS las cirugías en JSON.
+Responde SOLO con un objeto JSON válido, sin markdown, sin backticks, sin texto adicional. Omite las claves cuyo valor sería null (JSON compacto).
+NO inventes datos. Fecha de hoy: ${hoy}. En la app el usuario está mirando la semana/mes que parte el ${ref}: si la tabla indica solo el día ("LUNES 06", "Mié 8") sin mes ni año, usa el mes y año de esa fecha de referencia, salvo que el título de la tabla diga otro mes o año.
+
+Cómo suelen venir estas tablas (los nombres de columna cambian entre hospitales):
+- Encabezados como FECHA, HORARIO/HORA, NOMBRE/PACIENTE, EDAD, RUT, FICHA/FC/N° FICHA, DIAGNÓSTICO, CIRUGÍA/PROCEDIMIENTO, LADO, ABORDAJE, TOP/DURACIÓN, CIRUJANO/MÉDICO/DR, PABELLÓN/SALA, OBSERVACIONES.
+- El día aparece una vez y aplica a todas las filas siguientes hasta el próximo día. Lo mismo el bloque AM/PM: sin hora exacta usa AM → "08:00", PM → "14:00".
+- Puede haber una segunda sección para otro pabellón o clínica (p. ej. "CCV"): anótalo en "pabellon".
+- Ignora correlativos ("CORR:"), totales, encabezados repetidos y filas vacías.
 
 Esquema exacto:
-{
-  "cirugias": [
-    {
-      "fecha": "YYYY-MM-DD (si la tabla indica día/fecha) o null",
-      "hora": "HH:MM o null",
-      "nombre": "nombre completo del paciente tal como aparece o null",
-      "ficha_clinica": "número de ficha clínica / FC o null",
-      "rut": "RUT del paciente (formato 12.345.678-9) o null",
-      "edad": numero o null,
-      "diagnostico": "diagnóstico o null",
-      "procedimiento": "cirugía programada o null",
-      "lateralidad": "Derecha" | "Izquierda" | "Bilateral" | null,
-      "cirujano": "cirujano responsable o null",
-      "pabellon": "número o nombre de pabellón o null"
-    }
-  ]
-}
-Extrae una entrada por cada fila/cirugía de la tabla. Incluye el nombre completo si aparece.`;
+{"cirugias":[{"fecha":"YYYY-MM-DD","hora":"HH:MM","nombre":"nombre completo tal como aparece","ficha_clinica":"número de ficha / FC","rut":"12.345.678-9","edad":65,"diagnostico":"...","procedimiento":"cirugía programada","lateralidad":"Derecha|Izquierda|Bilateral","abordaje":"Abierto|Laparoscópico|Endoscópico|Robótico","duracion":"120 min","cirujano":"...","pabellon":"número o nombre","observaciones":"..."}]}
+Una entrada por cada fila/cirugía. Si son muchas (más de 60), prioriza incluirlas TODAS con los campos esenciales (fecha, hora, nombre, procedimiento, cirujano) antes que detallar observaciones.`;
 
-  const content = imagenesBase64.map((b64) => ({
+  const content = (imagenesBase64 || []).map((b64) => ({
     type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 },
   }));
-  content.push({ type: "text", text: instrucciones });
+  content.push({ type: "text", text: textoPlanilla ? `${instrucciones}\n\n=== PLANILLA ===\n${textoPlanilla}` : instrucciones });
 
   const res = await fetch(import.meta.env.VITE_CHAT_FUNCTION_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${await tokenFuncionIA()}` },
     body: JSON.stringify({
-      model: "claude-sonnet-5", max_tokens: 3000,
-      system: "Eres un extractor de tablas quirúrgicas de urología. Respondes exclusivamente con JSON válido. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes.",
+      model: "claude-sonnet-5", max_tokens: 8000,
+      system: "Eres un extractor de tablas quirúrgicas de urología. Respondes exclusivamente con JSON válido y compacto. No almacenes, registres ni retengas los datos personales de los pacientes que aparezcan en las imágenes o planillas.",
       messages: [{ role: "user", content }],
     }),
   });
+  if (!res.ok) {
+    let det = "";
+    try { det = (await res.text()).slice(0, 160); } catch {}
+    throw new Error(`el servidor de IA respondió ${res.status}${det ? " — " + det : ""}`);
+  }
   const data = await res.json();
+  anotarUsoIA(data, "tabla_foto");
   const txt = data.content?.find((b) => b.type === "text")?.text || "";
-  const clean = txt.replace(/```json|```/g, "").trim();
-  let parsed = null;
-  try { parsed = JSON.parse(clean); } catch { return null; }
-  return Array.isArray(parsed?.cirugias) ? parsed.cirugias : [];
+  return rescatarCirugiasJSON(txt);
+}
+
+// Convierte la planilla (matriz de celdas de SheetJS) en texto para la IA.
+// Se limita en filas y caracteres: una tabla semanal cabe de sobra.
+function planillaATexto(hojas, maxFilas = 400, maxChars = 30000) {
+  const lineas = [];
+  for (const { nombre, matriz } of hojas) {
+    if (hojas.length > 1) lineas.push(`### HOJA: ${nombre}`);
+    let n = 0;
+    for (const fila of matriz) {
+      if (!fila || fila.every((c) => !c || String(c).trim() === "")) continue;
+      lineas.push(fila.map((c) => String(c ?? "").replace(/\s+/g, " ").trim()).join(" | "));
+      if (++n >= maxFilas) { lineas.push("… (se omiten filas siguientes)"); break; }
+    }
+  }
+  return lineas.join("\n").slice(0, maxChars);
 }
 
 // ─── Extracción de EXÁMENES desde foto(s): devuelve arreglo de exámenes ───
@@ -759,6 +971,7 @@ Reglas:
       }),
     });
     const data = await res.json();
+    anotarUsoIA(data, "examenes_foto");
     const txt = data.content?.find((b) => b.type === "text")?.text || "";
     let clean = txt.replace(/```json|```/g, "").trim();
     if (!clean) return null;
@@ -1264,6 +1477,78 @@ async function marcarFlagVisto(userId, clave, valor = true) {
   }
 }
 
+// ─── Consumo de IA (solo administrador) ───────────────────────────
+// Lee la vista v_consumo_ia (tokens del chat y de las funciones de visión,
+// segundos de dictado) agrupada por mes. El saldo que queda no está acá: vive
+// en la consola de facturación de cada proveedor.
+function ConsumoIAPanel() {
+  const [filas, setFilas] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const { data, error: e } = await supabase.from("v_consumo_ia").select("*").order("mes", { ascending: false }).limit(6);
+        if (e) throw e;
+        if (vivo) setFilas(data || []);
+      } catch (e) {
+        if (vivo) { setFilas([]); setError(e?.message || "No se pudo leer el consumo."); }
+      }
+    })();
+    return () => { vivo = false; };
+  }, []);
+  const fmt = (n) => (n == null ? "—" : Number(n) >= 1e6 ? (Number(n) / 1e6).toFixed(2) + " M" : Number(n) >= 1e3 ? (Number(n) / 1e3).toFixed(1) + " k" : String(n));
+  const mesLabel = (m) => {
+    const d = String(m || "").slice(0, 7).split("-");
+    const nombres = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+    return d.length === 2 ? `${nombres[parseInt(d[1], 10) - 1] || d[1]} ${d[0]}` : String(m);
+  };
+  const celda = { padding: "6px 8px", fontSize: "var(--fs-0)", color: "var(--texto)", borderBottom: "0.5px solid var(--borde)", whiteSpace: "nowrap" };
+  const cab = { ...celda, color: "var(--texto-ter)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontSize: 10 };
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>📈 Consumo de IA</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.45 }}>
+        Tokens que gastan el chat y las funciones de visión (Anthropic) y minutos de dictado (OpenAI), por mes. El saldo restante y el gasto en dólares se ven en la consola de facturación de cada proveedor; ahí conviene activar la recarga automática para que el chat no se detenga.
+      </div>
+      {filas === null ? (
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Cargando…</div>
+      ) : error ? (
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)", lineHeight: 1.45 }}>⚠️ {error}<br />Si dice que la vista no existe, falta ejecutar el SQL de <code>v_consumo_ia</code>.</div>
+      ) : filas.length === 0 ? (
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Todavía no hay consumo registrado (se acumula desde esta versión).</div>
+      ) : (
+        <div style={{ overflowX: "auto", border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead><tr>
+              <th style={{ ...cab, textAlign: "left" }}>Mes</th>
+              <th style={{ ...cab, textAlign: "right" }}>Consultas</th>
+              <th style={{ ...cab, textAlign: "right" }}>Visión</th>
+              <th style={{ ...cab, textAlign: "right" }}>Tokens entrada</th>
+              <th style={{ ...cab, textAlign: "right" }}>Tokens salida</th>
+              <th style={{ ...cab, textAlign: "right" }}>Dictados</th>
+              <th style={{ ...cab, textAlign: "right" }}>Min. audio</th>
+            </tr></thead>
+            <tbody>
+              {filas.map((f) => (
+                <tr key={String(f.mes)}>
+                  <td style={{ ...celda, fontWeight: 600 }}>{mesLabel(f.mes)}</td>
+                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.consultas_chat)}</td>
+                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.llamadas_vision)}</td>
+                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.tokens_in)}</td>
+                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.tokens_out)}</td>
+                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.dictados)}</td>
+                  <td style={{ ...celda, textAlign: "right" }}>{f.min_audio == null ? "—" : Number(f.min_audio).toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Onboarding de notificaciones: se ofrece UNA vez al abrir la app ───
 function OnboardingPushModal({ currentUser, onClose }) {
   const [cargando, setCargando] = useState(false);
@@ -1663,16 +1948,34 @@ async function pedirRespuestaIA({ model, maxTokens, system, messages, token, onD
   const headers = { "Content-Type": "application/json", "Authorization": `Bearer ${token}` };
   const cuerpo = (stream) => JSON.stringify({ model, max_tokens: maxTokens, system, messages, ...(stream ? { stream: true } : {}) });
 
+  // Un error de la API (saldo agotado, modelo no permitido, 5xx) venía como
+  // JSON sin `content` y el chat mostraba "Sin respuesta." sin explicar nada.
+  // Ahora se lanza con el mensaje real, y el chat distingue el caso de saldo.
+  const mensajeErrorApi = (data, res) =>
+    data?.error?.message || (typeof data?.error === "string" ? data.error : null) || data?.message || (res ? `${res.status} ${res.statusText}` : "error de la API");
+  const lanzarErrorApi = async (res) => {
+    let data = null;
+    try { data = await res.json(); } catch {}
+    throw new Error(mensajeErrorApi(data, res));
+  };
+
   // ── Intento con streaming ──
   if (soportaStream() !== "0" && onDelta) {
+    let res;
     try {
-      const res = await fetch(url, { method: "POST", headers, body: cuerpo(true) });
+      res = await fetch(url, { method: "POST", headers, body: cuerpo(true) });
+    } catch { marcarStream("0"); res = null; }
+    if (res && !res.ok) await lanzarErrorApi(res);
+    if (res) {
+      try {
       const ct = (res.headers.get("content-type") || "").toLowerCase();
       if (res.ok && res.body && ct.includes("event-stream")) {
         marcarStream("1");
         const lector = res.body.getReader();
         const dec = new TextDecoder();
         let buffer = "", texto = "";
+        const uso = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+        let modeloResp = model;
         while (true) {
           const { done, value } = await lector.read();
           if (done) break;
@@ -1688,25 +1991,44 @@ async function pedirRespuestaIA({ model, maxTokens, system, messages, token, onD
               if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
                 texto += ev.delta.text;
                 onDelta(texto);
+              } else if (ev.type === "message_start" && ev.message) {
+                const u = ev.message.usage || {};
+                uso.input_tokens = u.input_tokens || 0;
+                uso.cache_read_input_tokens = u.cache_read_input_tokens || 0;
+                uso.cache_creation_input_tokens = u.cache_creation_input_tokens || 0;
+                if (ev.message.model) modeloResp = ev.message.model;
+              } else if (ev.type === "message_delta" && ev.usage) {
+                uso.output_tokens = ev.usage.output_tokens || uso.output_tokens;
+              } else if (ev.type === "error") {
+                throw new Error(ev.error?.message || "error de la API");
               }
-            } catch {}
+            } catch (e) { if (e?.message && !/JSON/.test(e.message)) throw e; }
           }
         }
+        anotarUsoIA({ usage: uso, model: modeloResp }, "chat", model);
         if (texto) return texto;
       }
       // La función respondió, pero no en streaming: se recuerda y se sigue abajo.
       marcarStream("0");
       if (res.ok && !ct.includes("event-stream")) {
         const data = await res.json();
+        anotarUsoIA(data, "chat", model);
         const t = data.content?.find((b) => b.type === "text")?.text;
         if (t) return t;
       }
-    } catch { marcarStream("0"); }
+      } catch (e) {
+        marcarStream("0");
+        if (esErrorDeSaldo(e?.message)) throw e;
+      }
+    }
   }
 
   // ── Camino clásico (una sola respuesta al final) ──
   const res = await fetch(url, { method: "POST", headers, body: cuerpo(false) });
+  if (!res.ok) await lanzarErrorApi(res);
   const data = await res.json();
+  if (data?.error) throw new Error(mensajeErrorApi(data, res));
+  anotarUsoIA(data, "chat", model);
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
@@ -1878,6 +2200,7 @@ function ConfigModal({ onClose, currentUser }) {
             );
           })}
         </div>
+        <ConsumoIAPanel />
         </>)}
 
         {/* Vista de pacientes */}
@@ -3030,7 +3353,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.3.0";
+const VERSION = "v3.4.0";
 
 // ─── Registro de uso ──────────────────────────────────────────────
 // Mide qué funciones se usan de verdad. Antes la actividad se infería de las
@@ -3087,6 +3410,38 @@ function registrarEvento(evento, detalle = null) {
       .then(() => {}, () => {});   // silencioso a propósito
   } catch {}
 }
+
+// ─── Consumo de IA: tokens por llamada ────────────────────────────
+// La API devuelve `usage` en cada respuesta (en streaming, repartido entre
+// message_start y message_delta). Se anota en eventos_uso para que el
+// administrador vea cuánto consume cada función y estime el gasto. El saldo
+// que queda NO lo expone la API con la llave normal: vive en la consola de
+// facturación del proveedor (Anthropic para el chat, OpenAI para el dictado).
+let ULTIMO_USO_IA = null;
+function anotarUsoIA(data, que, modelo) {
+  const u = data?.usage;
+  if (!u || typeof u !== "object") return;
+  const det = {
+    que,
+    modelo: data?.model || modelo || null,
+    tokens_in: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
+    tokens_out: u.output_tokens || 0,
+  };
+  // El chat guarda los tokens dentro de su propio evento (chat_consulta);
+  // las demás funciones emiten un evento ia_uso propio.
+  if (que === "chat") ULTIMO_USO_IA = det;
+  else registrarEvento("ia_uso", det);
+}
+function usoIA() {
+  const u = ULTIMO_USO_IA;
+  ULTIMO_USO_IA = null;
+  return u ? { modelo: u.modelo, tokens_in: u.tokens_in, tokens_out: u.tokens_out } : {};
+}
+// Mensaje de error de la API que delata saldo agotado o problema de facturación.
+function esErrorDeSaldo(msg) {
+  return /credit balance|insufficient|billing|payment|quota|402|saldo/i.test(String(msg || ""));
+}
+const MSG_SIN_SALDO_IA = "⚠️ El servicio de IA no pudo responder porque el saldo de créditos del proveedor está agotado o hay un problema de facturación.\n\nAvísale al administrador de UroSearch para que recargue la cuenta. El resto de la app (pacientes, tabla quirúrgica, logbook, biblioteca) sigue funcionando normalmente.";
 
 // ─── Diagnóstico visible en el dispositivo ────────────────────────
 // El bug del scroll de pacientes ocurre en el teléfono, donde no hay consola
@@ -5069,6 +5424,7 @@ function FeedbackAdmin() {
         }),
       });
       const data = await res.json();
+      anotarUsoIA(data, "feedback_sugerencia");
       const texto = data.content?.find(b => b.type === "text")?.text?.trim();
       if (texto) setBorradores(prev => ({ ...prev, [f.id]: texto }));
       else uroToast("La IA no devolvió una sugerencia.");
@@ -5656,6 +6012,7 @@ ${texto}`;
         });
         if (!res.ok) throw new Error("el servidor de IA respondió " + res.status);
         const data = await res.json();
+        anotarUsoIA(data, "preguntas_generar");
         const txt = data.content?.find(b => b.type === "text")?.text || "";
         const arr = parsearArrayPreguntasIA(txt);
         arr.forEach(q => {
@@ -5822,6 +6179,7 @@ Reglas: transcribe el texto tal cual; si una pregunta tiene menos de 4 alternati
     });
     if (!res.ok) throw new Error("el servidor de IA respondió " + res.status);
     const data = await res.json();
+    anotarUsoIA(data, "preguntas_extraer");
     const txt = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
     if (!txt) throw new Error("la IA no devolvió contenido (archivo ilegible o límite alcanzado)");
     const arr = parsearArrayPreguntasIA(txt);
@@ -7243,6 +7601,7 @@ function ImagenesChatPanel({ imagenesChat, setImagenesChat, currentUser }) {
         }),
       });
       const data = await res.json();
+      anotarUsoIA(data, "sugerencia_ia");
       const texto = data.content?.find((b) => b.type === "text")?.text || "";
       const j = JSON.parse(texto.replace(/```json|```/g, "").trim());
       if (j.titulo) { setTitulo(j.titulo); if (!claveEditada) setClave(slug(j.titulo)); }
@@ -8252,6 +8611,83 @@ function ConfiguracionServiciosModal({ onConfigurar, currentUser }) {
   );
 }
 
+// ─── Vista previa de una importación de cirugías (foto o Excel) ───
+// Antes la importación solo mostraba "se detectaron N cirugías, ¿importar?":
+// si la IA leía mal una fecha o un nombre, se descubría después, cirugía por
+// cirugía. Ahora cada fila se revisa y corrige ANTES de guardar; las que ya
+// existen en la tabla vienen desmarcadas.
+function PreviewImportCirugiasModal({ filas, origen, onConfirmar, onClose }) {
+  const [items, setItems] = useState(() => filas.map((f, i) => ({ ...f, _k: i, _incluir: !f._dup })));
+  const [guardando, setGuardando] = useState(false);
+  const set = (k, campo, valor) => setItems((prev) => prev.map((it) => (it._k === k ? { ...it, [campo]: valor } : it)));
+  const seleccionadas = items.filter((it) => it._incluir);
+  const dup = items.filter((it) => it._dup).length;
+  const inp = { ...inputStyle, marginBottom: 0, padding: "7px 9px", fontSize: "var(--fs-1)" };
+  const lbl = { fontSize: 10, fontWeight: 700, color: "var(--texto-ter)", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2, display: "block" };
+  const confirmar = async () => {
+    if (!seleccionadas.length) return uroToast("Marca al menos una cirugía.");
+    setGuardando(true);
+    try { await onConfirmar(seleccionadas.map(({ _k, _incluir, _dup, ...f }) => f)); }
+    finally { setGuardando(false); }
+  };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 80 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 720, maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 -8px 30px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding: "14px 16px 8px", borderBottom: "0.5px solid var(--borde)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>{origen === "excel" ? "📊 Revisar importación del Excel" : "📷 Revisar cirugías de la foto"}</div>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+          </div>
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 4, lineHeight: 1.45 }}>
+            Se detectaron {items.length} cirugía{items.length === 1 ? "" : "s"}{dup > 0 ? ` · ${dup} ya estaba${dup === 1 ? "" : "n"} en la tabla (desmarcadas)` : ""}. Corrige lo que haga falta y desmarca las que no correspondan.
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <button onClick={() => setItems((p) => p.map((it) => ({ ...it, _incluir: true })))} style={{ padding: "4px 10px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>Marcar todas</button>
+            <button onClick={() => setItems((p) => p.map((it) => ({ ...it, _incluir: false })))} style={{ padding: "4px 10px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>Desmarcar todas</button>
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.map((it) => (
+            <div key={it._k} style={{ border: "0.5px solid " + (it._incluir ? "var(--borde)" : "var(--borde-suave)"), borderLeft: "3px solid " + (it._dup ? "var(--alerta)" : it._incluir ? "var(--exito)" : "var(--borde)"), borderRadius: 10, padding: "10px 12px", background: "var(--superficie)", opacity: it._incluir ? 1 : 0.55 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <input type="checkbox" checked={!!it._incluir} onChange={(e) => set(it._k, "_incluir", e.target.checked)} style={{ width: 18, height: 18, flexShrink: 0 }} />
+                <input value={it.iniciales || ""} onChange={(e) => set(it._k, "iniciales", e.target.value.slice(0, 100))} placeholder="Nombre del paciente" style={{ ...inp, fontWeight: 600, flex: 1 }} />
+                {it._dup && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--alerta)", whiteSpace: "nowrap" }}>ya existe</span>}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                <div><label style={lbl}>Fecha</label><input type="date" value={it.fecha || ""} onChange={(e) => set(it._k, "fecha", e.target.value)} style={inp} /></div>
+                <div><label style={lbl}>Hora</label><input type="time" value={it.hora || ""} onChange={(e) => set(it._k, "hora", e.target.value)} style={inp} /></div>
+              </div>
+              <div style={{ marginBottom: 6 }}><label style={lbl}>Procedimiento</label><input value={it.procedimiento || ""} onChange={(e) => set(it._k, "procedimiento", e.target.value.slice(0, 200))} style={inp} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
+                <div><label style={lbl}>RUT</label><input value={it.rut || ""} onChange={(e) => set(it._k, "rut", e.target.value.slice(0, 15))} placeholder="12.345.678-9" style={inp} /></div>
+                <div><label style={lbl}>Ficha</label><input value={it.ficha_clinica || ""} onChange={(e) => set(it._k, "ficha_clinica", e.target.value.slice(0, 30))} style={inp} /></div>
+                <div><label style={lbl}>Edad</label><input type="number" value={it.edad ?? ""} onChange={(e) => set(it._k, "edad", e.target.value)} style={inp} /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 6 }}>
+                <div><label style={lbl}>Cirujano</label><input value={it.cirujano || ""} onChange={(e) => set(it._k, "cirujano", e.target.value.slice(0, 100))} style={inp} /></div>
+                <div><label style={lbl}>Pabellón</label><input value={it.pabellon || ""} onChange={(e) => set(it._k, "pabellon", e.target.value.slice(0, 20))} style={inp} /></div>
+                <div><label style={lbl}>Lado</label>
+                  <select value={it.lateralidad || ""} onChange={(e) => set(it._k, "lateralidad", e.target.value)} style={inp}>
+                    <option value="">—</option><option>Derecha</option><option>Izquierda</option><option>Bilateral</option>
+                  </select>
+                </div>
+              </div>
+              <div><label style={lbl}>Observaciones</label><input value={it.observaciones || ""} onChange={(e) => set(it._k, "observaciones", e.target.value.slice(0, 500))} placeholder="Dg, abordaje, duración…" style={inp} /></div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "10px 16px calc(12px + env(safe-area-inset-bottom))", borderTop: "0.5px solid var(--borde)", display: "flex", gap: 8 }}>
+          <button onClick={onClose} disabled={guardando} style={{ flex: 1, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 600, background: "var(--superficie)", color: "var(--texto-sec)", border: "0.5px solid var(--borde)", borderRadius: 9, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={confirmar} disabled={guardando || !seleccionadas.length} style={{ flex: 2, padding: "11px", fontSize: "var(--fs-2)", fontWeight: 700, background: seleccionadas.length ? "var(--exito)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 9, cursor: seleccionadas.length ? "pointer" : "default" }}>
+            {guardando ? "Importando…" : `✓ Importar ${seleccionadas.length} cirugía${seleccionadas.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, contexto, equipos, loadingCirugias, setLoadingCirugias, setPacientes, toolsOpen, soloLectura }) {
   const [vista, setVista] = useState("tabla");
   const [seleccionado, setSeleccionado] = useState(null);
@@ -8265,6 +8701,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   const inputExcelTablaRef = useRef(null);
   const [accionesTablaOpen, setAccionesTablaOpen] = useState(false); // menú "+" (Nueva/Importar/Foto/Vista)
   const [extrayendoTabla, setExtrayendoTabla] = useState(false);
+  const [previewImport, setPreviewImport] = useState(null); // { filas, origen } → PreviewImportCirugiasModal
   const [lunesSemana, setLunesSemana] = useState(() => {
     const d = new Date();
     const dow = (d.getDay() + 6) % 7; // 0 = lunes
@@ -8531,6 +8968,45 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       if (cirugia.ingreso_id) {
         try { const { data } = await supabase.from("ingresos").select("*").eq("id", cirugia.ingreso_id).maybeSingle(); ingresoLink = data || null; } catch {}
       }
+      // RUT y ficha: si la cirugía no los trae (Excel sin esas columnas, foto
+      // borrosa), se rescatan de un ingreso o de un paciente previo con el
+      // mismo nombre / ficha / RUT. Antes el hospitalizado quedaba sin ellos.
+      let rutRescate = cirugia.rut || ingresoLink?.datos?.rut || null;
+      let fichaRescate = cirugia.ficha_clinica || ingresoLink?.ficha || ingresoLink?.datos?.ficha || null;
+      if ((!rutRescate || !fichaRescate) && cirugia.iniciales) {
+        try {
+          const nombre = String(cirugia.iniciales).trim();
+          if (!ingresoLink) {
+            const sc = (q) => esEquipo ? q.eq("equipo_id", contexto) : q.eq("user_id", currentUser.id).is("equipo_id", null);
+            const { data: ings } = await sc(supabase.from("ingresos").select("id, nombre, ficha, datos").order("updated_at", { ascending: false }).limit(200));
+            const ing = (ings || []).find((x) => ingresoMatcheaCirugia(x, cirugia));
+            if (ing) {
+              rutRescate = rutRescate || ing.datos?.rut || null;
+              fichaRescate = fichaRescate || ing.ficha || ing.datos?.ficha || null;
+            }
+          }
+          if (!rutRescate || !fichaRescate) {
+            const patron = nombre.replace(/[%_\\]/g, "\\$&");
+            const { data: pacs } = await supabase.from("pacientes").select("rut, ficha_clinica").ilike("iniciales", patron).limit(5);
+            const prev = (pacs || []).find((x) => x.rut || x.ficha_clinica);
+            if (prev) {
+              rutRescate = rutRescate || prev.rut || null;
+              fichaRescate = fichaRescate || prev.ficha_clinica || null;
+            }
+          }
+          // Lo rescatado se guarda también en la cirugía (sirve al logbook).
+          if ((rutRescate && !cirugia.rut) || (fichaRescate && !cirugia.ficha_clinica)) {
+            const patchCx = {};
+            if (rutRescate && !cirugia.rut) patchCx.rut = formatearRut(rutRescate);
+            if (fichaRescate && !cirugia.ficha_clinica) patchCx.ficha_clinica = String(fichaRescate).slice(0, 30);
+            const rc = await actualizarCirugia(cirugia.id, patchCx);
+            if (rc.ok) {
+              setTablaCirugias(prev => prev.map(c => c.id === cirugia.id ? rc.cirugia : c));
+              if (seleccionado?.id === cirugia.id) setSeleccionado(rc.cirugia);
+            }
+          }
+        } catch (e) { logDiag(`tabla: no se pudo rescatar RUT/ficha → ${e?.message || e}`); }
+      }
       const datosPaciente = {
         medico_id: currentUser.id,
         equipo_id: esEquipo ? contexto : null,
@@ -8539,8 +9015,8 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         sexo: ingresoLink?.datos?.sexo || "M", // editable después en la ficha
         cama: "",
         servicio: "Urología",
-        ficha_clinica: cirugia.ficha_clinica || ingresoLink?.ficha || ingresoLink?.datos?.ficha || null,
-        rut: cirugia.rut || ingresoLink?.datos?.rut || null,
+        ficha_clinica: fichaRescate ? String(fichaRescate).slice(0, 30) : null,
+        rut: rutRescate ? formatearRut(rutRescate) : null,
         diagnostico: `Post-operado: ${cirugia.procedimiento}${cirugia.lateralidad ? ` (${cirugia.lateralidad})` : ""}`,
         historia: ingresoLink?.datos?.historia_compuesta || null,
         plan_manejo: null,
@@ -8583,54 +9059,97 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   };
 
   // ============================================================
-  // IMPORTAR EXCEL
+  // IMPORTAR (foto / Excel) → vista previa → guardar
   // ============================================================
 
+  // Fecha de referencia para la IA: lo que el usuario está mirando.
+  const fechaReferenciaImport = () => {
+    const d = modoVista === "mensual" ? mesActual : lunesSemana;
+    try { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; } catch { return hoyLocalISO(); }
+  };
+
+  // Fila cruda (de la IA o del parser HBV) → fila de la tabla `cirugias`.
+  const normalizarFilaImport = (c) => {
+    const esEquipoCtx = contexto !== "personal";
+    const obs = [];
+    if (c.abordaje) obs.push(`Abordaje: ${String(c.abordaje).trim()}`);
+    if (c.duracion) obs.push(`Duración: ${String(c.duracion).trim()}`);
+    if (c.diagnostico) obs.push(`Dg: ${String(c.diagnostico).trim()}`);
+    if (c.observaciones) {
+      const o = String(c.observaciones).trim();
+      obs.push(/Obs:|^🏥|^(Abordaje|Duración|Dg):/.test(o) ? o : `Obs: ${o}`);
+    }
+    const hora = (c.hora && /^\d{1,2}:\d{2}/.test(String(c.hora))) ? String(c.hora).slice(0, 5).padStart(5, "0") : "08:00";
+    const edad = c.edad != null && c.edad !== "" && !isNaN(parseInt(c.edad)) ? parseInt(c.edad) : null;
+    return {
+      cirujano_id: currentUser.id,
+      equipo_id: esEquipoCtx ? contexto : null,
+      fecha: (c.fecha && /^\d{4}-\d{2}-\d{2}$/.test(String(c.fecha))) ? String(c.fecha) : fechaReferenciaImport(),
+      hora,
+      iniciales: String(c.nombre || c.iniciales || "").replace(/\s+/g, " ").trim().slice(0, 100),
+      ficha_clinica: c.ficha_clinica ? String(c.ficha_clinica).trim().slice(0, 30) : null,
+      rut: c.rut ? formatearRut(c.rut) : null,
+      edad,
+      procedimiento: String(c.procedimiento || c.diagnostico || "Cirugía").trim().slice(0, 200),
+      lateralidad: ["Derecha", "Izquierda", "Bilateral"].includes(c.lateralidad) ? c.lateralidad : null,
+      cirujano: c.cirujano ? String(c.cirujano).trim().slice(0, 100) : null,
+      pabellon: c.pabellon ? String(c.pabellon).trim().slice(0, 20) : "5",
+      estado: "programada",
+      observaciones: (obs.join(" | ").slice(0, 500)) || null,
+    };
+  };
+
+  // Marca duplicados contra la tabla actual (misma fecha + nombre + procedimiento).
+  const _normImp = (v) => (v || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  const _claveImp = (c) => `${c.fecha}|${_normImp(c.iniciales)}|${_normImp(c.procedimiento)}`;
+  const abrirPreviewImport = (filas, origen) => {
+    const existentes = new Set(tablaCirugias.map(_claveImp));
+    const marcadas = filas.map((f) => ({ ...f, _dup: existentes.has(_claveImp(f)) }));
+    setPreviewImport({ filas: marcadas, origen });
+  };
+
+  // Guardado final desde la vista previa (ya revisadas y editadas).
+  const confirmarImport = async (filas) => {
+    const listas = filas.map((f) => ({
+      ...f,
+      iniciales: (f.iniciales || "").trim().slice(0, 100) || "PACIENTE",
+      procedimiento: (f.procedimiento || "").trim().slice(0, 200) || "Cirugía",
+      fecha: /^\d{4}-\d{2}-\d{2}$/.test(f.fecha || "") ? f.fecha : hoyLocalISO(),
+      hora: /^\d{1,2}:\d{2}/.test(f.hora || "") ? String(f.hora).slice(0, 5) : "08:00",
+      rut: f.rut ? formatearRut(f.rut) : null,
+      ficha_clinica: (f.ficha_clinica || "").trim() || null,
+      edad: f.edad != null && f.edad !== "" && !isNaN(parseInt(f.edad)) ? parseInt(f.edad) : null,
+      cirujano: (f.cirujano || "").trim() || null,
+      pabellon: (f.pabellon || "").trim() || null,
+      lateralidad: ["Derecha", "Izquierda", "Bilateral"].includes(f.lateralidad) ? f.lateralidad : null,
+      observaciones: (f.observaciones || "").trim().slice(0, 500) || null,
+    }));
+    const result = await crearCirugiasBulk(listas);
+    if (!result.ok) { uroToast("Error al importar: " + result.error); return; }
+    setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora)));
+    setPreviewImport(null);
+    uroToast(`✓ ${result.cirugias.length} cirugía${result.cirugias.length === 1 ? "" : "s"} importada${result.cirugias.length === 1 ? "" : "s"}`);
+  };
+
   const onFotoTabla = async (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 3);
+    const files = Array.from(e.target.files || []).slice(0, 5);
     e.target.value = "";
     if (!files.length) return;
     setExtrayendoTabla(true);
     try {
       const b64s = [];
-      for (const f of files) b64s.push(await comprimirImagenPac(f));
-      const cxs = await extraerTablaCirugias(b64s);
-      const esEquipoCtx = contexto !== "personal";
-      const filas = cxs
+      for (const f of files) {
+        // Un PDF de la tabla se rasteriza página a página; una foto se comprime.
+        const paginas = await archivoAImagenesB64(f, 5 - b64s.length);
+        b64s.push(...paginas);
+        if (b64s.length >= 5) break;
+      }
+      const cxs = await extraerTablaCirugias(b64s, null, fechaReferenciaImport());
+      const filas = (cxs || [])
         .filter(c => c && (c.procedimiento || c.diagnostico || c.nombre))
-        .map(c => ({
-          cirujano_id: currentUser.id,
-          equipo_id: esEquipoCtx ? contexto : null,
-          fecha: (c.fecha && /^\d{4}-\d{2}-\d{2}$/.test(c.fecha)) ? c.fecha : hoyLocalISO(),
-          hora: (c.hora && /^\d{1,2}:\d{2}/.test(c.hora)) ? c.hora.slice(0, 5) : "08:00",
-          iniciales: (c.nombre || "").slice(0, 100),
-          ficha_clinica: c.ficha_clinica ? String(c.ficha_clinica).slice(0, 30) : null,
-          rut: c.rut ? String(c.rut).slice(0, 15) : null,
-          edad: c.edad ? parseInt(c.edad) : null,
-          procedimiento: (c.procedimiento || c.diagnostico || "Cirugía").slice(0, 200),
-          lateralidad: ["Derecha", "Izquierda", "Bilateral"].includes(c.lateralidad) ? c.lateralidad : null,
-          cirujano: c.cirujano ? String(c.cirujano).slice(0, 100) : null,
-          pabellon: c.pabellon ? String(c.pabellon).slice(0, 20) : "5",
-          estado: "programada",
-          observaciones: c.diagnostico ? ("Dg: " + c.diagnostico).slice(0, 500) : null,
-        }));
-      if (filas.length === 0) { uroToast("No se pudo extraer ninguna cirugía de la foto. Intenta con mejor luz o encuadre."); return; }
-      // Evita duplicar si se re-sube la misma tabla: descarta las que ya existen
-      // (misma fecha + nombre + procedimiento, ignorando tildes y mayúsculas).
-      const _norm = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-      const _clave = (c) => `${c.fecha}|${_norm(c.iniciales)}|${_norm(c.procedimiento)}`;
-      const _existentes = new Set(tablaCirugias.map(_clave));
-      const nuevas = filas.filter(f => !_existentes.has(_clave(f)));
-      const dup = filas.length - nuevas.length;
-      if (nuevas.length === 0) { uroToast(`Las ${filas.length} cirugías detectadas ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); return; }
-      const msgConf = dup > 0
-        ? `Se detectaron ${filas.length} cirugías (${dup} ya existían y se omitirán). ¿Importar las ${nuevas.length} nuevas?`
-        : `Se detectaron ${nuevas.length} cirugías en la foto. ¿Importarlas?`;
-      if (!(await uroConfirm(msgConf))) return;
-      const result = await crearCirugiasBulk(nuevas);
-      if (!result.ok) { uroToast("Error al importar: " + result.error); return; }
-      setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a, b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora)));
-      uroToast(`✓ ${result.cirugias.length} cirugías importadas${dup > 0 ? ` · ${dup} omitidas por duplicado` : ""}`);
+        .map(normalizarFilaImport);
+      if (filas.length === 0) { uroToast("No se pudo extraer ninguna cirugía de la foto. Intenta con mejor luz o encuadre, o con una foto por sección de la tabla."); return; }
+      abrirPreviewImport(filas, "foto");
     } catch (err) {
       uroToast("No se pudo leer la foto de la tabla: " + (err?.message || err));
     } finally {
@@ -8638,48 +9157,49 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
     }
   };
 
+  // Excel: primero el parser del formato HBV (exacto y gratis); si la planilla
+  // no tiene ese formato —otro hospital, otras columnas— se manda a la IA como
+  // texto. En ambos casos se pasa por la vista previa antes de guardar.
   const importarExcel = async (e) => {
   const file = e.target.files?.[0];
+  e.target.value = "";
   if (!file) return;
 
   try {
     const XLSX = await import('xlsx');
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      try {
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      
-      // Leer como matriz de filas (sin asumir headers)
-      const matriz = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
-      
-      if (matriz.length === 0) {
-        uroToast("El archivo está vacío");
-        return;
-      }
+      const hojas = workbook.SheetNames.map((nombre) => ({ nombre, matriz: XLSX.utils.sheet_to_json(workbook.Sheets[nombre], { header: 1, defval: "", raw: false }) }));
+      const conDatos = hojas.filter((h) => h.matriz.some((f) => f && f.some((c) => c && String(c).trim() !== "")));
+      if (conDatos.length === 0) { uroToast("El archivo está vacío"); return; }
+      const matriz = conDatos[0].matriz;
 
       // ====================================================================
-      // BUSCAR FILA DE ENCABEZADOS
+      // BUSCAR FILA DE ENCABEZADOS (formato HBV)
       // ====================================================================
-      // Buscar la fila que contenga "FECHA" en la columna A o "DIAGNOSTICO"
       let filaHeaders = -1;
       let mapaColumnas = {};
-      
+
       for (let i = 0; i < Math.min(matriz.length, 15); i++) {
         const fila = matriz[i].map(c => String(c || "").toUpperCase().trim());
         const idxFecha = fila.findIndex(c => c === "FECHA");
         const idxDiagnostico = fila.findIndex(c => c.includes("DIAGNOSTICO") || c.includes("DIAGNÓSTICO"));
-        
+
         if (idxFecha !== -1 && idxDiagnostico !== -1) {
           filaHeaders = i;
-          // Mapear cada columna a su índice
           fila.forEach((nombre, idx) => {
             const limpio = nombre.replace(/[^A-Z]/g, "");
             if (limpio === "FECHA") mapaColumnas.fecha = idx;
             if (limpio === "HORARIO" || limpio === "HORA") mapaColumnas.horario = idx;
             if (limpio === "NOMBRE" || limpio === "PACIENTE" || limpio === "NOMBRES") mapaColumnas.nombre = idx;
             if (limpio === "EDAD") mapaColumnas.edad = idx;
+            // RUT y ficha: sin estas dos columnas, el paciente hospitalizado que
+            // se crea al completar la cirugía quedaba sin RUT ni ficha.
+            if (limpio === "RUT" || limpio === "RUN") mapaColumnas.rut = idx;
+            if (limpio === "FICHA" || limpio === "NFICHA" || limpio === "FC" || limpio === "NFC" || limpio === "FICHACLINICA" || nombre.includes("FICHA")) mapaColumnas.ficha = idx;
             if (limpio === "DIAGNOSTICO" || nombre.includes("DIAGN")) mapaColumnas.diagnostico = idx;
             if (limpio === "CIRUGIA" || nombre.includes("CIRUG")) mapaColumnas.cirugia = idx;
             if (limpio === "ABORDAJE") mapaColumnas.abordaje = idx;
@@ -8692,10 +9212,24 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         }
       }
 
-      if (filaHeaders === -1) {
-        uroToast("No se encontraron encabezados válidos. El Excel debe tener una fila con FECHA y DIAGNOSTICO.");
-        return;
-      }
+      // ── Sin formato HBV → IA con la planilla en texto ──
+      const importarConIA = async (motivo) => {
+        setExtrayendoTabla(true);
+        try {
+          logDiag(`tabla: Excel sin formato HBV (${motivo}); se lee con IA`);
+          const texto = planillaATexto(conDatos);
+          const cxs = await extraerTablaCirugias([], texto, fechaReferenciaImport());
+          const filas = (cxs || []).filter(c => c && (c.procedimiento || c.diagnostico || c.nombre)).map(normalizarFilaImport);
+          if (filas.length === 0) { uroToast("No se reconoció ninguna cirugía en el Excel. Revisa que tenga una fila de encabezados con nombre, cirugía y fecha."); return; }
+          abrirPreviewImport(filas, "excel");
+        } catch (err) {
+          uroToast("No se pudo leer el Excel con IA: " + (err?.message || err));
+        } finally {
+          setExtrayendoTabla(false);
+        }
+      };
+
+      if (filaHeaders === -1) { await importarConIA("sin fila FECHA/DIAGNOSTICO"); return; }
 
       // ====================================================================
       // DETECTAR MES Y AÑO (desde el título de la semana, ej: "...DE JULIO" + "2026")
@@ -8714,9 +9248,9 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           if (mAnio) anioDetectado = mAnio[1];
         }
       }
-      const ahoraFallback = new Date();
-      const mesFinal = mesDetectado || String(ahoraFallback.getMonth() + 1).padStart(2, "0");
-      const anioFinal = anioDetectado || String(ahoraFallback.getFullYear());
+      const refImp = fechaReferenciaImport();
+      const mesFinal = mesDetectado || refImp.slice(5, 7);
+      const anioFinal = anioDetectado || refImp.slice(0, 4);
 
       // ====================================================================
       // PROCESAR FILAS DE DATOS (soporta 2 tablas: HBV principal + CCV lunes)
@@ -8741,7 +9275,6 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
         const fila = matriz[i];
         if (!fila || fila.every(c => !c || String(c).trim() === "")) continue;
 
-        // ¿Empieza la tabla CCV? (cualquier celda menciona "CCV")
         const filaTextoUpper = fila.map(c => String(c || "").toUpperCase()).join(" ");
         if (filaTextoUpper.includes("CCV")) {
           modoCCV = true;
@@ -8749,9 +9282,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           continue;
         }
 
-        // Detectar fila de día (ej: "LUNES 06" en columna A).
-        // OJO: en esta planilla la etiqueta del día va en la MISMA fila que el
-        // primer paciente de ese día, así que NO se hace 'continue': se fija la
+        // Etiqueta del día en la MISMA fila que el primer paciente: se fija la
         // fecha y se sigue procesando la fila como paciente.
         const colA = String(fila[0] || "").toUpperCase().trim();
         const matchDia = colA.match(/(LUNES|MARTES|MIERCOLES|MIÉRCOLES|JUEVES|VIERNES|SABADO|SÁBADO|DOMINGO)\s*(\d{1,2})/);
@@ -8761,108 +9292,64 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           if (matchDia[1].startsWith("LUNES") && !fechaLunes) fechaLunes = fechaActual;
         }
 
-        // Detectar horario (AM/PM/PC en col B)
         const colB = String(fila[1] || "").toUpperCase().trim();
         if (colB === "AM" || colB === "PM" || colB === "PC") horarioActual = colB;
 
         if (!fechaActual) continue;
 
-        // Extraer datos de la fila
         const nombreCompleto = String(fila[mapaColumnas.nombre] || "").trim();
         const diagnostico = String(fila[mapaColumnas.diagnostico] || "").trim();
         const cirugia = String(fila[mapaColumnas.cirugia] || "").trim();
 
-        // Solo importar si hay diagnóstico Y cirugía (salta filas "CORR:", vacías, etc.)
         if (!diagnostico || !cirugia) continue;
         if (nombreCompleto === "" || nombreCompleto.toUpperCase().startsWith("CORR")) continue;
         if (["NOMBRE","NOMBRES","PACIENTE"].includes(nombreCompleto.toUpperCase())) continue;
 
-        // Nombre COMPLETO (ya no se convierte a iniciales)
-        const nombrePaciente = nombreCompleto.replace(/\s+/g, " ").slice(0, 120);
-
-        // Edad
         const edadStr = String(fila[mapaColumnas.edad] || "").trim();
         const edad = edadStr && !isNaN(parseInt(edadStr)) ? parseInt(edadStr) : null;
 
-        // Lateralidad (LADO: "D°", "I°", "BIL")
         const ladoRaw = String(fila[mapaColumnas.lado] || "").trim().toUpperCase();
         let lateralidad = null;
         if (ladoRaw.includes("BIL")) lateralidad = "Bilateral";
         else if (ladoRaw.includes("D")) lateralidad = "Derecha";
         else if (ladoRaw.includes("I")) lateralidad = "Izquierda";
 
-        // Abordaje (ABIERTO / LAP / END)
         const abordaje = mapaColumnas.abordaje != null ? normalizarAbordaje(fila[mapaColumnas.abordaje]) : "";
-
-        // Duración (columna TOP, ej "120 MIN")
         const duracion = mapaColumnas.duracion != null ? String(fila[mapaColumnas.duracion] || "").trim() : "";
-
-        // Obs especiales
         const obsEspeciales = mapaColumnas.obs != null ? String(fila[mapaColumnas.obs] || "").trim() : "";
+        const rutCelda = mapaColumnas.rut != null ? String(fila[mapaColumnas.rut] || "").trim() : "";
+        const fichaCelda = mapaColumnas.ficha != null ? String(fila[mapaColumnas.ficha] || "").trim() : "";
 
-        // Cirujano: en CCV la columna se corre; si viene vacío, buscar "DR" en la fila
         let cirujano = String(fila[mapaColumnas.cirujano] || "").trim();
         if (!cirujano) {
           const celdaDr = fila.map(c => String(c || "").trim()).find(c => /^DR/i.test(c));
           if (celdaDr) cirujano = celdaDr;
         }
 
-        // Construir observaciones combinando abordaje, duración, diagnóstico y obs especiales
-        const partesObs = [];
-        if (modoCCV) partesObs.push("🏥 CCV (Clínica Costanera)");
-        if (abordaje) partesObs.push(`Abordaje: ${abordaje}`);
-        if (duracion) partesObs.push(`Duración: ${duracion}`);
-        if (diagnostico) partesObs.push(`Dg: ${diagnostico}`);
-        if (obsEspeciales) partesObs.push(`Obs: ${obsEspeciales}`);
-        const observaciones = partesObs.join(" | ").slice(0, 500);
-
-        const hora = horarioActual === "AM" ? "08:00" : "14:00";
-
         filas.push({
-          cirujano_id: currentUser.id,
-          equipo_id: esEquipo ? contexto : null,
           fecha: fechaActual,
-          hora: hora,
-          iniciales: nombrePaciente,        // ahora guarda el NOMBRE COMPLETO
-          edad: edad,
-          procedimiento: cirugia.slice(0, 200),
-          lateralidad: lateralidad,
-          cirujano: cirujano ? cirujano.slice(0, 100) : null,
+          hora: horarioActual === "AM" ? "08:00" : "14:00",
+          nombre: nombreCompleto.replace(/\s+/g, " ").slice(0, 120),
+          edad,
+          rut: rutCelda || null,
+          ficha_clinica: fichaCelda || null,
+          procedimiento: cirugia,
+          diagnostico,
+          lateralidad,
+          abordaje,
+          duracion,
+          cirujano: cirujano || null,
           pabellon: modoCCV ? "CCV" : "5",
-          estado: 'programada',
-          observaciones: observaciones || `Dg: ${diagnostico}`,
+          observaciones: [modoCCV ? "🏥 CCV (Clínica Costanera)" : "", obsEspeciales ? `Obs: ${obsEspeciales}` : ""].filter(Boolean).join(" | "),
         });
       }
 
-      if (filas.length === 0) {
-        uroToast("No se pudo extraer ninguna cirugía válida del Excel.");
-        return;
+      if (filas.length === 0) { await importarConIA("encabezado HBV sin filas válidas"); return; }
+      abrirPreviewImport(filas.map(normalizarFilaImport), "excel");
+      } catch (err) {
+        uroToast("Error al leer Excel: " + (err?.message || err));
+        console.error(err);
       }
-
-      // Confirmar antes de insertar
-      const nCCV = filas.filter(f => f.pabellon === "CCV").length;
-      const resumenCCV = nCCV > 0 ? ` (${nCCV} de ellas en CCV, lunes)` : "";
-      // Evita duplicar si se re-importa el mismo Excel (misma fecha + nombre + procedimiento).
-      const _normX = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-      const _claveX = (c) => `${c.fecha}|${_normX(c.iniciales)}|${_normX(c.procedimiento)}`;
-      const _existX = new Set(tablaCirugias.map(_claveX));
-      const nuevasX = filas.filter(f => !_existX.has(_claveX(f)));
-      const dupX = filas.length - nuevasX.length;
-      if (nuevasX.length === 0) { uroToast(`Las ${filas.length} cirugías del Excel ya estaban en la tabla. No se importó ninguna (se evitaron duplicados).`); e.target.value = ""; return; }
-      if (!(await uroConfirm(`Se importarán ${nuevasX.length} cirugías${dupX > 0 ? ` (${dupX} ya existían y se omiten)` : ""}${resumenCCV}. ¿Continuar?`))) {
-        e.target.value = "";
-        return;
-      }
-
-      const result = await crearCirugiasBulk(nuevasX);
-      if (!result.ok) {
-        uroToast("Error al importar: " + result.error);
-        return;
-      }
-
-      setTablaCirugias(prev => [...prev, ...result.cirugias].sort((a,b) => (a.fecha+a.hora).localeCompare(b.fecha+b.hora)));
-      uroToast(`✓ ${result.cirugias.length} cirugías importadas${dupX > 0 ? ` · ${dupX} omitidas por duplicado` : ""}`);
-      e.target.value = "";
     };
     reader.readAsArrayBuffer(file);
   } catch (err) {
@@ -9078,8 +9565,14 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
   return (
     <div style={{padding:"16px",overflowY:"auto"}}>
       {/* Inputs ocultos usados por el menú "+" (importar Excel / foto de tabla) */}
-      <input ref={inputExcelTablaRef} type="file" accept=".xlsx,.xls" onChange={importarExcel} style={{display:"none"}}/>
+      <input ref={inputExcelTablaRef} type="file" accept=".xlsx,.xls,.xlsm,.csv" onChange={importarExcel} style={{display:"none"}}/>
       <input ref={inputFotoTablaRef} type="file" accept="image/*,application/pdf" multiple style={{display:"none"}} onChange={onFotoTabla}/>
+      {previewImport && <PreviewImportCirugiasModal filas={previewImport.filas} origen={previewImport.origen} onConfirmar={confirmarImport} onClose={()=>setPreviewImport(null)} />}
+      {extrayendoTabla && (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.35)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:79}}>
+          <div style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:12,padding:"14px 18px",fontSize:"var(--fs-2)",color:"var(--texto)",fontWeight:600}}>🔍 Leyendo la tabla quirúrgica…</div>
+        </div>
+      )}
 
       {/* Navegación de semana o mes + filtro de estado (siempre visible) */}
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
@@ -9118,7 +9611,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
                 <div onClick={()=>setAccionesTablaOpen(false)} style={{position:"fixed",inset:0,zIndex:19}}/>
                 <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:9,padding:5,zIndex:20,boxShadow:"0 8px 22px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",gap:2,minWidth:180}}>
                   <button onClick={()=>{setAccionesTablaOpen(false);setVista("nuevo");}} style={menuAccTabla}>➕ Nueva cirugía</button>
-                  <button onClick={()=>{setAccionesTablaOpen(false);inputExcelTablaRef.current?.click();}} style={menuAccTabla}>📊 Importar Excel</button>
+                  <button onClick={()=>{setAccionesTablaOpen(false);inputExcelTablaRef.current?.click();}} disabled={extrayendoTabla} style={{...menuAccTabla,opacity:extrayendoTabla?0.6:1}}>📊 Importar Excel</button>
                   <button onClick={()=>{setAccionesTablaOpen(false);inputFotoTablaRef.current?.click();}} disabled={extrayendoTabla} style={{...menuAccTabla,opacity:extrayendoTabla?0.6:1}}>{extrayendoTabla?"🔍 Leyendo…":"📷 Foto tabla"}</button>
                   <div style={{height:"0.5px",background:"var(--borde)",margin:"3px 6px"}}/>
                   <div style={{fontSize:"var(--fs-xs)",fontWeight:700,color:"var(--texto-ter)",padding:"3px 10px 1px",letterSpacing:0.4}}>VISTA</div>
@@ -10907,6 +11400,18 @@ function compararCama(a, b) {
 
 // Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
+// Un mismo examen no debe salir dos veces en la lista (p. ej. si la cola sin
+// conexión lo reenvió): se conserva la primera aparición de cada id.
+function sinDuplicadosPorId(lista) {
+  const vistos = new Set();
+  return (lista || []).filter((x) => {
+    const k = x?.id;
+    if (k == null) return true;
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+}
 function normalizarExamen(ex) {
   if (!ex) return ex;
   let de = ex.datos_estructurados;
@@ -11113,6 +11618,14 @@ function ImagenesPaciente({ paciente, currentUser, soloLectura }) {
     setUrls(Object.fromEntries(pares));
   };
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [paciente.id]);
+  // Cuando la hoja de ingreso se adjunta desde el formulario de ingreso, la
+  // galería se refresca sola sin cerrar y reabrir la ficha.
+  useEffect(() => {
+    const onAdj = (e) => { if (e?.detail?.pacienteId === paciente.id) cargar(); };
+    window.addEventListener("uro-imagenes-paciente", onAdj);
+    return () => window.removeEventListener("uro-imagenes-paciente", onAdj);
+    // eslint-disable-next-line
+  }, [paciente.id]);
 
   const onFiles = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -11326,6 +11839,10 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipo
   const [fotoMenuCargando, setFotoMenuCargando] = useState(false);
   const [extrayendoIngreso, setExtrayendoIngreso] = useState(false);
   const [extraccionMsg, setExtraccionMsg] = useState("");
+  // Fotos de la hoja de ingreso ya comprimidas (base64): se adjuntan a la ficha
+  // al guardar el paciente nuevo. Antes se usaban para extraer y se botaban.
+  const [fotosIngresoPendientes, setFotosIngresoPendientes] = useState([]);
+  const [adjuntarFotoIngreso, setAdjuntarFotoIngreso] = useState(true);
 const [editForm, setEditForm] = useState({});
 const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando se está agregando una cirugía
 
@@ -11390,6 +11907,7 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
     !!seleccionado?.id
   );
   const [nuevoEx, setNuevoEx] = useState({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
+  const [examenEditando, setExamenEditando] = useState(null); // examen abierto en el formulario para editar
   const [paramsLab, setParamsLab] = useState({}); // valores de los parámetros numéricos del lab seleccionado
   // Dictado del resultado de un examen: se anexa tal cual, sin reestructurar —
   // un informe de imagen dictado no gana nada con que la IA lo reordene.
@@ -12089,9 +12607,17 @@ const cargarMiembrosEquipo = async () => {
     if (!files.length) return;
     setError(""); setExtraccionMsg(""); setExtrayendoIngreso(true);
     try {
+      // Un PDF se rasteriza página a página: mandarlo como si fuera JPEG hacía
+      // que la IA no devolviera nada y el formulario decía "no se pudo leer".
       const b64s = [];
-      for (const f of files) b64s.push(await comprimirImagenPac(f));
+      for (const f of files) {
+        const paginas = await archivoAImagenesB64(f, 5 - b64s.length);
+        b64s.push(...paginas);
+        if (b64s.length >= 5) break;
+      }
+      setFotosIngresoPendientes(prev => [...prev, ...b64s].slice(0, 6));
       const x = await extraerIngresoPaciente(b64s);
+      if (!x || typeof x !== "object") throw new Error("sin datos");
       setNuevo(prev => ({
         ...prev,
         iniciales: x.iniciales ? String(x.iniciales).slice(0, 100) : prev.iniciales,
@@ -12103,9 +12629,9 @@ const cargarMiembrosEquipo = async () => {
         plan_manejo: x.plan_manejo || prev.plan_manejo,
         historia: componerHistoriaIngreso(x) || prev.historia,
       }));
-      setExtraccionMsg("✓ Datos extraídos. Revísalos y completa cama/servicio antes de guardar.");
+      setExtraccionMsg("✓ Datos extraídos. Revísalos y completa cama/servicio antes de guardar. La foto del ingreso quedará adjunta en la ficha.");
     } catch (err) {
-      setError("No se pudo leer la foto. Intenta con mejor luz o ingresa los datos a mano.");
+      setError("No se pudo leer la foto. Intenta con mejor luz o ingresa los datos a mano (la foto igual quedará adjunta en la ficha al guardar).");
     } finally {
       setExtrayendoIngreso(false);
     }
@@ -12121,8 +12647,13 @@ const cargarMiembrosEquipo = async () => {
     else setFotoMenuCargando(target.iniciales || true);
     try {
       const b64s = [];
-      for (const f of files) b64s.push(await comprimirImagenPac(f));
+      for (const f of files) {
+        const paginas = await archivoAImagenesB64(f, 5 - b64s.length);
+        b64s.push(...paginas);
+        if (b64s.length >= 5) break;
+      }
       const x = await extraerIngresoPaciente(b64s);
+      if (!x || typeof x !== "object") throw new Error("sin datos");
       const textoNuevo = componerHistoriaIngreso(x);
       const historiaFinal = [target.historia, textoNuevo].filter(Boolean).join("\n\n");
       const patch = { historia: historiaFinal };
@@ -12138,8 +12669,12 @@ const cargarMiembrosEquipo = async () => {
       }
       if (seleccionado?.id === result.paciente.id) setSeleccionado(result.paciente);
       setPacientes(prev => prev.map(p => p.id === result.paciente.id ? result.paciente : p));
-      if (enFicha) setExtraccionMsg("✓ Ingreso agregado a la historia desde la foto.");
-      else uroToast("✓ Ingreso agregado a la historia de " + (result.paciente.iniciales || "el paciente") + ".");
+      // La hoja de ingreso queda también como imagen de la ficha.
+      const nAdj = await adjuntarImagenesPaciente(result.paciente.id, currentUser.id, b64s);
+      window.dispatchEvent(new CustomEvent("uro-imagenes-paciente", { detail: { pacienteId: result.paciente.id } }));
+      const sufijo = nAdj ? ` y ${nAdj} imagen${nAdj === 1 ? "" : "es"} adjunta${nAdj === 1 ? "" : "s"} en la ficha` : "";
+      if (enFicha) setExtraccionMsg(`✓ Ingreso agregado a la historia desde la foto${sufijo}.`);
+      else uroToast(`✓ Ingreso agregado a la historia de ${result.paciente.iniciales || "el paciente"}${sufijo}.`);
     } catch (err) {
       if (enFicha) setExtraccionMsg("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
       else uroToast("⚠️ No se pudo leer la foto. Intenta con mejor luz.");
@@ -12189,6 +12724,15 @@ const cargarMiembrosEquipo = async () => {
     if (!result.ok) return setError(result.error);
 
     setPacientes(prev => [result.paciente, ...prev]);
+    // Las fotos de la hoja de ingreso se adjuntan a la ficha recién creada.
+    if (adjuntarFotoIngreso && fotosIngresoPendientes.length) {
+      const fotos = fotosIngresoPendientes;
+      adjuntarImagenesPaciente(result.paciente.id, currentUser.id, fotos).then((n) => {
+        if (n) uroToast(`📎 ${n} imagen${n === 1 ? "" : "es"} del ingreso adjunta${n === 1 ? "" : "s"} a la ficha de ${result.paciente.iniciales}`);
+      });
+    }
+    setFotosIngresoPendientes([]);
+    setAdjuntarFotoIngreso(true);
     setNuevo({ iniciales: "", ficha_clinica: "", rut: "", edad: "", sexo: "M", cama: "", servicio: "", diagnostico: "", plan_manejo: "", historia: "", fecha_ingreso: hoyLocalISO() });
     setExtraccionMsg("");
     setVista("lista");
@@ -12371,7 +12915,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     } catch {}
     try {
       const exResult = await listarExamenes(paciente.id);
-      if (exResult.ok) { const norm = exResult.examenes.map(normalizarExamen); setExamenes(norm); guardarSnapshot(kEx, norm); }
+      if (exResult.ok) { const norm = sinDuplicadosPorId(exResult.examenes.map(normalizarExamen)); setExamenes(norm); guardarSnapshot(kEx, norm); }
     } catch {}
     cargarPendientesPaciente(paciente.id);
   };
@@ -12704,6 +13248,35 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       datos_estructurados: estructurados,
     };
 
+    const limpiarFormEx = () => {
+      setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
+      setParamsLab({});
+      setLitiasis([]);
+      setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
+      setTumores([]);
+      setFormTumor({ organo: "", sublocalizacion: "", tamano: "" });
+      setAntibiograma([]);
+      setFormAtb({ atb: "", sens: "" });
+      setExamenEditando(null);
+    };
+
+    // ── Edición de un examen ya guardado ──
+    if (examenEditando?.id) {
+      if (String(examenEditando.id).startsWith("tmp_")) return uroToast("Este examen aún no se sincronizó; espera a tener conexión para editarlo.");
+      const { data: upd, error: errUpd } = await supabase.from("examenes").update(datos).eq("id", examenEditando.id).select("id").maybeSingle();
+      if (errUpd) return uroToast("No se pudo editar: " + errUpd.message);
+      // Sin fila devuelta = la policy de UPDATE no lo permitió (no da error, solo 0 filas).
+      if (!upd) return uroToast("No se pudo editar el examen: sin permiso de edición en la base (policy UPDATE de examenes).");
+      registrarEvento("examen_editado", { tipo: datos.tipo });
+      const recarga = await listarExamenes(seleccionado.id);
+      if (recarga.ok) setExamenes(sinDuplicadosPorId(recarga.examenes.map(normalizarExamen)));
+      else setExamenes(prev => prev.map(e => e.id === examenEditando.id ? normalizarExamen({ ...e, ...datos }) : e));
+      limpiarFormEx();
+      setAbrirFormExamen(false);
+      uroToast("✓ Examen actualizado");
+      return;
+    }
+
     const result = await crearExamen(seleccionado.id, currentUser.id, datos);
     if (result.ok) registrarEvento("examen_creado", { tipo: datos.tipo });
     if (!result.ok) {
@@ -12714,53 +13287,38 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     } else {
       // Recargar desde la base para asegurar que los datos estructurados se lean correctamente
       const recarga = await listarExamenes(seleccionado.id);
-      if (recarga.ok) setExamenes(recarga.examenes.map(normalizarExamen));
+      if (recarga.ok) setExamenes(sinDuplicadosPorId(recarga.examenes.map(normalizarExamen)));
       else setExamenes(prev => [normalizarExamen(result.examen), ...prev]);
     }
 
-    // Copiar automáticamente el examen a la evolución del día
-    const partesEx = [];
-    partesEx.push(`${nuevoEx.tipo}: ${nombreExamen}`);
-    if (estructurados.pirads) partesEx.push(`PI-RADS ${estructurados.pirads}`);
-    if (estructurados.pesoProstatico) partesEx.push(`Próstata ${estructurados.pesoProstatico} g`);
-    if (estructurados.lugar) partesEx.push(`Lugar: ${estructurados.lugar}`);
-    if (estructurados.tipoCultivo) partesEx.push(estructurados.tipoCultivo);
-    if (estructurados.germen) partesEx.push("Germen: " + estructurados.germen);
-    if (estructurados.antibiograma) {
-      const abg = estructurados.antibiograma.map(a => `${a.atb} (${a.sens?.[0] || "?"})`).join(", ");
-      if (abg) partesEx.push("Antibiograma: " + abg);
-    }
-    if (estructurados.parametros) {
-      const ps = Object.entries(estructurados.parametros).map(([k,v]) => {
-        const def = (PARAMETROS_LAB[nuevoEx.nombre] || []).find(p => p.key === k);
-        return `${def?.label || k}: ${v}${def?.unidad ? " "+def.unidad : ""}`;
-      });
-      if (ps.length) partesEx.push(ps.join(", "));
-    }
-    if (estructurados.litiasis) {
-      estructurados.litiasis.forEach(l => {
-        partesEx.push("Litiasis: " + [l.ubicacion,l.tercio,l.lateralidad,l.tamano?`${l.tamano} mm`:"",l.uh?`${l.uh} UH`:""].filter(Boolean).join(" · "));
-      });
-    }
-    if (estructurados.tumores) {
-      estructurados.tumores.forEach(t => {
-        partesEx.push("Tumor: " + [t.organo,t.sublocalizacion,t.tamano?`${t.tamano} cm`:""].filter(Boolean).join(" · "));
-      });
-    }
-    if (nuevoEx.resultado.trim()) partesEx.push(nuevoEx.resultado.trim());
-    const textoEvo = `🧪 EXAMEN (${nuevoEx.fecha_examen}):\n${partesEx.join("\n")}`;
-    const evoResult = await crearEvolucion(seleccionado.id, currentUser.id, textoEvo, "examen");
-    if (evoResult.ok) setEvoluciones(prev => [evoResult.evolucion, ...prev]);
-    else encolar("crearEvolucion", { pacienteId: seleccionado.id, autorId: currentUser.id, texto: textoEvo, tipo: "examen" });
+    // Antes el examen se copiaba también como una evolución tipo "examen",
+    // y aparecía dos veces (en Exámenes y en Evolución). Ahora vive solo en
+    // Exámenes; la evolución queda para el curso clínico.
+    limpiarFormEx();
+  };
 
-    setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" });
-    setParamsLab({});
-    setLitiasis([]);
-    setFormLitiasis({ ubicacion: "", tercio: "", lateralidad: "", tamano: "", uh: "" });
-    setTumores([]);
-    setFormTumor({ organo: "", sublocalizacion: "", tamano: "" });
-    setAntibiograma([]);
-    setFormAtb({ atb: "", sens: "" });
+  const empezarEdicionExamen = (ex) => {
+    const de = ex.datos_estructurados || {};
+    const germenStd = de.germen ? (UROPATOGENOS.includes(de.germen) || de.germen === "Cultivo negativo" ? de.germen : "Otro") : "";
+    setNuevoEx({
+      tipo: ex.tipo || "Laboratorio",
+      nombre: ex.nombre || "",
+      resultado: ex.resultado || "",
+      fecha_examen: ex.fecha_examen || hoyLocalISO(),
+      pirads: de.pirads || "",
+      pesoProstatico: de.pesoProstatico || "",
+      lugar: de.lugar || "",
+      tipoCultivo: de.tipoCultivo || "",
+      germen: germenStd,
+      germenOtro: germenStd === "Otro" ? de.germen : "",
+    });
+    setParamsLab(de.parametros && typeof de.parametros === "object" ? { ...de.parametros } : {});
+    setLitiasis(Array.isArray(de.litiasis) ? de.litiasis : []);
+    setTumores(Array.isArray(de.tumores) ? de.tumores : []);
+    setAntibiograma(Array.isArray(de.antibiograma) ? de.antibiograma : []);
+    setExamenEditando(ex);
+    setAbrirFormExamen(true);
+    setTimeout(() => formExamenRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   };
 
   const eliminarEx = async (exId) => {
@@ -12867,7 +13425,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
   if (vista === "nuevo") {
     return (
       <div style={{padding:"20px",overflowY:"auto"}}>
-        <button onClick={()=>{setVista("lista");setError("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
+        <button onClick={()=>{setVista("lista");setError("");setFotosIngresoPendientes([]);setExtraccionMsg("");}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:12,padding:0}}>← Volver</button>
         <div style={{fontSize:16,fontWeight:600,color:"var(--texto)",marginBottom:14}}>Nuevo paciente {esEquipo && `en equipo "${equipoActual?.nombre}"`}</div>
 
         {/* Captura por foto: autocompleta desde la hoja de ingreso */}
@@ -12885,6 +13443,15 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           )}
         </div>
         {extraccionMsg && <div style={{fontSize:"var(--fs-1)",padding:"8px 10px",marginBottom:12,borderRadius:8,background:"var(--exito-bg)",border:"0.5px solid var(--exito-borde)",color:"var(--exito)"}}>{extraccionMsg}</div>}
+        {fotosIngresoPendientes.length > 0 && (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontSize:"var(--fs-1)",padding:"8px 10px",marginBottom:12,borderRadius:8,background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",color:"var(--texto)"}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+              <input type="checkbox" checked={adjuntarFotoIngreso} onChange={e=>setAdjuntarFotoIngreso(e.target.checked)} style={{width:16,height:16}}/>
+              📎 Adjuntar {fotosIngresoPendientes.length} imagen{fotosIngresoPendientes.length===1?"":"es"} del ingreso a la ficha
+            </label>
+            <button onClick={()=>setFotosIngresoPendientes([])} style={{background:"none",border:"none",color:"var(--texto-ter)",cursor:"pointer",fontSize:"var(--fs-0)"}}>Quitar</button>
+          </div>
+        )}
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -13094,8 +13661,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           </button>
         )}
         {ordenTxAbierta && <OrdenTransfusionModal paciente={seleccionado} currentUser={currentUser} examenes={examenes} onClose={()=>setOrdenTxAbierta(false)} />}
-        {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setFotoExamenesAbierto(false)} />}
-        {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(r.examenes.map(normalizarExamen)); }} onClose={()=>setPlantillasAbierto(false)} />}
+        {fotoExamenesAbierto && <FotoExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(sinDuplicadosPorId(r.examenes.map(normalizarExamen))); }} onClose={()=>setFotoExamenesAbierto(false)} />}
+        {plantillasAbierto && <PlantillasExamenesModal paciente={seleccionado} currentUser={currentUser} onGuardado={async()=>{ const r = await listarExamenes(seleccionado.id); if (r.ok) setExamenes(sinDuplicadosPorId(r.examenes.map(normalizarExamen))); }} onClose={()=>setPlantillasAbierto(false)} />}
         <button onClick={()=>{setVista("lista");setSeleccionado(null);}} style={{background:"none",border:"none",color:"var(--texto-sec)",fontSize:"var(--fs-2)",cursor:"pointer",marginBottom:10,padding:0}}>← Volver a la lista</button>
 
        {/* Cabecera */}
@@ -13442,8 +14009,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                       </div>
                       <div style={{fontSize:"var(--fs-xs)",color:"var(--texto-ter)",marginTop:2}}>{ex.autor?.nombre || "Anónimo"}</div>
                     </div>
-                    {ex.autor_id === currentUser.id && (
-                      <button onClick={()=>eliminarEx(ex.id)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
+                    {ex.autor_id === currentUser.id && !soloLectura && (
+                      <div style={{display:"flex",gap:10,flexShrink:0}}>
+                        <button onClick={()=>empezarEdicionExamen(ex)} title="Editar examen" style={{background:"none",border:"none",color:"var(--primario)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>✏️</button>
+                        <button onClick={()=>eliminarEx(ex.id)} title="Eliminar examen" style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-1)",padding:0}}>🗑</button>
+                      </div>
                     )}
                   </div>
                   {ex.datos_estructurados && (ex.datos_estructurados.pirads || ex.datos_estructurados.pesoProstatico || ex.datos_estructurados.lugar || ex.datos_estructurados.tipoCultivo) && (
@@ -13819,8 +14389,8 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* NUEVO EXAMEN (formulario) */}
         <div ref={formExamenRef} style={abrirFormExamen?{order:3,background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px"}:{order:3}}>
           {abrirFormExamen && <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>➕ Nuevo examen</div>
-            <button onClick={()=>setAbrirFormExamen(false)} style={{padding:"5px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>Cerrar</button>
+            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>{examenEditando ? `✏️ Editar examen (${examenEditando.fecha_examen || ""})` : "➕ Nuevo examen"}</div>
+            <button onClick={()=>{ setAbrirFormExamen(false); if (examenEditando) { setExamenEditando(null); setNuevoEx({ tipo: "Laboratorio", nombre: "", resultado: "", fecha_examen: hoyLocalISO(), pirads: "", pesoProstatico: "", lugar: "", tipoCultivo: "", germen: "", germenOtro: "" }); setParamsLab({}); setLitiasis([]); setTumores([]); setAntibiograma([]); } }} style={{padding:"5px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--texto-sec)",border:"0.5px solid var(--borde)",borderRadius:6,cursor:"pointer",fontWeight:500}}>{examenEditando ? "Cancelar" : "Cerrar"}</button>
           </div>}
           {abrirFormExamen && (<>
 
@@ -14054,7 +14624,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
             <ControlDictado dictado={dictadoExamen} etiqueta="Dictar resultado" compacto />
           </div>
           {dictadoExamen.error && <div style={{fontSize:"var(--fs-0)",color:"var(--peligro)",fontWeight:600,marginTop:4}}>{dictadoExamen.error}</div>}
-          <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0}}>+ Guardar examen</button>
+          <button onClick={guardarExamen} style={{...btnPrimary, marginTop:0}}>{examenEditando ? "💾 Guardar cambios" : "+ Guardar examen"}</button>
           </>)}
         </div>
       </div>
@@ -14766,6 +15336,28 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     try { return localStorage.getItem("uro_tema") || "light"; }
     catch { return "light"; }
   });
+  // El tema vivía solo en localStorage (por dispositivo): quien usa modo oscuro
+  // en el teléfono lo tenía claro en el computador de pabellón. Ahora se guarda
+  // en el perfil (perfiles.onboarding_visto, el jsonb por usuario que ya usan
+  // el tutorial y el boletín) y se lee al iniciar sesión; localStorage queda
+  // como espejo para no parpadear mientras carga.
+  const cambiarTema = (nuevo) => {
+    setTema(nuevo);
+    if (currentUser?.id) marcarFlagVisto(currentUser.id, "tema", nuevo);
+  };
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const vistos = await leerFlagsVistos(currentUser.id);
+        const t = vistos?.tema;
+        if (vivo && (t === "light" || t === "dark")) setTema((actual) => (actual === t ? actual : t));
+      } catch {}
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line
+  }, [currentUser?.id]);
   // Si la app cargó bien, se limpia la marca de "ya recargué por caché vieja"
   useEffect(() => { try { sessionStorage.removeItem("uro_recarga_import"); } catch {} }, []);
 
@@ -15697,9 +16289,10 @@ if (imgsResult.ok) {
   const fallar = (motivo) => {
     if (respondido) return;
     respondido = true;
+    if (esErrorDeSaldo(motivo)) logDiag(`chat: la API rechazó por saldo/facturación → ${motivo}`);
     setMessages(prev => {
       const base = prev.length && prev[prev.length - 1]?.streaming ? prev.slice(0, -1) : prev;
-      return [...base, { role: "assistant", content: MSG_ERROR_CHAT, error: true, motivo }];
+      return [...base, { role: "assistant", content: esErrorDeSaldo(motivo) ? MSG_SIN_SALDO_IA : MSG_ERROR_CHAT, error: true, motivo }];
     });
     setLoading(false);
   };
@@ -15707,7 +16300,7 @@ if (imgsResult.ok) {
   const t0Chat = Date.now();
   // Declaradas acá y no dentro del try: el bloque finally que registra la
   // métrica está fuera de ese alcance y no podría leerlas.
-  let mtDocs = 0, mtPac = false, mtLog = false, mtProto = false;
+  let mtDocs = 0, mtPac = false, mtLog = false, mtProto = false, mtGeneral = false;
 
   // ── Frontera de protección ──
   // TODO lo que sigue —detección de pacientes, cirugías, videos, logbook,
@@ -15746,14 +16339,20 @@ if (imgsResult.ok) {
   // ("indicaciones de RTU de próstata" con un paciente prostático en la lista).
   // Antes, detectar pacientes CANCELABA la búsqueda documental y el chat
   // respondía "no tengo el documento" sin haber buscado nunca.
-  const necesitaBase = !esCharla;
+  // "Busca en conocimiento general", "usa tu conocimiento", "responde igual":
+  // el usuario pide EXPLÍCITAMENTE responder fuera de la base. Antes esa frase
+  // pasaba por la búsqueda como una consulta más, calzaba por palabras sueltas
+  // ("general", "busca") con cualquier manual, y el modelo —obligado a usar
+  // solo esos documentos— se negaba y encima los citaba como fuente.
+  const pideGeneralExplicito = !esCharla && PIDE_CONOCIMIENTO_GENERAL.test(sinTildes(txt));
+  const necesitaBase = !esCharla && !pideGeneralExplicito;
   // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
   // Si la RPC falla (esquema en caché de PostgREST, permisos, firma cambiada),
   // buscarChunks devuelve {ok:false} y el chat respondía "no encontré nada en
   // la base" — indistinguible de una búsqueda legítimamente vacía. Ese error
   // silencioso costó una sesión entera de diagnóstico: ahora queda registrado.
   const busquedaPromise = necesitaBase
-    ? buscarChunks(expandirSiglas(txt), 8).then((r) => {
+    ? buscarChunks(expandirConsulta(txt), 8).then((r) => {
         if (!r.ok) logDiag(`biblioteca: la búsqueda FALLÓ → ${r.error}`);
         else logDiag(`biblioteca: ${r.chunks.length} fragmentos para "${txt.slice(0, 40)}"`);
         return r;
@@ -15824,7 +16423,7 @@ if (imgsResult.ok) {
   let docsRelevantes = [];
   const busqueda = await busquedaPromise;
   if (busqueda.ok) {
-    docsRelevantes = filtrarChunksRelevantes(txt, busqueda.chunks || []);
+    docsRelevantes = filtrarChunksRelevantes(expandirSiglas(txt), busqueda.chunks || []);
     // El segundo filtro es local y puede descartar todo lo que trajo la base:
     // conviene ver ambos números para saber cuál de los dos dejó al chat sin
     // material.
@@ -15930,20 +16529,31 @@ if (imgsResult.ok) {
   // acaba de aceptar/rechazar esa oferta.
   const FRASE_OFERTA = "¿Quieres que te responda con mi propio conocimiento";
   const ultimoAsistente = [...messages].reverse().find(m => m.role === "assistant");
-  const ofrecioConocimiento = !!(ultimoAsistente && (ultimoAsistente.ofrecioConocimiento || (ultimoAsistente.content || "").includes(FRASE_OFERTA)));
-  const esAfirmacion = /^\s*(s[ií]\b|si\b|dale\b|ok(ay)?\b|ya\b|claro\b|bueno\b|obvio\b|correcto\b|afirmativo\b|por\s*favor\b|de\s*una\b|hazlo\b|adelante\b|responde|resp[oó]ndeme|cont[eé]stame|yes\b)/i;
+  // La oferta se reconoce por la marca del mensaje o por su texto: el modelo
+  // a veces la parafrasea ("¿activo el modo de conocimiento general?"), y esa
+  // variante también debe contar como oferta.
+  const pareceOferta = (m) => !!(m && (m.ofrecioConocimiento || /conocimiento (clinico )?general|mi propio conocimiento|conocimiento propio/.test(sinTildes(m.content || "")) && /\?/.test(m.content || "")));
+  const ofrecioConocimiento = pareceOferta(ultimoAsistente);
+  const esAfirmacion = /^\s*(s[ií]\b|si\b|dale\b|ok(ay)?\b|ya\b|claro\b|bueno\b|obvio\b|correcto\b|afirmativo\b|por\s*favor\b|de\s*una\b|hazlo\b|adelante\b|responde|resp[oó]ndeme|cont[eé]stame|yes\b|activa|act[ií]valo)/i;
   const esNegacion = /^\s*(no\b|nel\b|negativo\b|mejor\s*no\b|d[eé]jalo\b|as[ií]\s*no\b)/i;
-  const usarConocimientoPropio = ofrecioConocimiento && esAfirmacion.test(txt) && !esNegacion.test(txt);
-  const declinoConocimiento = ofrecioConocimiento && !usarConocimientoPropio && esNegacion.test(txt);
-  // Recupera la consulta original (el mensaje del usuario justo antes de la oferta)
+  const usarConocimientoPropio = pideGeneralExplicito || (ofrecioConocimiento && esAfirmacion.test(txt) && !esNegacion.test(txt));
+  const declinoConocimiento = !pideGeneralExplicito && ofrecioConocimiento && !usarConocimientoPropio && esNegacion.test(txt);
+  // Recupera la consulta original. Si el mismo mensaje trae la pregunta ("usa tu
+  // conocimiento: manejo de la epididimitis"), esa es la consulta; si no, el
+  // último mensaje del usuario que fue una pregunta real (no un "sí", no un
+  // "busca en general", no un saludo).
   let preguntaOriginal = "";
   if (usarConocimientoPropio) {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant" && (messages[i].ofrecioConocimiento || (messages[i].content || "").includes(FRASE_OFERTA))) {
-        for (let j = i - 1; j >= 0; j--) {
-          if (messages[j].role === "user") { preguntaOriginal = messages[j].content; break; }
-        }
-        break;
+    const resto = sinTildes(txt).replace(PIDE_CONOCIMIENTO_GENERAL, " ");
+    const traePregunta = pideGeneralExplicito && terminosConsulta(resto).some((t) => !GENERICOS_CLINICOS.has(t));
+    if (traePregunta) preguntaOriginal = txt;
+    else {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.role !== "user") continue;
+        const c = m.content || "";
+        if (esAfirmacion.test(c) || esNegacion.test(c) || PIDE_CONOCIMIENTO_GENERAL.test(sinTildes(c)) || esCharlaBasica(c)) continue;
+        preguntaOriginal = c; break;
       }
     }
   }
@@ -15967,7 +16577,15 @@ if (imgsResult.ok) {
       // El usuario rechazó la oferta de conocimiento propio
       ctx += "\n\n=== EL USUARIO DECLINÓ ===\nEl usuario NO quiere que uses conocimiento fuera de la base. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar información clínica: \"De acuerdo, me limito a la base de conocimiento de UroSearch. ¿Puedo ayudarte con otra consulta?\"";
     } else if (tieneFuentes) {
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde ÚNICA Y EXCLUSIVAMENTE con la información contenida en estos documentos. NO uses conocimiento externo ni general. Si los documentos no contienen lo suficiente para responder, dilo explícitamente. NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n"
+      // Qué hacer si los documentos recuperados NO cubren la pregunta depende de
+      // la política del administrador: en modo general se responde igual con
+      // conocimiento propio (marcado); en modo verificada se ofrece. En ambos
+      // casos la respuesta trae una marca que el cliente usa para NO mostrar
+      // como fuente documentos que no se usaron.
+      const siNoCubren = modoChatVigente === "general"
+        ? "Si los documentos NO contienen la información necesaria para responder, responde con tu conocimiento clínico como urólogo especialista (guías EAU/AUA, criterio clínico) y comienza tu respuesta EXACTAMENTE con esta línea: \"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\" En ese caso no cites ni menciones los documentos. "
+        : "Si los documentos NO contienen la información necesaria para responder, NO uses conocimiento propio: responde EXACTAMENTE y SOLO con este mensaje: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\" ";
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde con la información contenida en estos documentos. Mientras los documentos respondan la pregunta, NO uses conocimiento externo ni general. " + siNoCubren + "NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n"
         // La búsqueda puede traer documentos de OTRA patología que comparten
         // vocabulario ("vigilancia activa" existe en próstata y en testículo).
         // Sin esta regla el modelo los fusionaba en un solo párrafo y terminaba
@@ -16052,13 +16670,19 @@ if (imgsResult.ok) {
       onDelta,
     })) || "Sin respuesta.";
     const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
+    // ¿La respuesta salió de los documentos o de conocimiento general? El
+    // modelo lo declara con una marca; sin ella, citar el documento era
+    // mentir sobre la fuente.
+    const respondioConGeneral = usarConocimientoPropio || reply.includes(MARCA_RESPUESTA_GENERAL);
+    const hizoOferta = reply.includes(FRASE_OFERTA);
+    mtGeneral = respondioConGeneral;
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
     // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
-    if (!esCharla && !usarConocimientoPropio && !declinoConocimiento && !tieneFuentes && !consultaCirugias && !consultaPacientes && modoChatVigente !== "general") {
+    if (!esCharla && !usarConocimientoPropio && !declinoConocimiento && (hizoOferta || (!tieneFuentes && !consultaCirugias && !consultaPacientes && modoChatVigente !== "general"))) {
       respuesta.ofrecioConocimiento = true;
     }
     if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
-    if (tieneFuentes && !usarConocimientoPropio && !declinoConocimiento) {
+    if (tieneFuentes && !respondioConGeneral && !hizoOferta && !declinoConocimiento) {
       const vistas = new Set();
       respuesta.fuentes = docsRelevantes
         .filter(d => { if (vistas.has(d.titulo)) return false; vistas.add(d.titulo); return true; })
@@ -16107,6 +16731,8 @@ if (imgsResult.ok) {
       con_pacientes: mtPac,
       con_logbook: mtLog,
       con_protocolos: mtProto,
+      general: mtGeneral,
+      ...usoIA(),
     });
   }
 };
@@ -16130,6 +16756,7 @@ if (imgsResult.ok) {
   }),
 });
       const data = await res.json();
+      anotarUsoIA(data, "mapa");
       const txt = data.content?.find(b => b.type==="text")?.text || "";
       const clean = txt.replace(/```json|```/g,"").trim();
       try { setMapaActual(JSON.parse(clean)); }
@@ -16480,7 +17107,7 @@ if (!currentUser) {
                 ))}
               </div>
             )}
-            <button onClick={()=>setTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>cambiarTema(tema==="light"?"dark":"light")} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
               {tema==="light" ? "🌙 Modo oscuro" : "☀️ Modo claro"}
             </button>
             <button onClick={()=>{ setMenuOpen(false); setConfigOpen(true); }} style={{width:"100%",padding:"8px 14px",fontSize:"var(--fs-2)",textAlign:"left",background:"none",border:"none",color:"var(--texto)",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
