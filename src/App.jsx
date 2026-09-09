@@ -4,7 +4,7 @@ import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion, cancelarInvitacion } from "./equipos";
 import { listarPacientes, crearPaciente, actualizarPaciente, eliminarPaciente, transferirPacienteAPersonal, transferirPacienteAEquipo, restringirPaciente, listarImagenesPaciente, subirImagenPaciente, urlImagenPaciente, eliminarImagenPaciente, listarEvoluciones, crearEvolucion, eliminarEvolucion, listarExamenes, crearExamen, eliminarExamen, listarMisServicios, crearServicio, eliminarServicio, crearServiciosBulk, listarServiciosEquipo, crearServicioEquipo, eliminarServicioEquipo, crearServiciosEquipoBulk, migrarServiciosAlEquipo, reordenarServiciosEquipo } from "./pacientes";
-import { listarLogbook } from "./logbook";
+import { listarLogbook, obtenerUrlFoto } from "./logbook";
 
 
 // ─── Fecha y hora LOCALES del dispositivo (nunca UTC) ───
@@ -367,6 +367,12 @@ const TERMINOS_EN = {
   varon: ["male", "men"], varones: ["male", "men"], mujer: ["female", "women"], mujeres: ["female", "women"],
 };
 
+// Términos DÉBILES: clínicamente reales pero presentes en casi cualquier
+// capítulo de urología (adjetivos, anatomía general, lateralidad). No bastan
+// por sí solos para dar un fragmento por pertinente: "manejo de la epididimitis
+// aguda" traía capítulos enteros solo porque decían "aguda"/"acute".
+const TERMINOS_DEBILES = new Set(["aguda","agudo","agudas","agudos","cronica","cronico","cronicas","cronicos","recurrente","recurrentes","complicada","complicado","nocturna","nocturno","perioperatorio","postoperatorio","preoperatorio","anciano","ancianos","geriatrico","varon","varones","mujer","mujeres","activa","activo","benigna","benigno","maligna","maligno","masa","masas","nodulo","nodulos","dolor","fiebre","renal","renales","urinaria","urinario","urinarias","urinarios","vesical","vesicales","uretral","prostatico","prostatica","testicular","escrotal","peneano","peneana","pelvica","pelvico","ureteral","tracto","genital","genitales","adulto","adultos","hombre","hombres","nino","ninos","infantil","derecho","derecha","izquierdo","izquierda","bilateral","unilateral","superior","inferior","anterior","posterior","lateral","medial","proximal","distal","grande","pequeno","pequena","leve","moderado","moderada","severo","severa","grave","simple","compleja","complejo","primario","primaria","secundario","secundaria","temprano","temprana","tardio","tardia","avanzado","avanzada","localizado","localizada","sintomatica","sintomatico","asintomatica","asintomatico","persistente","progresiva","progresivo","obstructiva","obstructivo","infecciosa","infeccioso","funcional","estructural","total","parcial","radical","completa","completo","ambulatorio","hospitalario","electiva","electivo","urgente","importante","frecuente"]);
+
 // Variantes (español + inglés) de una palabra ya normalizada (sin tildes,
 // minúsculas). Prueba también el singular para "calculos", "infecciones".
 function variantesTermino(w) {
@@ -378,15 +384,30 @@ function variantesTermino(w) {
   return Array.from(out);
 }
 
-// Suma a la consulta los equivalentes en inglés de sus términos (después de
-// expandir las siglas, para que "ITU" también llegue como "infection").
-function expandirConsulta(texto) {
-  const conSiglas = expandirSiglas(texto);
-  const extras = new Set();
-  sinTildes(conSiglas).split(/[^a-z0-9]+/).filter((w) => w.length >= 4).forEach((w) => {
-    variantesTermino(w).forEach((v) => { if (v !== w) extras.add(v); });
-  });
-  return extras.size ? `${conSiglas} ${Array.from(extras).join(" ")}` : conSiglas;
+// Clasifica los términos de una consulta: fuertes (identifican el tema),
+// débiles (acompañan) y genéricos (no discriminan). Sobre el texto ya con
+// siglas expandidas.
+function clasificarTerminos(consultaExpandida) {
+  const grupos = terminosConsulta(consultaExpandida).map((t) => ({
+    t, variantes: variantesTermino(t),
+    clase: GENERICOS_CLINICOS.has(t) ? "generico" : TERMINOS_DEBILES.has(t) ? "debil" : "fuerte",
+  }));
+  return grupos;
+}
+
+// Consulta que se manda a la función SQL: SOLO términos fuertes y débiles con
+// sus equivalentes en inglés. Antes iba la frase completa y la función,
+// que ordena por cantidad de palabras distintas que calzan, prefería manuales
+// en español llenos de "tratamiento primera linea sintomas" por sobre el
+// capítulo del Campbell que sí habla del tema. Esos fragmentos genéricos
+// llegaban al tope de 8, el filtro local los botaba, y el chat decía "no hay
+// nada en la base" teniendo el libro entero.
+function expandirConsulta(texto, { soloFuertes = false } = {}) {
+  const grupos = clasificarTerminos(expandirSiglas(texto)).filter((g) => g.clase === "fuerte" || (!soloFuertes && g.clase === "debil"));
+  const palabras = new Set();
+  grupos.forEach((g) => g.variantes.forEach((v) => palabras.add(v)));
+  if (!palabras.size) return expandirSiglas(texto);
+  return Array.from(palabras).join(" ");
 }
 
 // Palabras que aparecen en cualquier capítulo y por eso NO cuentan como
@@ -399,33 +420,41 @@ function terminosConsulta(txt) {
   const norm = (txt || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   return Array.from(new Set(norm.split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !STOP_CHAT.has(w))));
 }
-function filtrarChunksRelevantes(consulta, chunks) {
+function filtrarChunksRelevantes(consulta, chunks, maximo = 5) {
   // Cada término de la consulta es un GRUPO: la palabra en español y sus
   // equivalentes en inglés; basta con que aparezca cualquiera de ellas.
-  const grupos = terminosConsulta(consulta).map((t) => ({ t, variantes: variantesTermino(t), generico: GENERICOS_CLINICOS.has(t) }));
+  const grupos = clasificarTerminos(consulta);
   if (!grupos.length) return [];
-  const especificos = grupos.filter((g) => !g.generico);
+  const fuertes = grupos.filter((g) => g.clase === "fuerte");
+  const debiles = grupos.filter((g) => g.clase === "debil");
   const puntuados = (chunks || []).map((c) => {
-    const cont = sinTildes((c.titulo || "") + " " + (c.contenido || ""));
-    let hitsEsp = 0, hitsGen = 0, score = 0;
+    const titulo = sinTildes(c.titulo || "");
+    const cont = titulo + " " + sinTildes(c.contenido || "");
+    let hitsF = 0, hitsD = 0, hitsG = 0, score = 0;
     grupos.forEach((g) => {
       if (!g.variantes.some((v) => cont.includes(v))) return;
-      if (g.generico) { hitsGen++; score += 1; } else { hitsEsp++; score += g.t.length; }
+      if (g.clase === "fuerte") { hitsF++; score += 4 + g.t.length; if (g.variantes.some((v) => titulo.includes(v))) score += 6; }
+      else if (g.clase === "debil") { hitsD++; score += 2; }
+      else { hitsG++; score += 0.5; }
     });
-    return { c, hitsEsp, hitsGen, score };
+    return { c, hitsF, hitsD, hitsG, score };
   });
   let filtrados;
-  if (especificos.length > 0) {
-    // Con términos específicos (epididimitis, litiasis…) al menos uno de ELLOS
-    // debe estar en el fragmento; las palabras genéricas solo ordenan.
-    const minEsp = especificos.length >= 3 ? 2 : 1;
-    filtrados = puntuados.filter((s) => s.hitsEsp >= minEsp);
+  if (fuertes.length > 0) {
+    // Al menos un término FUERTE (epididimitis, litiasis, hiperplasia…) debe
+    // estar; con 3 o más fuertes se exigen 2. Débiles y genéricos solo ordenan.
+    const minF = fuertes.length >= 3 ? 2 : 1;
+    filtrados = puntuados.filter((x) => x.hitsF >= minF);
+  } else if (debiles.length > 0) {
+    // Solo términos débiles ("dolor testicular agudo"): que calcen al menos dos,
+    // o el único que haya.
+    const minD = Math.min(2, debiles.length);
+    filtrados = puntuados.filter((x) => x.hitsD >= minD);
   } else {
-    // Consulta hecha solo de palabras genéricas: regla antigua.
-    const minHits = grupos.length >= 3 ? 2 : 1;
-    filtrados = puntuados.filter((s) => s.hitsGen >= minHits);
+    const minG = grupos.length >= 3 ? 2 : 1;
+    filtrados = puntuados.filter((x) => x.hitsG >= minG);
   }
-  return filtrados.sort((a, b) => b.score - a.score).slice(0, 5).map((s) => s.c);
+  return filtrados.sort((a, b) => b.score - a.score).slice(0, maximo).map((x) => x.c);
 }
 
 // Estilo de ALTO CONTRASTE para los mensajes de confirmación/error de formularios.
@@ -500,15 +529,42 @@ function b64ABlobJpeg(b64) {
   return new Blob([bytes], { type: "image/jpeg" });
 }
 async function adjuntarImagenesPaciente(pacienteId, userId, b64s) {
-  let ok = 0;
+  let ok = 0, ultimoError = "";
   for (const b of (b64s || []).slice(0, 6)) {
     try {
       const r = await subirImagenPaciente(pacienteId, userId, b64ABlobJpeg(b));
       if (r.ok) { ok++; registrarEvento("imagen_paciente", { origen: "ingreso" }); }
-      else logDiag(`imagen: no se pudo adjuntar la hoja de ingreso → ${r.error}`);
-    } catch (e) { logDiag(`imagen: excepción al adjuntar → ${e?.message || e}`); }
+      else { ultimoError = r.error || "error"; logDiag(`imagen: no se pudo adjuntar la hoja de ingreso → ${r.error}`); }
+    } catch (e) { ultimoError = e?.message || String(e); logDiag(`imagen: excepción al adjuntar → ${ultimoError}`); }
+  }
+  if (!ok && ultimoError) {
+    // "Bucket not found" = el bucket paciente-imagenes no existe en Storage.
+    uroToast("No se pudo adjuntar la foto a la ficha: " + ultimoError + (/bucket/i.test(ultimoError) ? " (falta crear el bucket paciente-imagenes: está en el SQL de v3.5.0)" : ""));
   }
   return ok;
+}
+
+// ─── Documento de acreditación (título / carta de aceptación) ───
+// Hasta v3.4 el formulario de registro guardaba solo el NOMBRE del archivo: el
+// documento nunca salía del navegador y el administrador no tenía qué revisar.
+// Ahora se sube al bucket privado "acreditaciones" (ruta <uid>/<archivo>) y la
+// ruta queda en perfiles.documento_path; el admin lo abre con URL firmada.
+// Si el registro exige confirmar el correo, no hay sesión en ese momento: el
+// archivo se guarda en memoria y se sube en el primer login (antes de que la
+// app cierre la sesión por estar pendiente).
+let DOC_ACREDITACION_PENDIENTE = null;
+async function subirDocumentoAcreditacion(uid, file) {
+  if (!uid || !file) return { ok: false, error: "sin archivo" };
+  try {
+    const limpio = String(file.name || "documento").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
+    const path = `${uid}/${Date.now()}_${limpio}`;
+    const { error } = await supabase.storage.from("acreditaciones").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+    if (error) return { ok: false, error: error.message };
+    const { error: e2 } = await supabase.from("perfiles").update({ documento_path: path, documento_nombre: file.name || limpio }).eq("id", uid);
+    if (e2) return { ok: false, error: e2.message };
+    DOC_ACREDITACION_PENDIENTE = null;
+    return { ok: true, path };
+  } catch (e) { return { ok: false, error: e?.message || String(e) }; }
 }
 
 // ─── Dictado de voz ───────────────────────────────────────────────
@@ -1192,6 +1248,24 @@ async function guardarModoChatGlobal(valor) {
   MODO_CHAT_LEIDO_EN = Date.now();
   return { ok: true };
 }
+// Ajustes globales de texto libre (misma tabla que chat_modo), con caché corto.
+const AJUSTES_CACHE = {};
+async function leerAjusteGlobal(clave, ttlMs = 60000) {
+  const c = AJUSTES_CACHE[clave];
+  if (c && Date.now() - c.en < ttlMs) return c.valor;
+  try {
+    const { data } = await supabase.from("ajustes_globales").select("valor").eq("clave", clave).maybeSingle();
+    AJUSTES_CACHE[clave] = { valor: data?.valor ?? "", en: Date.now() };
+  } catch { AJUSTES_CACHE[clave] = { valor: c?.valor ?? "", en: Date.now() }; }
+  return AJUSTES_CACHE[clave].valor;
+}
+async function guardarAjusteGlobal(clave, valor) {
+  const { error } = await supabase.from("ajustes_globales").upsert({ clave, valor: String(valor ?? "") }, { onConflict: "clave" });
+  if (error) return { ok: false, error: error.message };
+  AJUSTES_CACHE[clave] = { valor: String(valor ?? ""), en: Date.now() };
+  return { ok: true };
+}
+
 function cargarConfig() {
   try { return { ...CONFIG_DEFECTO, ...(JSON.parse(localStorage.getItem("uro_config")) || {}) }; }
   catch { return { ...CONFIG_DEFECTO }; }
@@ -1477,13 +1551,53 @@ async function marcarFlagVisto(userId, clave, valor = true) {
   }
 }
 
+// ─── Instrucciones del administrador para Uros ─────────────────────
+// Texto libre que se agrega al system prompt del chat en cada consulta, sin
+// deploy: formato de respuesta, tono, qué guías priorizar, errores frecuentes
+// que corregir ("no listes 10 diferenciales, ordena por probabilidad y
+// justifica los 3 primeros"). Nunca puede relajar las reglas de seguridad.
+function InstruccionesChatPanel() {
+  const [texto, setTexto] = useState("");
+  const [original, setOriginal] = useState("");
+  const [estado, setEstado] = useState("cargando"); // cargando | listo | guardando
+  useEffect(() => { leerAjusteGlobal("chat_instrucciones", 0).then((v) => { setTexto(v || ""); setOriginal(v || ""); setEstado("listo"); }); }, []);
+  const guardar = async () => {
+    setEstado("guardando");
+    const r = await guardarAjusteGlobal("chat_instrucciones", texto.trim().slice(0, 4000));
+    setEstado("listo");
+    if (!r.ok) return uroToast("No se pudo guardar: " + r.error);
+    setOriginal(texto.trim().slice(0, 4000));
+    uroToast("✓ Instrucciones guardadas: rigen desde la próxima consulta");
+  };
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>🎯 Instrucciones para Uros</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 6, lineHeight: 1.45 }}>
+        Se agregan al prompt del chat en cada consulta, para todos los usuarios y sin deploy. Sirven para corregir el estilo y los errores que veas en las respuestas (formato, extensión, qué guías priorizar, cómo ordenar diferenciales). No relajan las reglas de seguridad ni la política de fuente.
+      </div>
+      <textarea value={texto} onChange={(e) => setTexto(e.target.value)} disabled={estado !== "listo"} rows={6} placeholder={"Ejemplos:\n• Responde en máximo 8 líneas salvo que pidan detalle.\n• Ordena los diferenciales por probabilidad y justifica solo los 3 primeros.\n• Prioriza las guías EAU sobre las AUA cuando difieran.\n• Para dosis de antibióticos usa siempre mg/kg en pediatría."} style={{ ...inputStyle, resize: "vertical", marginBottom: 6, fontSize: "var(--fs-1)" }} />
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button onClick={guardar} disabled={estado !== "listo" || texto.trim() === original} style={{ padding: "7px 14px", fontSize: "var(--fs-1)", fontWeight: 600, background: texto.trim() !== original ? "var(--primario)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: texto.trim() !== original ? "pointer" : "default" }}>{estado === "guardando" ? "Guardando…" : "Guardar instrucciones"}</button>
+        <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{texto.length}/4000</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Consumo de IA (solo administrador) ───────────────────────────
 // Lee la vista v_consumo_ia (tokens del chat y de las funciones de visión,
 // segundos de dictado) agrupada por mes. El saldo que queda no está acá: vive
 // en la consola de facturación de cada proveedor.
 function ConsumoIAPanel() {
   const [filas, setFilas] = useState(null);
+  const [dias, setDias] = useState([]);
   const [error, setError] = useState("");
+  // Presupuesto: lo que cargaste en el proveedor y los precios por millón de
+  // tokens; con eso se estima cuánto queda. Es una ESTIMACIÓN: el saldo real
+  // solo está en la consola de facturación.
+  const [pres, setPres] = useState({ saldo_usd: "", desde: "", precio_in: "", precio_out: "", precio_min: "" });
+  const [presOriginal, setPresOriginal] = useState("");
+  const [guardandoPres, setGuardandoPres] = useState(false);
   useEffect(() => {
     let vivo = true;
     (async () => {
@@ -1494,9 +1608,27 @@ function ConsumoIAPanel() {
       } catch (e) {
         if (vivo) { setFilas([]); setError(e?.message || "No se pudo leer el consumo."); }
       }
+      try {
+        const { data } = await supabase.from("v_consumo_ia_dia").select("*").order("dia", { ascending: false }).limit(400);
+        if (vivo) setDias(data || []);
+      } catch {}
+      try {
+        const raw = await leerAjusteGlobal("ia_presupuesto", 0);
+        const obj = raw ? JSON.parse(raw) : {};
+        if (vivo && obj && typeof obj === "object") { const p = { saldo_usd: obj.saldo_usd ?? "", desde: obj.desde ?? "", precio_in: obj.precio_in ?? "", precio_out: obj.precio_out ?? "", precio_min: obj.precio_min ?? "" }; setPres(p); setPresOriginal(JSON.stringify(p)); }
+      } catch {}
     })();
     return () => { vivo = false; };
   }, []);
+  const guardarPres = async () => {
+    setGuardandoPres(true);
+    const r = await guardarAjusteGlobal("ia_presupuesto", JSON.stringify(pres));
+    setGuardandoPres(false);
+    if (!r.ok) return uroToast("No se pudo guardar: " + r.error);
+    setPresOriginal(JSON.stringify(pres));
+    uroToast("✓ Presupuesto guardado");
+  };
+  const num = (v) => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isNaN(n) ? 0 : n; };
   const fmt = (n) => (n == null ? "—" : Number(n) >= 1e6 ? (Number(n) / 1e6).toFixed(2) + " M" : Number(n) >= 1e3 ? (Number(n) / 1e3).toFixed(1) + " k" : String(n));
   const mesLabel = (m) => {
     const d = String(m || "").slice(0, 7).split("-");
@@ -1505,46 +1637,122 @@ function ConsumoIAPanel() {
   };
   const celda = { padding: "6px 8px", fontSize: "var(--fs-0)", color: "var(--texto)", borderBottom: "0.5px solid var(--borde)", whiteSpace: "nowrap" };
   const cab = { ...celda, color: "var(--texto-ter)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontSize: 10 };
+  const inp = { ...inputStyle, marginBottom: 0, padding: "7px 9px", fontSize: "var(--fs-1)" };
+  const lbl = { fontSize: 10, fontWeight: 700, color: "var(--texto-ter)", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 2, display: "block" };
+
+  // Gasto estimado desde la fecha de carga, con los precios ingresados.
+  const costoDia = (d) => num(d.tokens_in) / 1e6 * num(pres.precio_in) + num(d.tokens_out) / 1e6 * num(pres.precio_out) + num(d.min_audio) * num(pres.precio_min);
+  const desdeOk = /^\d{4}-\d{2}-\d{2}$/.test(pres.desde || "");
+  const gastado = desdeOk ? dias.filter((d) => String(d.dia).slice(0, 10) >= pres.desde).reduce((acc, d) => acc + costoDia(d), 0) : 0;
+  const saldo = num(pres.saldo_usd);
+  const restante = Math.max(0, saldo - gastado);
+  const pct = saldo > 0 ? Math.min(100, Math.round(gastado / saldo * 100)) : 0;
+  const presListo = desdeOk && saldo > 0 && (num(pres.precio_in) > 0 || num(pres.precio_out) > 0);
+  // Ritmo: promedio diario de los últimos 14 días con consumo → días que quedan.
+  const ult14 = dias.filter((d) => { const lim = new Date(); lim.setDate(lim.getDate() - 14); return new Date(String(d.dia).slice(0, 10)) >= lim; });
+  const porDia = ult14.length ? ult14.reduce((a, d) => a + costoDia(d), 0) / 14 : 0;
+  const diasRestantes = porDia > 0 ? Math.round(restante / porDia) : null;
+
+  // Gráfico de barras (SVG) de tokens por mes, apilado entrada/salida.
+  const serie = [...(filas || [])].sort((a, b) => String(a.mes).localeCompare(String(b.mes)));
+  const maxTok = Math.max(1, ...serie.map((f) => num(f.tokens_in) + num(f.tokens_out)));
+  const Wg = 320, Hg = 120, padL = 8, padB = 18, bw = serie.length ? Math.min(44, (Wg - padL * 2) / serie.length - 8) : 0;
+
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>📈 Consumo de IA</div>
       <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.45 }}>
-        Tokens que gastan el chat y las funciones de visión (Anthropic) y minutos de dictado (OpenAI), por mes. El saldo restante y el gasto en dólares se ven en la consola de facturación de cada proveedor; ahí conviene activar la recarga automática para que el chat no se detenga.
+        Tokens que gastan el chat y las funciones de visión (Anthropic) y minutos de dictado (OpenAI), por mes. El saldo real vive en la consola de facturación de cada proveedor; abajo puedes ingresar lo que cargaste y los precios para ver una estimación de cuánto queda.
       </div>
       {filas === null ? (
         <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Cargando…</div>
       ) : error ? (
         <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)", lineHeight: 1.45 }}>⚠️ {error}<br />Si dice que la vista no existe, falta ejecutar el SQL de <code>v_consumo_ia</code>.</div>
       ) : filas.length === 0 ? (
-        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Todavía no hay consumo registrado (se acumula desde esta versión).</div>
+        <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Todavía no hay consumo registrado (se acumula desde v3.4.0).</div>
       ) : (
-        <div style={{ overflowX: "auto", border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead><tr>
-              <th style={{ ...cab, textAlign: "left" }}>Mes</th>
-              <th style={{ ...cab, textAlign: "right" }}>Consultas</th>
-              <th style={{ ...cab, textAlign: "right" }}>Visión</th>
-              <th style={{ ...cab, textAlign: "right" }}>Tokens entrada</th>
-              <th style={{ ...cab, textAlign: "right" }}>Tokens salida</th>
-              <th style={{ ...cab, textAlign: "right" }}>Dictados</th>
-              <th style={{ ...cab, textAlign: "right" }}>Min. audio</th>
-            </tr></thead>
-            <tbody>
-              {filas.map((f) => (
-                <tr key={String(f.mes)}>
-                  <td style={{ ...celda, fontWeight: 600 }}>{mesLabel(f.mes)}</td>
-                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.consultas_chat)}</td>
-                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.llamadas_vision)}</td>
-                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.tokens_in)}</td>
-                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.tokens_out)}</td>
-                  <td style={{ ...celda, textAlign: "right" }}>{fmt(f.dictados)}</td>
-                  <td style={{ ...celda, textAlign: "right" }}>{f.min_audio == null ? "—" : Number(f.min_audio).toFixed(1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div style={{ border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)", padding: "8px 10px 4px", marginBottom: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--texto-ter)", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>Tokens por mes <span style={{ fontWeight: 400, textTransform: "none" }}>(■ entrada · ■ salida)</span></div>
+            <svg viewBox={`0 0 ${Wg} ${Hg}`} width="100%" style={{ display: "block", maxHeight: 150 }}>
+              {serie.map((f, i) => {
+                const x = padL + i * ((Wg - padL * 2) / serie.length) + ((Wg - padL * 2) / serie.length - bw) / 2;
+                const hIn = (num(f.tokens_in) / maxTok) * (Hg - padB - 6);
+                const hOut = (num(f.tokens_out) / maxTok) * (Hg - padB - 6);
+                const yOut = Hg - padB - hOut, yIn = yOut - hIn;
+                return (
+                  <g key={String(f.mes)}>
+                    <rect x={x} y={yOut} width={bw} height={hOut} fill="var(--primario)" opacity="0.55" rx="2" />
+                    <rect x={x} y={yIn} width={bw} height={hIn} fill="var(--primario)" rx="2" />
+                    <text x={x + bw / 2} y={Hg - 5} textAnchor="middle" fontSize="9" fill="var(--texto-ter)">{mesLabel(f.mes)}</text>
+                    <text x={x + bw / 2} y={Math.max(9, yIn - 3)} textAnchor="middle" fontSize="8.5" fill="var(--texto)">{fmt(num(f.tokens_in) + num(f.tokens_out))}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <div style={{ overflowX: "auto", border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)", marginBottom: 10 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead><tr>
+                <th style={{ ...cab, textAlign: "left" }}>Mes</th>
+                <th style={{ ...cab, textAlign: "right" }}>Consultas</th>
+                <th style={{ ...cab, textAlign: "right" }}>Visión</th>
+                <th style={{ ...cab, textAlign: "right" }}>Tokens entrada</th>
+                <th style={{ ...cab, textAlign: "right" }}>Tokens salida</th>
+                <th style={{ ...cab, textAlign: "right" }}>Dictados</th>
+                <th style={{ ...cab, textAlign: "right" }}>Min. audio</th>
+                {presListo && <th style={{ ...cab, textAlign: "right" }}>≈ USD</th>}
+              </tr></thead>
+              <tbody>
+                {filas.map((f) => (
+                  <tr key={String(f.mes)}>
+                    <td style={{ ...celda, fontWeight: 600 }}>{mesLabel(f.mes)}</td>
+                    <td style={{ ...celda, textAlign: "right" }}>{fmt(f.consultas_chat)}</td>
+                    <td style={{ ...celda, textAlign: "right" }}>{fmt(f.llamadas_vision)}</td>
+                    <td style={{ ...celda, textAlign: "right" }}>{fmt(f.tokens_in)}</td>
+                    <td style={{ ...celda, textAlign: "right" }}>{fmt(f.tokens_out)}</td>
+                    <td style={{ ...celda, textAlign: "right" }}>{fmt(f.dictados)}</td>
+                    <td style={{ ...celda, textAlign: "right" }}>{f.min_audio == null ? "—" : Number(f.min_audio).toFixed(1)}</td>
+                    {presListo && <td style={{ ...celda, textAlign: "right" }}>{costoDia(f).toFixed(2)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
+
+      {/* Saldo estimado */}
+      <div style={{ border: "0.5px solid var(--borde)", borderRadius: 10, background: "var(--superficie)", padding: "10px 12px" }}>
+        <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>💳 Saldo estimado de créditos</div>
+        {presListo ? (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-1)", color: "var(--texto)", marginBottom: 4 }}>
+              <span><strong>≈ US$ {restante.toFixed(2)}</strong> restantes de US$ {saldo.toFixed(2)}</span>
+              <span style={{ color: "var(--texto-ter)" }}>gastado ≈ US$ {gastado.toFixed(2)} ({pct}%)</span>
+            </div>
+            <div style={{ height: 12, borderRadius: 6, background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: pct >= 90 ? "var(--peligro)" : pct >= 70 ? "var(--alerta)" : "var(--exito)", transition: "width 0.3s" }} />
+            </div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 4 }}>
+              {diasRestantes != null ? `Al ritmo de los últimos 14 días (≈ US$ ${porDia.toFixed(2)}/día) alcanza para ${diasRestantes} día${diasRestantes === 1 ? "" : "s"} más.` : "Sin consumo en los últimos 14 días para proyectar."} Estimación a partir de los precios ingresados y del consumo registrado desde el {pres.desde}; no incluye lo gastado fuera de la app ni cargos del proveedor no medidos aquí.
+              {!dias.length && " (Falta la vista v_consumo_ia_dia: sin ella no se puede sumar desde una fecha.)"}
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 8, lineHeight: 1.45 }}>Ingresa cuánto cargaste, desde cuándo, y los precios por millón de tokens del modelo que usa el chat (los publica el proveedor). Con eso se calcula el saldo estimado y cuántos días alcanza.</div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+          <div><label style={lbl}>Créditos cargados (USD)</label><input type="number" value={pres.saldo_usd} onChange={(e) => setPres({ ...pres, saldo_usd: e.target.value })} placeholder="ej: 50" style={inp} /></div>
+          <div><label style={lbl}>Desde (fecha de la carga)</label><input type="date" value={pres.desde} onChange={(e) => setPres({ ...pres, desde: e.target.value })} style={inp} /></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 8 }}>
+          <div><label style={lbl}>USD / M tokens entrada</label><input type="number" step="0.01" value={pres.precio_in} onChange={(e) => setPres({ ...pres, precio_in: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>USD / M tokens salida</label><input type="number" step="0.01" value={pres.precio_out} onChange={(e) => setPres({ ...pres, precio_out: e.target.value })} style={inp} /></div>
+          <div><label style={lbl}>USD / min dictado</label><input type="number" step="0.001" value={pres.precio_min} onChange={(e) => setPres({ ...pres, precio_min: e.target.value })} style={inp} /></div>
+        </div>
+        <button onClick={guardarPres} disabled={guardandoPres || JSON.stringify(pres) === presOriginal} style={{ padding: "7px 14px", fontSize: "var(--fs-1)", fontWeight: 600, background: JSON.stringify(pres) !== presOriginal ? "var(--primario)" : "var(--borde)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: JSON.stringify(pres) !== presOriginal ? "pointer" : "default" }}>{guardandoPres ? "Guardando…" : "Guardar presupuesto"}</button>
+      </div>
     </div>
   );
 }
@@ -2200,6 +2408,7 @@ function ConfigModal({ onClose, currentUser }) {
             );
           })}
         </div>
+        <InstruccionesChatPanel />
         <ConsumoIAPanel />
         </>)}
 
@@ -3353,7 +3562,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.4.0";
+const VERSION = "v3.5.1";
 
 // ─── Registro de uso ──────────────────────────────────────────────
 // Mide qué funciones se usan de verdad. Antes la actividad se infería de las
@@ -4934,7 +5143,27 @@ function AuthScreen({ onLogin }) {
       return;
     }
 
-    setInfo("Tu solicitud fue enviada. Si la confirmación por correo está activada, te llegará un link para verificar tu dirección; luego recibirás acceso una vez que el administrador apruebe tu cuenta.");
+    // El documento se sube ahora si el registro dejó sesión; si no (correo por
+    // confirmar), queda en memoria y se sube en el primer inicio de sesión.
+    let notaDoc = "";
+    // Se deja pendiente ANTES de intentar subirlo: si la app detecta la sesión
+    // nueva, ve la cuenta "pendiente" y la cierra mientras se sube, el archivo
+    // igual queda para el primer inicio de sesión. Si la subida sale bien, la
+    // función limpia el pendiente.
+    DOC_ACREDITACION_PENDIENTE = form.documento;
+    try {
+      const { data: sesionData } = await supabase.auth.getSession();
+      const uid = sesionData?.session?.user?.id;
+      if (uid) {
+        const up = await subirDocumentoAcreditacion(uid, form.documento);
+        if (up.ok) notaDoc = " Tu documento de acreditación quedó adjunto a la solicitud.";
+        else { logDiag(`registro: no se pudo subir el documento → ${up.error}`); notaDoc = " El documento se adjuntará cuando inicies sesión por primera vez."; }
+      } else {
+        notaDoc = " Cuando confirmes tu correo e inicies sesión, el documento se adjuntará solo a tu solicitud.";
+      }
+    } catch {}
+
+    setInfo("Tu solicitud fue enviada. Si la confirmación por correo está activada, te llegará un link para verificar tu dirección; luego recibirás acceso una vez que el administrador apruebe tu cuenta." + notaDoc);
     setForm({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   };
 
@@ -5594,6 +5823,25 @@ function AdminPanel() {
     }
     setPerfiles(result.perfiles);
     setLoading(false);
+    // Ruta del documento de acreditación (columna nueva; se lee aparte para no
+    // depender de las columnas que devuelva listarPerfiles).
+    try {
+      const { data } = await supabase.from("perfiles").select("id, documento_path, documento_nombre");
+      if (data) {
+        const m = new Map(data.map((x) => [x.id, x]));
+        setPerfiles((prev) => prev.map((u) => ({ ...u, documento_path: m.get(u.id)?.documento_path || u.documento_path || null, documento_nombre: u.documento_nombre || m.get(u.id)?.documento_nombre || null })));
+      }
+    } catch {}
+  };
+
+  const verDocumento = async (u) => {
+    try {
+      const { data, error } = await supabase.storage.from("acreditaciones").createSignedUrl(u.documento_path, 600);
+      if (error) throw error;
+      window.open(data.signedUrl, "_blank", "noopener");
+    } catch (e) {
+      uroToast("No se pudo abrir el documento: " + (e?.message || e) + (/(bucket|not found)/i.test(String(e?.message || "")) ? " — falta crear el bucket acreditaciones (SQL de v3.5.0)." : ""));
+    }
   };
 
   const filtrados = perfiles.filter(u => filtro === "todos" || u.estado === filtro);
@@ -5692,8 +5940,13 @@ function AdminPanel() {
               </div>
               <div style={{fontSize:"var(--fs-1)",color:"var(--texto-sec)"}}>{u.correo} · {u.especialidad || "Sin especialidad"}</div>
               {u.fecha_registro && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",marginTop:2}}>Solicitud: {new Date(u.fecha_registro).toLocaleDateString("es-CL")}</div>}
-              {u.documento_nombre && (
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6,fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginTop:8}}>📎 <span style={{flex:1}}>{u.documento_nombre}</span></div>
+              {(u.documento_nombre || u.documento_path) && (
+                <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"var(--fondo-suave)",borderRadius:6,fontSize:"var(--fs-0)",color:"var(--texto-sec)",marginTop:8}}>
+                  📎 <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.documento_nombre || "Documento de acreditación"}</span>
+                  {u.documento_path
+                    ? <button onClick={()=>verDocumento(u)} style={{padding:"4px 10px",fontSize:"var(--fs-0)",fontWeight:600,background:"var(--primario)",color:"var(--texto-inv)",border:"none",borderRadius:6,cursor:"pointer",flexShrink:0}}>👁 Ver</button>
+                    : <span title="El archivo no se subió (registro anterior a v3.5.0 o sin sesión al registrarse)" style={{fontSize:"var(--fs-0)",color:"var(--alerta)",flexShrink:0}}>sin archivo</span>}
+                </div>
               )}
               {u.rol !== "admin" && (
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
@@ -11400,6 +11653,93 @@ function compararCama(a, b) {
 
 // Plantillas SOAP completas
 // Garantiza que datos_estructurados sea siempre un objeto (Supabase a veces lo entrega como texto)
+// Resumen de un examen en una línea, para mostrarlo dentro de la evolución del
+// día y en el PDF de la visita sin repetir la tarjeta completa.
+function resumenExamenTexto(ex) {
+  const de = ex?.datos_estructurados || {};
+  const partes = [];
+  const params = de.parametros && typeof de.parametros === "object" ? Object.entries(de.parametros).filter(([, v]) => v !== "" && v != null) : [];
+  if (params.length) partes.push(params.map(([k, v]) => { const def = (PARAMETROS_LAB[ex.nombre] || []).find((p) => p.key === k); return `${def?.label || k} ${v}${def?.unidad ? " " + def.unidad : ""}`; }).join(", "));
+  if (de.germen) partes.push(`${de.germen}${Array.isArray(de.antibiograma) && de.antibiograma.length ? " · " + de.antibiograma.map((a) => `${a.atb} ${a.sens?.[0] || "?"}`).join(", ") : ""}`);
+  if (Array.isArray(de.litiasis) && de.litiasis.length) partes.push("Litiasis: " + de.litiasis.map((l) => [l.ubicacion, l.tercio, l.lateralidad, l.tamano ? `${l.tamano} mm` : "", l.uh ? `${l.uh} UH` : ""].filter(Boolean).join(" ")).join("; "));
+  if (Array.isArray(de.tumores) && de.tumores.length) partes.push("Tumor: " + de.tumores.map((t) => [t.organo, t.sublocalizacion, t.tamano ? `${t.tamano} mm` : ""].filter(Boolean).join(" ")).join("; "));
+  if (de.pirads) partes.push(`PI-RADS ${de.pirads}`);
+  if (de.pesoProstatico) partes.push(`Próstata ${de.pesoProstatico} cc`);
+  if (ex?.resultado) partes.push(String(ex.resultado).trim());
+  return partes.join(" · ");
+}
+// "Últimos" exámenes para la evolución del día: los de los últimos 7 días o,
+// si no hay tan recientes, los 3 más nuevos. Nunca más de 8.
+function ultimosExamenesDe(examenes) {
+  const orden = [...(examenes || [])].filter((e) => e && e.fecha_examen).sort((a, b) => String(b.fecha_examen).localeCompare(String(a.fecha_examen)) || String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  if (!orden.length) return [];
+  const limite = new Date(); limite.setDate(limite.getDate() - 7);
+  const lim = `${limite.getFullYear()}-${String(limite.getMonth() + 1).padStart(2, "0")}-${String(limite.getDate()).padStart(2, "0")}`;
+  const recientes = orden.filter((e) => String(e.fecha_examen) >= lim);
+  return (recientes.length ? recientes : orden.slice(0, 3)).slice(0, 8);
+}
+
+// ─── Protocolo operatorio en la ficha ───
+// Muestra las evoluciones tipo "protocolo" (la transcripción que deja el
+// Logbook al escanear el protocolo) y, si el usuario tiene ese registro en SU
+// logbook con foto, abre la foto con URL firmada.
+function ProtocoloPacienteModal({ paciente, protocolos, currentUser, onClose }) {
+  const [buscandoFoto, setBuscandoFoto] = useState(false);
+  const verFoto = async (proto) => {
+    setBuscandoFoto(true);
+    try {
+      const r = await listarLogbook(currentUser.id);
+      if (!r.ok) throw new Error(r.error);
+      const tk = (t) => new Set(sinTildes(t || "").replace(/[.,]/g, " ").split(/\s+/).filter((x) => x.length >= 2));
+      const nom = tk(paciente.iniciales);
+      const fechaProto = ((proto?.texto || "").match(/\((\d{4}-\d{2}-\d{2})\)/) || [])[1];
+      const cand = (r.registros || []).filter((reg) => reg.foto_path).map((reg) => {
+        const s = tk(reg.iniciales); let c = 0; nom.forEach((t) => { if (s.has(t)) c++; });
+        if (fechaProto && reg.fecha === fechaProto) c += 2;
+        return { reg, c };
+      }).filter((x) => x.c >= 2).sort((a, b) => b.c - a.c || String(b.reg.fecha || "").localeCompare(String(a.reg.fecha || "")));
+      if (!cand.length) { uroToast("No encontré la foto de este protocolo en tu logbook (solo se puede abrir la foto de registros propios)."); return; }
+      const u = await obtenerUrlFoto(cand[0].reg.foto_path);
+      if (!u.ok) throw new Error(u.error);
+      window.open(u.url, "_blank", "noopener");
+    } catch (e) {
+      uroToast("No se pudo abrir la foto: " + (e?.message || e));
+    } finally { setBuscandoFoto(false); }
+  };
+  const irAlLogbook = () => { onClose(); window.dispatchEvent(new CustomEvent("uro-ir-a-tab", { detail: "logbook" })); };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 80, padding: 12 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--fondo)", borderRadius: 14, width: "100%", maxWidth: 640, maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 10px 40px rgba(0,0,0,0.3)" }}>
+        <div style={{ padding: "14px 16px 10px", borderBottom: "0.5px solid var(--borde)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📄 Protocolo operatorio</div>
+            <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{paciente.iniciales}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "var(--texto-ter)", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {protocolos.length === 0 ? (
+            <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", lineHeight: 1.5 }}>
+              Todavía no hay un protocolo transcrito para este paciente. Se agrega solo cuando alguien del equipo escanea el protocolo en 📓 Logbook (el nombre debe coincidir con el de la ficha).
+              <div style={{ marginTop: 10 }}>
+                <button onClick={irAlLogbook} style={{ padding: "8px 14px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>📷 Escanear protocolo en el Logbook</button>
+              </div>
+            </div>
+          ) : protocolos.map((pr) => (
+            <div key={pr.id} style={{ border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px", background: "var(--superficie)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{pr.fecha_evolucion || ""} {pr.hora_evolucion ? String(pr.hora_evolucion).slice(0, 5) : ""}{pr.autor?.nombre ? ` · ${pr.autor.nombre}` : ""}</div>
+                <button onClick={() => verFoto(pr)} disabled={buscandoFoto} style={{ padding: "5px 10px", fontSize: "var(--fs-0)", fontWeight: 600, background: "var(--fondo-suave)", color: "var(--primario)", border: "0.5px solid var(--borde)", borderRadius: 8, cursor: "pointer" }}>{buscandoFoto ? "Buscando…" : "🖼 Ver foto del protocolo"}</button>
+              </div>
+              <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", whiteSpace: "pre-wrap", lineHeight: 1.5, wordBreak: "break-word" }}>{pr.texto}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Un mismo examen no debe salir dos veces en la lista (p. ej. si la cola sin
 // conexión lo reenvió): se conserva la primera aparición de cada id.
 function sinDuplicadosPorId(lista) {
@@ -11824,6 +12164,9 @@ function PacientesPanel({ pacientes, setPacientes, currentUser, contexto, equipo
   const [editandoFicha, setEditandoFicha] = useState(false);
   const [otroAntecedente, setOtroAntecedente] = useState("");
   const [editandoHistoria, setEditandoHistoria] = useState(false);
+  const [historiaColapsada, setHistoriaColapsada] = useState(() => { try { return localStorage.getItem("uro_historia_colapsada") === "1"; } catch { return false; } });
+  const toggleHistoria = () => setHistoriaColapsada((v) => { const n = !v; try { localStorage.setItem("uro_historia_colapsada", n ? "1" : "0"); } catch {} return n; });
+  const [protocoloAbierto, setProtocoloAbierto] = useState(false);
   const [historiaDraft, setHistoriaDraft] = useState("");
   const [mostrarEvosAntiguas, setMostrarEvosAntiguas] = useState(false);
   const [mostrarExAntiguos, setMostrarExAntiguos] = useState(false);
@@ -11891,7 +12234,12 @@ const [formCirugia, setFormCirugia] = useState(null); // {fecha, nombre} cuando 
   });
   const sugSOAP = useSugSOAP(currentUser?.id); // sugerencias SOAP personalizadas por usuario
   const [diuresis, setDiuresis] = useState({ cantidad: "", via: "", caracteristicas: "" });
-  const [drenaje, setDrenaje] = useState({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
+  // Drenajes: puede haber más de uno (p. ej. Hemosuc + tubular), y la
+  // ubicación se escribe a mano (antes era una lista fija de cuadrantes que no
+  // servía para "fosa renal", "lecho prostático", etc.).
+  const DRENAJE_VACIO = { tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" };
+  const [drenaje, setDrenaje] = useState({ activo: false, lista: [{ ...DRENAJE_VACIO }] });
+  const setDren = (i, campo, valor) => setDrenaje(prev => ({ ...prev, lista: prev.lista.map((d, j) => (j === i ? { ...d, [campo]: valor } : d)) }));
   const [seccionAbierta, setSeccionAbierta] = useState(null); // qué bloque de sugerencias está desplegado
   const [tipoEvo, setTipoEvo] = useState("estructurada");
 
@@ -13050,6 +13398,19 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
 
     const fmtFecha = (f) => { const [a, m, d] = (f || "").split("-"); return d ? `${d}/${m}/${a}` : (f || ""); };
     const rolLabel = (r) => ({ urologo: "Urólogo", residente: "Residente de Urología", becado: "Residente de Urología", interno: "Interno", enfermeria: "Enfermería", admin: "Médico" }[r] || (r ? r.charAt(0).toUpperCase() + r.slice(1) : ""));
+    // Exámenes recientes (últimos 7 días o los 3 más nuevos) antes de las
+    // evoluciones, como en la ficha.
+    const ultEx = ultimosExamenesDe(examenes);
+    if (ultEx.length) {
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(60, 60, 60);
+      doc.text("Exámenes recientes", M, y); y += 5;
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(20, 20, 20);
+      ultEx.forEach(ex => {
+        const linea = `• ${ex.nombre} (${fmtFecha(ex.fecha_examen)})${resumenExamenTexto(ex) ? ": " + resumenExamenTexto(ex) : ""}`;
+        doc.splitTextToSize(linea, W - 2 * M).forEach(p => { if (y > 286) { doc.addPage(); y = 18; } doc.text(p, M, y); y += 4.6; });
+      });
+      y += 4;
+    }
     delDia.forEach(e => {
       if (y > 262) { doc.addPage(); y = 18; }
       // Fecha (dd/mm/aaaa) y hora (HH:MM), una línea a la izquierda.
@@ -13145,20 +13506,22 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         if (diuresis.caracteristicas) d.push(diuresis.caracteristicas);
         partes.push(`DIURESIS:\n${d.join(" · ")}`);
       }
-      // Drenaje estructurado
+      // Drenajes estructurados (uno o varios)
       if (drenaje.activo) {
-        const dr = [];
-        if (drenaje.tipo) {
-          let t = drenaje.tipo;
-          if ((drenaje.tipo === "Hemosuc" || drenaje.tipo === "Jackson Pratt") && drenaje.aspiracion) {
-            t += ` (${drenaje.aspiracion})`;
+        const lineas = drenaje.lista.map((d) => {
+          const dr = [];
+          if (d.tipo) {
+            let t = d.tipo;
+            if ((d.tipo === "Hemosuc" || d.tipo === "Jackson Pratt") && d.aspiracion) t += ` (${d.aspiracion})`;
+            dr.push(t);
           }
-          dr.push(t);
-        }
-        if (drenaje.localizacion) dr.push(drenaje.localizacion);
-        if (drenaje.cantidad) dr.push(`${drenaje.cantidad} ml`);
-        if (drenaje.caracteristicas) dr.push(drenaje.caracteristicas);
-        if (dr.length > 0) partes.push(`DRENAJE:\n${dr.join(" · ")}`);
+          if (d.localizacion.trim()) dr.push(d.localizacion.trim());
+          if (d.cantidad) dr.push(`${d.cantidad} ml`);
+          if (d.caracteristicas) dr.push(d.caracteristicas);
+          return dr.join(" · ");
+        }).filter(Boolean);
+        if (lineas.length === 1) partes.push(`DRENAJE:\n${lineas[0]}`);
+        else if (lineas.length > 1) partes.push(`DRENAJES:\n${lineas.map((l, i) => `${i + 1}. ${l}`).join("\n")}`);
       }
       if (evoEstructurada.examen.trim()) partes.push(`EXAMEN FÍSICO:\n${evoEstructurada.examen.trim()}`);
       if (evoEstructurada.indicaciones.trim()) partes.push(`INDICACIONES:\n${evoEstructurada.indicaciones.trim()}`);
@@ -13181,7 +13544,7 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
     limpiarBorradorEvo(); // el SOAP ya quedó persistido: el borrador sobra
     setEvoEstructurada({ subjetivo: "", objetivo: "", examen: "", indicaciones: "" });
     setDiuresis({ cantidad: "", via: "", caracteristicas: "" });
-    setDrenaje({ activo: false, tipo: "", aspiracion: "", localizacion: "", cantidad: "", caracteristicas: "" });
+    setDrenaje({ activo: false, lista: [{ ...DRENAJE_VACIO }] });
   };
 
   const eliminarEvo = async (evoId) => {
@@ -13833,14 +14196,20 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
           {seleccionado.cirugias_realizadas.map((cx, idx) => {
             const dia = diaPostOp(cx.fecha);
             return (
-              <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:"var(--fs-2)",color:"var(--texto)",padding:"3px 0"}}>
-                <span><strong>Día {dia}:</strong> {cx.nombre}</span>
-                <button onClick={()=>eliminarCirugia(idx)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>✕</button>
+              <div key={idx} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:"var(--fs-2)",color:"var(--texto)",padding:"3px 0",gap:8}}>
+                <span style={{minWidth:0}}><strong>Día {dia}:</strong> {cx.nombre}</span>
+                {!soloLectura && <button onClick={()=>eliminarCirugia(idx)} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-2)",padding:0}}>✕</button>}
               </div>
             );
           })}
+          {(() => { const n = (evoluciones || []).filter(e => e.tipo === "protocolo").length; return (
+            <button onClick={()=>setProtocoloAbierto(true)} style={{marginTop:6,padding:"6px 12px",fontSize:"var(--fs-1)",fontWeight:600,background:"var(--superficie)",color:"var(--primario)",border:"0.5px solid var(--borde)",borderRadius:8,cursor:"pointer"}}>
+              📄 Ver protocolo{n ? ` (${n})` : ""}
+            </button>
+          ); })()}
         </div>
       )}
+      {protocoloAbierto && <ProtocoloPacienteModal paciente={seleccionado} protocolos={(evoluciones || []).filter(e => e.tipo === "protocolo")} currentUser={currentUser} onClose={()=>setProtocoloAbierto(false)} />}
       {Array.isArray(seleccionado.antecedentes) && seleccionado.antecedentes.length > 0 && (
         <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",marginTop:6,padding:"10px 12px",background:"var(--fondo-suave)",borderRadius:6}}>
           <strong>Antecedentes:</strong>{" "}
@@ -13868,7 +14237,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         {/* HISTORIA DEL PACIENTE */}
         <div style={{background:"var(--superficie)",border:"0.5px solid var(--borde)",borderRadius:10,padding:"14px",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:seleccionado.historia||editandoHistoria?8:0}}>
-            <div style={{fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)"}}>📖 Historia</div>
+            <button onClick={toggleHistoria} disabled={editandoHistoria} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:"var(--fs-2)",fontWeight:600,color:"var(--texto)",display:"flex",alignItems:"center",gap:6}}>
+              📖 Historia <span style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",fontWeight:400}}>{historiaColapsada && seleccionado.historia ? "▸ mostrar" : seleccionado.historia ? "▾ ocultar" : ""}</span>
+            </button>
             {!editandoHistoria && (
               <button onClick={()=>{setHistoriaDraft(seleccionado.historia||"");setEditandoHistoria(true);}} style={{padding:"4px 11px",fontSize:"var(--fs-0)",background:seleccionado.historia?"var(--superficie)":"var(--primario)",color:seleccionado.historia?"var(--primario)":"var(--texto-inv)",border:seleccionado.historia?"0.5px solid var(--borde)":"none",borderRadius:6,cursor:"pointer",fontWeight:500}}>
                 {seleccionado.historia ? "✏ Editar" : "+ Agregar Historia"}
@@ -13884,7 +14255,11 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               </div>
             </>
           ) : seleccionado.historia ? (
-            <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.5,background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px"}}>{seleccionado.historia}</div>
+            historiaColapsada ? (
+              <div onClick={toggleHistoria} style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",background:"var(--fondo-suave)",borderRadius:6,padding:"6px 12px",cursor:"pointer"}}>{seleccionado.historia.replace(/\s+/g, " ").slice(0, 140)}…</div>
+            ) : (
+              <div style={{fontSize:"var(--fs-2)",color:"var(--texto)",whiteSpace:"pre-wrap",lineHeight:1.5,background:"var(--fondo-suave)",borderRadius:6,padding:"10px 12px"}}>{seleccionado.historia}</div>
+            )
           ) : null}
         </div>
 
@@ -13898,6 +14273,16 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
               {!soloLectura && <button onClick={()=>{setAbrirFormEvo(true); setTimeout(()=>formEvoRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),60);}} title="Agregar evolución" aria-label="Agregar evolución" style={ST_BTN_MAS}>+</button>}
             </div>
           </div>
+          {(() => { const ult = ultimosExamenesDe(examenes); return ult.length > 0 && (
+            <div style={{marginBottom:10,padding:"8px 10px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:8}}>
+              <div style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--primario)",marginBottom:4}}>🔬 Últimos exámenes</div>
+              {ult.map(ex => { const r = resumenExamenTexto(ex); return (
+                <div key={ex.id} style={{fontSize:"var(--fs-0)",color:"var(--texto)",lineHeight:1.45,padding:"2px 0"}}>
+                  <strong>{ex.nombre}</strong> <span style={{color:"var(--texto-ter)"}}>{(ex.fecha_examen || "").split("-").reverse().join("/")}</span>{r ? `: ${r}` : ""}
+                </div>
+              ); })}
+            </div>
+          ); })()}
           {evoluciones.length === 0 ? (
             <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",fontStyle:"italic",padding:"6px 0"}}>No hay evoluciones registradas</div>
           ) : (
@@ -14283,6 +14668,9 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         <option value="Sonda Foley">Sonda Foley</option>
         <option value="Nefrostomía">Nefrostomía</option>
         <option value="Cistostomía">Cistostomía</option>
+        <option value="Pigtail">Pigtail</option>
+        <option value="Catéter ureteral">Catéter ureteral</option>
+        <option value="Cateterismo intermitente">Cateterismo intermitente</option>
       </select>
       <select value={diuresis.caracteristicas} onChange={e=>setDiuresis({...diuresis,caracteristicas:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1,minWidth:140}}>
         <option value="">Características...</option>
@@ -14308,44 +14696,47 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
       </button>
     </div>
     {drenaje.activo && (
-      <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}>
-        <select value={drenaje.tipo} onChange={e=>setDrenaje({...drenaje,tipo:e.target.value, aspiracion: (e.target.value==="Hemosuc"||e.target.value==="Jackson Pratt")?drenaje.aspiracion:""})} style={{...inputStyle,marginBottom:0}}>
-          <option value="">Tipo de drenaje...</option>
-          <option value="Tubular">Tubular</option>
-          <option value="Hemosuc">Hemosuc</option>
-          <option value="Jackson Pratt">Jackson Pratt</option>
-        </select>
-        {(drenaje.tipo==="Hemosuc" || drenaje.tipo==="Jackson Pratt") && (
-          <select value={drenaje.aspiracion} onChange={e=>setDrenaje({...drenaje,aspiracion:e.target.value})} style={{...inputStyle,marginBottom:0}}>
-            <option value="">Aspiración...</option>
-            <option value="Aspirativo">Aspirativo</option>
-            <option value="No aspirativo">No aspirativo</option>
-          </select>
-        )}
-        <select value={drenaje.localizacion} onChange={e=>setDrenaje({...drenaje,localizacion:e.target.value})} style={{...inputStyle,marginBottom:0}}>
-          <option value="">Localización...</option>
-          <option value="Hipocondrio derecho">Hipocondrio derecho</option>
-          <option value="Epigastrio">Epigastrio</option>
-          <option value="Hipocondrio izquierdo">Hipocondrio izquierdo</option>
-          <option value="Flanco derecho">Flanco derecho</option>
-          <option value="Mesogastrio">Mesogastrio</option>
-          <option value="Flanco izquierdo">Flanco izquierdo</option>
-          <option value="Fosa iliaca derecha">Fosa iliaca derecha</option>
-          <option value="Hipogastrio">Hipogastrio</option>
-          <option value="Fosa iliaca izquierda">Fosa iliaca izquierda</option>
-        </select>
-        <div style={{display:"flex",gap:6,alignItems:"center"}}>
-          <input type="number" value={drenaje.cantidad} onChange={e=>setDrenaje({...drenaje,cantidad:e.target.value})} placeholder="Cantidad" style={{...inputStyle,marginBottom:0,width:100,flex:"0 0 auto"}}/>
-          <span style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)"}}>ml</span>
-          <select value={drenaje.caracteristicas} onChange={e=>setDrenaje({...drenaje,caracteristicas:e.target.value})} style={{...inputStyle,marginBottom:0,flex:1}}>
-            <option value="">Características...</option>
-            <option value="Hemático">Hemático</option>
-            <option value="Serohemático">Serohemático</option>
-            <option value="Seroso">Seroso</option>
-            <option value="Purulento">Purulento</option>
-            <option value="Orina">Orina</option>
-          </select>
-        </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8}}>
+        {drenaje.lista.map((d, i) => (
+          <div key={i} style={{display:"flex",flexDirection:"column",gap:6,padding:drenaje.lista.length>1?"8px 10px":0,border:drenaje.lista.length>1?"0.5px solid var(--borde)":"none",borderRadius:8,background:drenaje.lista.length>1?"var(--superficie)":"transparent"}}>
+            {drenaje.lista.length > 1 && (
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:"var(--fs-0)",fontWeight:700,color:"var(--texto-ter)"}}>Drenaje {i + 1}</span>
+                <button onClick={()=>setDrenaje(prev=>({...prev, lista: prev.lista.filter((_, j)=>j!==i)}))} style={{background:"none",border:"none",color:"var(--peligro)",cursor:"pointer",fontSize:"var(--fs-0)",padding:0}}>✕ Quitar</button>
+              </div>
+            )}
+            <select value={d.tipo} onChange={e=>{ const t = e.target.value; setDrenaje(prev=>({...prev, lista: prev.lista.map((x, j)=> j===i ? {...x, tipo: t, aspiracion: (t==="Hemosuc"||t==="Jackson Pratt") ? x.aspiracion : ""} : x)})); }} style={{...inputStyle,marginBottom:0}}>
+              <option value="">Tipo de drenaje...</option>
+              <option value="Tubular">Tubular</option>
+              <option value="Hemosuc">Hemosuc</option>
+              <option value="Jackson Pratt">Jackson Pratt</option>
+              <option value="Penrose">Penrose</option>
+            </select>
+            {(d.tipo==="Hemosuc" || d.tipo==="Jackson Pratt") && (
+              <select value={d.aspiracion} onChange={e=>setDren(i,"aspiracion",e.target.value)} style={{...inputStyle,marginBottom:0}}>
+                <option value="">Aspiración...</option>
+                <option value="Aspirativo">Aspirativo</option>
+                <option value="No aspirativo">No aspirativo</option>
+              </select>
+            )}
+            <input value={d.localizacion} onChange={e=>setDren(i,"localizacion",e.target.value)} placeholder="Ubicación (ej: fosa renal derecha, lecho vesical, flanco izquierdo)" style={{...inputStyle,marginBottom:0}}/>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input type="number" value={d.cantidad} onChange={e=>setDren(i,"cantidad",e.target.value)} placeholder="Cantidad" style={{...inputStyle,marginBottom:0,width:100,flex:"0 0 auto"}}/>
+              <span style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)"}}>ml</span>
+              <select value={d.caracteristicas} onChange={e=>setDren(i,"caracteristicas",e.target.value)} style={{...inputStyle,marginBottom:0,flex:1}}>
+                <option value="">Características...</option>
+                <option value="Hemático">Hemático</option>
+                <option value="Serohemático">Serohemático</option>
+                <option value="Seroso">Seroso</option>
+                <option value="Purulento">Purulento</option>
+                <option value="Orina">Orina</option>
+                <option value="Bilioso">Bilioso</option>
+                <option value="Linfa">Linfa</option>
+              </select>
+            </div>
+          </div>
+        ))}
+        <button onClick={()=>setDrenaje(prev=>({...prev, lista: [...prev.lista, { ...DRENAJE_VACIO }]}))} style={{alignSelf:"flex-start",padding:"6px 12px",fontSize:"var(--fs-1)",background:"var(--superficie)",color:"var(--primario)",border:"0.5px dashed var(--primario)",borderRadius:8,cursor:"pointer",fontWeight:600}}>+ Agregar otro drenaje</button>
       </div>
     )}
   </div>
@@ -15345,19 +15736,34 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     setTema(nuevo);
     if (currentUser?.id) marcarFlagVisto(currentUser.id, "tema", nuevo);
   };
+  // Pestaña abierta: se guarda en el perfil al cambiarla (con retardo) y al
+  // cerrar sesión, y se restaura al volver a entrar. Antes handleLogout ponía
+  // "chat" y eso pisaba el valor guardado en localStorage.
+  const prefsRestauradas = useRef(false);
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) { prefsRestauradas.current = false; return; }
     let vivo = true;
     (async () => {
       try {
         const vistos = await leerFlagsVistos(currentUser.id);
+        if (!vivo) return;
         const t = vistos?.tema;
-        if (vivo && (t === "light" || t === "dark")) setTema((actual) => (actual === t ? actual : t));
+        if (t === "light" || t === "dark") setTema((actual) => (actual === t ? actual : t));
+        const tabsValidos = tabsPorRol(currentUser.rol).map((x) => x[0]);
+        if (vistos?.tab && tabsValidos.includes(vistos.tab)) setTab(vistos.tab);
+        if (vistos?.subtab_hospital) setSubTabHospital(vistos.subtab_hospital);
       } catch {}
+      finally { if (vivo) prefsRestauradas.current = true; }
     })();
     return () => { vivo = false; };
     // eslint-disable-next-line
   }, [currentUser?.id]);
+  useEffect(() => {
+    if (!currentUser?.id || !prefsRestauradas.current) return;
+    const id = setTimeout(() => { marcarFlagVisto(currentUser.id, "tab", tab); marcarFlagVisto(currentUser.id, "subtab_hospital", subTabHospital); }, 2500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line
+  }, [tab, subTabHospital]);
   // Si la app cargó bien, se limpia la marca de "ya recargué por caché vieja"
   useEffect(() => { try { sessionStorage.removeItem("uro_recarga_import"); } catch {} }, []);
 
@@ -15887,6 +16293,16 @@ const eliminarConv = async (conversacionId) => {
     nuevaConversacion();
   }
 };
+  // La pestaña abierta queda en el perfil (con tope de 1,5 s para no
+  // retrasar el cierre si no hay red).
+  if (currentUser?.id) {
+    try {
+      await Promise.race([
+        (async () => { await marcarFlagVisto(currentUser.id, "tab", tab); await marcarFlagVisto(currentUser.id, "subtab_hospital", subTabHospital); })(),
+        new Promise((res) => setTimeout(res, 1500)),
+      ]);
+    } catch {}
+  }
   await logoutUser();
   setCurrentUser(null);
   setSession(null);
@@ -16015,6 +16431,13 @@ const cargarPerfil = async (sessionData) => {
   
   // Si el usuario no está aprobado, no dejarlo entrar
   if (perfil.estado !== "aprobado") {
+    // Documento de acreditación pendiente de subir (registro con correo por
+    // confirmar): se sube ahora, que hay sesión, antes de cerrarla.
+    if (perfil.estado === "pendiente" && DOC_ACREDITACION_PENDIENTE) {
+      const up = await subirDocumentoAcreditacion(perfil.id, DOC_ACREDITACION_PENDIENTE);
+      if (up.ok) uroToast("✓ Tu documento de acreditación quedó adjunto a la solicitud.");
+      else logDiag(`login pendiente: no se pudo subir el documento → ${up.error}`);
+    }
     let mensaje = "";
     if (perfil.estado === "pendiente") mensaje = "Tu cuenta aún está pendiente de aprobación por el administrador.";
     else if (perfil.estado === "rechazado") mensaje = "Tu cuenta fue rechazada. Contacta al administrador.";
@@ -16325,6 +16748,7 @@ if (imgsResult.ok) {
   // Política de fuente definida por el administrador. Si la lectura falla, el
   // valor por defecto es el conservador: limitarse a la biblioteca.
   const modoChatVigente = await leerModoChatGlobal();
+  const instruccionesAdmin = (await leerAjusteGlobal("chat_instrucciones")).trim().slice(0, 4000);
 
   let listaPacChat = pacientes;
   if ((!listaPacChat || listaPacChat.length === 0) && currentUser) {
@@ -16352,7 +16776,7 @@ if (imgsResult.ok) {
   // la base" — indistinguible de una búsqueda legítimamente vacía. Ese error
   // silencioso costó una sesión entera de diagnóstico: ahora queda registrado.
   const busquedaPromise = necesitaBase
-    ? buscarChunks(expandirConsulta(txt), 8).then((r) => {
+    ? buscarChunks(expandirConsulta(txt), 20).then((r) => {
         if (!r.ok) logDiag(`biblioteca: la búsqueda FALLÓ → ${r.error}`);
         else logDiag(`biblioteca: ${r.chunks.length} fragmentos para "${txt.slice(0, 40)}"`);
         return r;
@@ -16424,6 +16848,18 @@ if (imgsResult.ok) {
   const busqueda = await busquedaPromise;
   if (busqueda.ok) {
     docsRelevantes = filtrarChunksRelevantes(expandirSiglas(txt), busqueda.chunks || []);
+    // Segunda pasada de precisión: si nada pasó el filtro pero la consulta
+    // tiene términos fuertes, se busca SOLO con ellos (sin adjetivos que
+    // arrastran fragmentos ajenos) y se filtra de nuevo.
+    if (docsRelevantes.length === 0 && clasificarTerminos(expandirSiglas(txt)).some((g) => g.clase === "fuerte")) {
+      try {
+        const q2 = expandirConsulta(txt, { soloFuertes: true });
+        logDiag(`chat: sin fragmentos pertinentes en la 1ª pasada; 2ª pasada con "${q2.slice(0, 80)}"`);
+        const r2 = await buscarChunks(q2, 20);
+        if (r2.ok) docsRelevantes = filtrarChunksRelevantes(expandirSiglas(txt), r2.chunks || []);
+      } catch (e) { logDiag(`chat: 2ª pasada falló → ${e?.message || e}`); }
+    }
+    logDiag(`chat: candidatos=${(busqueda.chunks || []).length} pertinentes=${docsRelevantes.length}${docsRelevantes.length ? " · " + docsRelevantes.map((d) => (d.titulo || "").slice(0, 40)).join(" | ") : ""}`);
     // El segundo filtro es local y puede descartar todo lo que trajo la base:
     // conviene ver ambos números para saber cuál de los dos dejó al chat sin
     // material.
@@ -16585,7 +17021,7 @@ if (imgsResult.ok) {
       const siNoCubren = modoChatVigente === "general"
         ? "Si los documentos NO contienen la información necesaria para responder, responde con tu conocimiento clínico como urólogo especialista (guías EAU/AUA, criterio clínico) y comienza tu respuesta EXACTAMENTE con esta línea: \"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\" En ese caso no cites ni menciones los documentos. "
         : "Si los documentos NO contienen la información necesaria para responder, NO uses conocimiento propio: responde EXACTAMENTE y SOLO con este mensaje: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\" ";
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde con la información contenida en estos documentos. Mientras los documentos respondan la pregunta, NO uses conocimiento externo ni general. " + siNoCubren + "NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente).\n\n"
+      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde con la información contenida en estos documentos. Mientras los documentos respondan la pregunta, NO uses conocimiento externo ni general. " + siNoCubren + "NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente). AL FINAL de tu respuesta, en una línea aparte, escribe exactamente [[FUENTES: n,n]] con los números de los DOC que realmente usaste (por ejemplo [[FUENTES: 1,3]]); si no usaste ninguno escribe [[FUENTES: ]]. Esa línea no se muestra al usuario.\n\n"
         // La búsqueda puede traer documentos de OTRA patología que comparten
         // vocabulario ("vigilancia activa" existe en próstata y en testículo).
         // Sin esta regla el modelo los fusionaba en un solo párrafo y terminaba
@@ -16641,7 +17077,10 @@ if (imgsResult.ok) {
     if (ctxProtocolos) { ctx += ctxProtocolos; mtProto = true; }
     // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
     const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
-    const sysPrompt = SYSTEM_PROMPT + modoIns + ctxAnon + ctxImagenes;
+    // Instrucciones del administrador (Configuración → 🎯 Instrucciones para
+    // Uros): van después del prompt base y antes del contexto de la consulta.
+    const insAdmin = instruccionesAdmin ? `\n\nINSTRUCCIONES DEL ADMINISTRADOR DE UROSEARCH (prevalecen sobre el estilo por defecto; NUNCA sobre la regla de seguridad clínica ni sobre la política de fuente de esta consulta):\n${instruccionesAdmin}` : "";
+    const sysPrompt = SYSTEM_PROMPT + insAdmin + modoIns + ctxAnon + ctxImagenes;
     const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
     // El token ya viene de la sesión que se pidió arriba: evita un segundo
     // getSession() justo antes de disparar la petición.
@@ -16650,7 +17089,8 @@ if (imgsResult.ok) {
     // La respuesta se va mostrando mientras se escribe (si la función lo permite).
     let placeholder = false;
     const onDelta = (acumulado) => {
-      const visible = desanonimizar(acumulado, mapaAnon);
+      // La línea [[FUENTES: …]] (o su comienzo, aún incompleto) no se muestra.
+      const visible = desanonimizar(acumulado.replace(/\n?\s*\[\[(?:FUENTES:[^\]]*|F(?:U(?:E(?:N(?:T(?:E(?:S:?)?)?)?)?)?)?)?\]?\]?\s*$/, ""), mapaAnon);
       setMessages(prev => {
         if (!placeholder) { placeholder = true; return [...prev, { role: "assistant", content: visible, streaming: true }]; }
         const copia = [...prev];
@@ -16660,7 +17100,7 @@ if (imgsResult.ok) {
       });
     };
 
-    const reply = (await pedirRespuestaIA({
+    let reply = (await pedirRespuestaIA({
       // Para saludos y charla no hace falta el modelo grande: responde bastante antes.
       model: esCharla ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
       maxTokens: esCharla ? 500 : 2000,
@@ -16669,11 +17109,21 @@ if (imgsResult.ok) {
       token,
       onDelta,
     })) || "Sin respuesta.";
+    // El modelo declara qué documentos usó ([[FUENTES: 1,3]]); la línea se
+    // quita del texto y solo esos documentos se muestran como bibliografía.
+    // Sin la marca (respuesta cortada, modelo que no la puso) se muestran los
+    // documentos que pasaron el filtro, como antes.
+    let docsUsados = null;
+    const mFuentes = reply.match(/\[\[FUENTES:\s*([\d,\s]*)\]\]/);
+    if (mFuentes) {
+      docsUsados = mFuentes[1].split(/[,\s]+/).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= docsRelevantes.length);
+      reply = reply.replace(/\n?\s*\[\[FUENTES:[^\]]*\]\]\s*/g, "").trim();
+    }
     const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
     // ¿La respuesta salió de los documentos o de conocimiento general? El
     // modelo lo declara con una marca; sin ella, citar el documento era
     // mentir sobre la fuente.
-    const respondioConGeneral = usarConocimientoPropio || reply.includes(MARCA_RESPUESTA_GENERAL);
+    const respondioConGeneral = usarConocimientoPropio || reply.includes(MARCA_RESPUESTA_GENERAL) || (docsUsados !== null && docsUsados.length === 0 && !reply.includes(FRASE_OFERTA));
     const hizoOferta = reply.includes(FRASE_OFERTA);
     mtGeneral = respondioConGeneral;
     // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
@@ -16684,9 +17134,11 @@ if (imgsResult.ok) {
     if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
     if (tieneFuentes && !respondioConGeneral && !hizoOferta && !declinoConocimiento) {
       const vistas = new Set();
-      respuesta.fuentes = docsRelevantes
+      const base = docsUsados && docsUsados.length ? docsRelevantes.filter((_, i) => docsUsados.includes(i + 1)) : docsRelevantes;
+      respuesta.fuentes = base
         .filter(d => { if (vistas.has(d.titulo)) return false; vistas.add(d.titulo); return true; })
         .map(d => ({id:d.id, titulo:d.titulo, fuente:d.fuente||"", categoria:d.categoria||""}));
+      if (!respuesta.fuentes.length) delete respuesta.fuentes;
     }
     if (consultaCirugias && consultaCirugias.cirugias.length > 0) respuesta.cirugiasConsulta = { rango: consultaCirugias.rango, cantidad: consultaCirugias.cirugias.length };
     if (consultaPacientes && !consultaPacientes.ningun && consultaPacientes.pacientes.length > 0) respuesta.pacientesConsulta = { cantidad: consultaPacientes.pacientes.length };

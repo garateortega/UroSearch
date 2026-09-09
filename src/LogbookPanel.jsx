@@ -920,25 +920,42 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
     }
     setGuardando(false);
     if (!result.ok) return setError(result.error);
-    // Si hay un paciente hospitalizado con nombre coincidente (sin tildes), le adjunta el protocolo.
-    if (!editId) {
-      try {
-        const tk = (s) => new Set(sinTildes(s || "").replace(/[.,]/g, " ").split(/\s+/).filter((t) => t.length >= 2));
-        const nomTk = tk(datos.iniciales);
-        if (nomTk.size >= 2) {
-          const { data: pacs } = await supabase.from("pacientes").select("id, iniciales").neq("estado", "alta");
-          const cand = (pacs || [])
-            .map((p) => { const s = tk(p.iniciales); let c = 0; nomTk.forEach((t) => { if (s.has(t)) c++; }); return { p, c }; })
-            .filter((x) => x.c >= 2)
-            .sort((a, b) => b.c - a.c);
-          // Solo adjunta si hay un mejor match claro (único o con más coincidencias que el resto).
-          if (cand.length && (cand.length === 1 || cand[0].c > cand[1].c)) {
-            const m = cand[0].p;
-            const texto = `PROTOCOLO OPERATORIO — ${datos.procedimiento || "Cirugía"}${datos.fecha ? ` (${datos.fecha})` : ""}${datos.cirujano ? `\nCirujano: ${datos.cirujano}` : ""}${datos.ayudantes ? `\nAyudantes: ${datos.ayudantes}` : ""}`;
-            await supabase.from("evoluciones").insert({ paciente_id: m.id, autor_id: currentUser.id, texto, tipo: "protocolo" });
-          }
+    // Si hay un paciente hospitalizado con nombre coincidente (sin tildes), le
+    // adjunta el protocolo TRANSCRITO completo como evolución tipo "protocolo".
+    // Desde la ficha se abre con "📄 Ver protocolo". Al editar el registro, la
+    // evolución del mismo procedimiento y fecha se actualiza en vez de duplicarse.
+    try {
+      const tk = (s) => new Set(sinTildes(s || "").replace(/[.,]/g, " ").split(/\s+/).filter((t) => t.length >= 2));
+      const nomTk = tk(datos.iniciales);
+      if (nomTk.size >= 2) {
+        const { data: pacs } = await supabase.from("pacientes").select("id, iniciales").neq("estado", "alta");
+        const cand = (pacs || [])
+          .map((p) => { const s = tk(p.iniciales); let c = 0; nomTk.forEach((t) => { if (s.has(t)) c++; }); return { p, c }; })
+          .filter((x) => x.c >= 2)
+          .sort((a, b) => b.c - a.c);
+        // Solo adjunta si hay un mejor match claro (único o con más coincidencias que el resto).
+        if (cand.length && (cand.length === 1 || cand[0].c > cand[1].c)) {
+          const m = cand[0].p;
+          const cabecera = `PROTOCOLO OPERATORIO — ${datos.procedimiento || "Cirugía"}${datos.fecha ? ` (${datos.fecha})` : ""}`;
+          const lineas = [cabecera];
+          if (datos.cirujano || datos.ayudantes) lineas.push(`Cirujano: ${datos.cirujano || "—"}${datos.ayudantes ? ` · Ayudantes: ${datos.ayudantes}` : ""}`);
+          const dg = [datos.diagnostico_pre ? `Dg preop: ${datos.diagnostico_pre}` : "", datos.diagnostico_post ? `Dg postop: ${datos.diagnostico_post}` : ""].filter(Boolean).join(" · ");
+          if (dg) lineas.push(dg);
+          const tech = [datos.anestesia ? `Anestesia: ${datos.anestesia}` : "", datos.hora_inicio ? `Horario: ${String(datos.hora_inicio).slice(0, 5)}–${String(datos.hora_termino || "").slice(0, 5)}` : "", datos.sangrado_ml != null ? `Sangrado: ${datos.sangrado_ml} ml` : "", datos.duracion_min != null ? `Duración: ${datos.duracion_min} min` : ""].filter(Boolean).join(" · ");
+          if (tech) lineas.push(tech);
+          if (datos.hallazgos) lineas.push(`\nHALLAZGOS:\n${datos.hallazgos}`);
+          if (datos.tecnica) lineas.push(`\nTÉCNICA:\n${datos.tecnica}`);
+          if (datos.detalles_complicacion) lineas.push(`\n${datos.complicacion ? "COMPLICACIÓN" : "INCIDENTE"}${datos.clavien ? ` (Clavien ${datos.clavien})` : ""}:\n${datos.detalles_complicacion}`);
+          if (datos.observaciones) lineas.push(`\nObs: ${datos.observaciones}`);
+          const texto = lineas.join("\n").slice(0, 8000);
+          const { data: previas } = await supabase.from("evoluciones").select("id, texto").eq("paciente_id", m.id).eq("tipo", "protocolo").eq("autor_id", currentUser.id).limit(20);
+          const previa = (previas || []).find((e) => (e.texto || "").startsWith(cabecera));
+          if (previa) await supabase.from("evoluciones").update({ texto }).eq("id", previa.id);
+          else await supabase.from("evoluciones").insert({ paciente_id: m.id, autor_id: currentUser.id, texto, tipo: "protocolo" });
         }
-      } catch { /* no bloquea el guardado del logbook */ }
+      }
+    } catch { /* no bloquea el guardado del logbook */ }
+    if (!editId) {
 
       // ── Logbook de equipo: agrega la cirugía a los compañeros que participaron ──
       try {
