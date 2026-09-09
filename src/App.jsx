@@ -1584,6 +1584,206 @@ function InstruccionesChatPanel() {
   );
 }
 
+// ─── Errores recientes (solo administrador) ────────────────────────
+function ErroresRecientesPanel() {
+  const [filas, setFilas] = useState(null);
+  const [abierto, setAbierto] = useState(false);
+  const cargar = async () => {
+    try {
+      const { data, error } = await supabase.from("eventos_uso").select("*").eq("evento", "error_js").limit(200);
+      if (error) throw error;
+      const fechaDe = (r) => r.created_at || r.creado_en || r.fecha || r.ts || Object.values(r).find((v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) || "";
+      setFilas((data || []).map((r) => ({ ...r, _fecha: fechaDe(r) })).sort((a, b) => String(b._fecha).localeCompare(String(a._fecha))).slice(0, 30));
+    } catch (e) { setFilas([]); uroToast("No se pudieron leer los errores: " + (e?.message || e)); }
+  };
+  useEffect(() => { if (abierto && filas === null) cargar(); /* eslint-disable-next-line */ }, [abierto]);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <button onClick={() => setAbierto((v) => !v)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", display: "flex", alignItems: "center", gap: 6 }}>
+        🐞 Errores recientes <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", fontWeight: 400 }}>{abierto ? "▾ ocultar" : "▸ ver"}</span>
+      </button>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2, lineHeight: 1.45 }}>Errores no controlados en los dispositivos de todos los usuarios (JS, promesas y pantallas rotas), con versión y pestaña. Se registran desde v3.6.0.</div>
+      {abierto && (
+        <div style={{ marginTop: 8 }}>
+          {filas === null ? <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Cargando…</div>
+          : filas.length === 0 ? <div style={{ fontSize: "var(--fs-0)", color: "var(--exito)" }}>✓ Sin errores registrados.</div>
+          : filas.map((r) => {
+            const d = r.detalle || {};
+            return (
+              <div key={r.id || r._fecha + d.msg} style={{ border: "0.5px solid var(--borde)", borderLeft: "3px solid var(--peligro)", borderRadius: 8, padding: "6px 10px", marginBottom: 6, background: "var(--superficie)" }}>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>{String(r._fecha).slice(0, 16).replace("T", " ")} · {d.version || "?"} · {d.tab || "—"} · {d.tipo || ""}{d.seccion ? ` (${d.seccion})` : ""}</div>
+                <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)", fontWeight: 600, wordBreak: "break-word" }}>{d.msg}</div>
+                {d.pila && <pre style={{ fontSize: 10, color: "var(--texto-sec)", whiteSpace: "pre-wrap", margin: "4px 0 0", maxHeight: 90, overflow: "auto" }}>{d.pila}</pre>}
+              </div>
+            );
+          })}
+          <button onClick={cargar} style={{ padding: "5px 12px", fontSize: "var(--fs-0)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>↻ Actualizar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Prueba de la base de conocimiento (solo administrador) ────────
+// 30 preguntas patrón con la palabra que DEBE aparecer en los fragmentos
+// recuperados. Se corre la misma búsqueda que usa el chat (sin gastar IA) y
+// se reporta cuántas encontraron la fuente correcta. Guardar el resultado
+// permite comparar después de cada cambio en la búsqueda: es un número, no
+// una impresión. Formato de cada línea: pregunta | palabra1, palabra2
+const PREGUNTAS_PRUEBA_DEFECTO = [
+  ["Manejo de la epididimitis aguda en el adulto", "epididymitis, epididimitis"],
+  ["Tratamiento de primera línea de la hiperplasia prostática benigna", "hyperplasia, hiperplasia, bph"],
+  ["Indicaciones de nefrolitotomía percutánea", "percutaneous nephrolithotomy, nefrolitotomia, pcnl"],
+  ["Manejo del cólico renal con litiasis ureteral de 6 mm", "ureteral stone, ureteral calcul, litiasis ureteral, expulsive"],
+  ["Vigilancia activa en cáncer de próstata de bajo riesgo", "active surveillance, vigilancia activa"],
+  ["Indicación de RTU vesical y re-RTU en tumor no músculo invasor", "turbt, transurethral resection, non-muscle, no musculo"],
+  ["Torsión testicular: tiempo de isquemia y conducta", "testicular torsion, torsion testicular"],
+  ["Profilaxis antibiótica en biopsia de próstata", "biopsy, biopsia"],
+  ["Manejo de la retención urinaria aguda", "urinary retention, retencion urinaria"],
+  ["Gangrena de Fournier: diagnóstico y manejo quirúrgico", "fournier"],
+  ["Tratamiento de la infección urinaria complicada en el hombre", "urinary tract infection, infeccion urinaria, uti"],
+  ["Manejo de la hematuria macroscópica", "hematuria, haematuria"],
+  ["Estadificación TNM del cáncer de vejiga", "tnm, staging, estadificacion"],
+  ["Nefrectomía radical versus parcial en masa renal de 4 cm", "partial nephrectomy, nefrectomia parcial, t1a"],
+  ["Manejo del trauma renal grado IV", "renal trauma, trauma renal, grade iv, grado iv"],
+  ["Disfunción eréctil: inhibidores de fosfodiesterasa 5", "phosphodiesterase, fosfodiesterasa, pde5, sildenafil, tadalafil"],
+  ["Derivación urinaria tras cistectomía radical", "urinary diversion, derivacion urinaria, neobladder, ileal conduit"],
+  ["Estenosis uretral: uretrotomía interna versus uretroplastía", "urethral stricture, estenosis uretral, urethroplasty, uretroplast"],
+  ["Manejo de la vejiga hiperactiva refractaria", "overactive bladder, vejiga hiperactiva, botulinum"],
+  ["Varicocele e infertilidad: indicaciones de varicocelectomía", "varicocele"],
+  ["Criptorquidia: edad de la orquidopexia", "cryptorchidism, undescended, criptorquidia, orchiopexy, orquidopexia"],
+  ["Complicaciones de la ureteroscopía", "ureteroscopy, ureteroscopia"],
+  ["Manejo de la sepsis de origen urinario", "urosepsis, sepsis"],
+  ["Tumor testicular: marcadores y estadificación", "germ cell, germinal, testicular, afp, hcg"],
+  ["Indicaciones de catéter doble J tras ureteroscopía", "stent, doble j, double j"],
+  ["Enfermedad de Peyronie: tratamiento", "peyronie"],
+  ["Priapismo isquémico: manejo", "priapism, priapismo"],
+  ["Reflujo vesicoureteral en niños: grados y manejo", "vesicoureteral reflux, reflujo vesicoureteral, vur"],
+  ["Incontinencia urinaria de esfuerzo en la mujer: cabestrillo", "stress urinary incontinence, incontinencia de esfuerzo, sling, cabestrillo"],
+  ["Hidronefrosis por estenosis pieloureteral: pieloplastía", "pyeloplasty, pieloplast, ureteropelvic, pieloureteral"],
+].map(([pregunta, espera]) => `${pregunta} | ${espera}`).join("\n");
+
+function parsearPreguntasPrueba(texto) {
+  return String(texto || "").split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+    const [pregunta, esp] = l.split("|");
+    return { pregunta: (pregunta || "").trim(), espera: (esp || "").split(",").map((k) => sinTildes(k.trim())).filter(Boolean) };
+  }).filter((q) => q.pregunta);
+}
+
+// Misma tubería que el chat: expansión, 20 candidatos, filtro, 2ª pasada.
+async function probarBusquedaBase(q) {
+  const t0 = Date.now();
+  let candidatos = 0, rel = [], error = "";
+  try {
+    const r = await buscarChunks(expandirConsulta(q.pregunta), 20);
+    if (!r.ok) throw new Error(r.error);
+    candidatos = (r.chunks || []).length;
+    rel = filtrarChunksRelevantes(expandirSiglas(q.pregunta), r.chunks || []);
+    if (!rel.length && clasificarTerminos(expandirSiglas(q.pregunta)).some((g) => g.clase === "fuerte")) {
+      const r2 = await buscarChunks(expandirConsulta(q.pregunta, { soloFuertes: true }), 20);
+      if (r2.ok) rel = filtrarChunksRelevantes(expandirSiglas(q.pregunta), r2.chunks || []);
+    }
+  } catch (e) { error = e?.message || String(e); }
+  const texto = rel.map((c) => sinTildes((c.titulo || "") + " " + (c.contenido || ""))).join("\n");
+  const estado = error ? "error" : rel.length === 0 ? "sin" : (q.espera.length === 0 || q.espera.some((k) => texto.includes(k))) ? "ok" : "dudoso";
+  return { pregunta: q.pregunta, estado, candidatos, pertinentes: rel.length, titulos: [...new Set(rel.map((c) => c.titulo))].slice(0, 3), ms: Date.now() - t0, error };
+}
+
+function PruebaBasePanel() {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState("");
+  const [editando, setEditando] = useState(false);
+  const [corriendo, setCorriendo] = useState(false);
+  const [progreso, setProgreso] = useState(0);
+  const [resultados, setResultados] = useState(null);
+  const [ultimo, setUltimo] = useState(null);
+  useEffect(() => {
+    if (!abierto) return;
+    (async () => {
+      const guardadas = await leerAjusteGlobal("chat_pruebas", 0);
+      setTexto(guardadas || PREGUNTAS_PRUEBA_DEFECTO);
+      try { const u = await leerAjusteGlobal("chat_pruebas_ultimo", 0); if (u) setUltimo(JSON.parse(u)); } catch {}
+    })();
+  }, [abierto]);
+  const preguntas = parsearPreguntasPrueba(texto);
+  const correr = async () => {
+    if (!preguntas.length) return uroToast("No hay preguntas.");
+    setCorriendo(true); setProgreso(0); setResultados([]);
+    const acc = [];
+    for (const q of preguntas) {
+      acc.push(await probarBusquedaBase(q));
+      setProgreso(acc.length); setResultados([...acc]);
+    }
+    setCorriendo(false);
+    registrarEvento("prueba_base", { total: acc.length, ok: acc.filter((r) => r.estado === "ok").length, version: VERSION });
+  };
+  const guardarPreguntas = async () => {
+    const r = await guardarAjusteGlobal("chat_pruebas", texto.trim());
+    if (!r.ok) return uroToast("No se pudo guardar: " + r.error);
+    setEditando(false); uroToast("✓ Preguntas guardadas");
+  };
+  const guardarReferencia = async () => {
+    if (!resultados) return;
+    const ref = { fecha: hoyLocalISO(), version: VERSION, total: resultados.length, ok: resultados.filter((r) => r.estado === "ok").length, dudoso: resultados.filter((r) => r.estado === "dudoso").length, sin: resultados.filter((r) => r.estado === "sin").length, detalle: resultados.map((r) => ({ p: r.pregunta.slice(0, 60), e: r.estado })) };
+    const r = await guardarAjusteGlobal("chat_pruebas_ultimo", JSON.stringify(ref));
+    if (!r.ok) return uroToast("No se pudo guardar: " + r.error);
+    setUltimo(ref); uroToast("✓ Guardado como referencia para comparar");
+  };
+  const ok = (resultados || []).filter((r) => r.estado === "ok").length;
+  const dudoso = (resultados || []).filter((r) => r.estado === "dudoso").length;
+  const sin = (resultados || []).filter((r) => r.estado === "sin").length;
+  const colorEstado = (e) => e === "ok" ? "var(--exito)" : e === "dudoso" ? "var(--alerta)" : "var(--peligro)";
+  const iconoEstado = (e) => e === "ok" ? "✓" : e === "dudoso" ? "⚠" : e === "error" ? "!" : "✗";
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <button onClick={() => setAbierto((v) => !v)} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", display: "flex", alignItems: "center", gap: 6 }}>
+        🧪 Prueba de la base de conocimiento <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", fontWeight: 400 }}>{abierto ? "▾ ocultar" : "▸ ver"}</span>
+      </button>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginTop: 2, lineHeight: 1.45 }}>
+        Corre las preguntas patrón por la misma búsqueda que usa el chat (sin gastar IA) y dice cuántas recuperan la fuente correcta. ✓ encontró la palabra esperada · ⚠ trajo fragmentos pero no la palabra · ✗ no trajo nada pertinente. Guarda el resultado y compáralo después de cada cambio.
+      </div>
+      {abierto && (
+        <div style={{ marginTop: 8 }}>
+          {ultimo && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginBottom: 6 }}>Referencia guardada: <strong>{ultimo.ok}/{ultimo.total}</strong> ✓ · {ultimo.dudoso} ⚠ · {ultimo.sin} ✗ ({ultimo.version}, {ultimo.fecha})</div>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            <button onClick={correr} disabled={corriendo} style={{ padding: "7px 14px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: corriendo ? "default" : "pointer", opacity: corriendo ? 0.7 : 1 }}>{corriendo ? `Probando ${progreso}/${preguntas.length}…` : `▶ Ejecutar ${preguntas.length} preguntas`}</button>
+            <button onClick={() => setEditando((v) => !v)} style={{ padding: "7px 12px", fontSize: "var(--fs-1)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>{editando ? "Cerrar edición" : "✏️ Editar preguntas"}</button>
+            {resultados && !corriendo && <button onClick={guardarReferencia} style={{ padding: "7px 12px", fontSize: "var(--fs-1)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>💾 Guardar como referencia</button>}
+          </div>
+          {editando && (
+            <div style={{ marginBottom: 8 }}>
+              <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={10} style={{ ...inputStyle, resize: "vertical", marginBottom: 6, fontSize: "var(--fs-0)", fontFamily: "monospace" }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={guardarPreguntas} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", fontWeight: 600, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Guardar preguntas</button>
+                <button onClick={() => setTexto(PREGUNTAS_PRUEBA_DEFECTO)} style={{ padding: "6px 12px", fontSize: "var(--fs-1)", background: "var(--fondo-suave)", border: "0.5px solid var(--borde)", color: "var(--texto-sec)", borderRadius: 8, cursor: "pointer" }}>Restaurar las 30 por defecto</button>
+              </div>
+            </div>
+          )}
+          {resultados && resultados.length > 0 && (
+            <div>
+              <div style={{ fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)", marginBottom: 6 }}>
+                Resultado: <span style={{ color: "var(--exito)" }}>{ok} ✓</span> · <span style={{ color: "var(--alerta)" }}>{dudoso} ⚠</span> · <span style={{ color: "var(--peligro)" }}>{sin} ✗</span> de {resultados.length}
+                {ultimo && !corriendo && <span style={{ fontWeight: 400, color: "var(--texto-ter)" }}> · antes {ultimo.ok}/{ultimo.total} ({ok - ultimo.ok >= 0 ? "+" : ""}{ok - ultimo.ok})</span>}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {resultados.map((r, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: "var(--fs-0)", padding: "5px 8px", background: "var(--superficie)", border: "0.5px solid var(--borde)", borderLeft: "3px solid " + colorEstado(r.estado), borderRadius: 6 }}>
+                    <span style={{ color: colorEstado(r.estado), fontWeight: 700, flexShrink: 0 }}>{iconoEstado(r.estado)}</span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ color: "var(--texto)", fontWeight: 600 }}>{r.pregunta}</div>
+                      <div style={{ color: "var(--texto-ter)" }}>{r.error ? `error: ${r.error}` : `${r.candidatos} candidatos → ${r.pertinentes} pertinentes · ${r.ms} ms${r.titulos.length ? " · " + r.titulos.join(" | ") : ""}`}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Consumo de IA (solo administrador) ───────────────────────────
 // Lee la vista v_consumo_ia (tokens del chat y de las funciones de visión,
 // segundos de dictado) agrupada por mes. El saldo que queda no está acá: vive
@@ -2409,6 +2609,8 @@ function ConfigModal({ onClose, currentUser }) {
           })}
         </div>
         <InstruccionesChatPanel />
+        <PruebaBasePanel />
+        <ErroresRecientesPanel />
         <ConsumoIAPanel />
         </>)}
 
@@ -3562,7 +3764,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.5.1";
+const VERSION = "v3.6.1";
 
 // ─── Registro de uso ──────────────────────────────────────────────
 // Mide qué funciones se usan de verdad. Antes la actividad se infería de las
@@ -3618,6 +3820,40 @@ function registrarEvento(evento, detalle = null) {
       .insert({ user_id: userId, evento, detalle, equipo_id: equipoId })
       .then(() => {}, () => {});   // silencioso a propósito
   } catch {}
+}
+
+// ─── Errores en producción → eventos_uso ("error_js") ─────────────
+// Hasta ahora un error en el teléfono de un residente solo se veía si él lo
+// contaba. Todo error no controlado (JS, promesa, render) queda registrado
+// con versión, pestaña y las primeras líneas de la pila; el administrador
+// los ve en Configuración → 🐞 Errores recientes. Uno por firma por sesión y
+// tope de 20 para no inundar la tabla si algo entra en bucle.
+let TAB_ACTUAL = "";
+const ERRORES_VISTOS = new Set();
+let ERRORES_ENVIADOS = 0;
+function registrarErrorJS(tipo, mensaje, pila, extra = {}) {
+  try {
+    const msg = String(mensaje || "").slice(0, 300);
+    if (!msg || /^script error\.?$/i.test(msg) || /ResizeObserver loop/i.test(msg)) return;
+    const firma = `${tipo}|${msg.slice(0, 120)}`;
+    if (ERRORES_VISTOS.has(firma) || ERRORES_ENVIADOS >= 20) return;
+    ERRORES_VISTOS.add(firma); ERRORES_ENVIADOS++;
+    logDiag(`error ${tipo}: ${msg}`);
+    registrarEvento("error_js", {
+      tipo, msg,
+      pila: String(pila || "").split("\n").slice(0, 6).join("\n").slice(0, 600),
+      version: typeof VERSION === "string" ? VERSION : "?",
+      tab: TAB_ACTUAL || null,
+      online: typeof navigator !== "undefined" ? navigator.onLine : null,
+      ua: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 120) : null,
+      ...extra,
+    });
+  } catch {}
+}
+if (typeof window !== "undefined" && !window.__uroErroresHook) {
+  window.__uroErroresHook = true;
+  window.addEventListener("error", (e) => registrarErrorJS("js", e?.message || e?.error?.message, e?.error?.stack, { src: String(e?.filename || "").slice(-60), linea: e?.lineno || null }));
+  window.addEventListener("unhandledrejection", (e) => { const r = e?.reason; registrarErrorJS("promesa", r?.message || (typeof r === "string" ? r : JSON.stringify(r || "")), r?.stack); });
 }
 
 // ─── Consumo de IA: tokens por llamada ────────────────────────────
@@ -11964,7 +12200,7 @@ function ImagenesPaciente({ paciente, currentUser, soloLectura }) {
     const onAdj = (e) => { if (e?.detail?.pacienteId === paciente.id) cargar(); };
     window.addEventListener("uro-imagenes-paciente", onAdj);
     return () => window.removeEventListener("uro-imagenes-paciente", onAdj);
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paciente.id]);
 
   const onFiles = async (e) => {
@@ -15736,34 +15972,6 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     setTema(nuevo);
     if (currentUser?.id) marcarFlagVisto(currentUser.id, "tema", nuevo);
   };
-  // Pestaña abierta: se guarda en el perfil al cambiarla (con retardo) y al
-  // cerrar sesión, y se restaura al volver a entrar. Antes handleLogout ponía
-  // "chat" y eso pisaba el valor guardado en localStorage.
-  const prefsRestauradas = useRef(false);
-  useEffect(() => {
-    if (!currentUser?.id) { prefsRestauradas.current = false; return; }
-    let vivo = true;
-    (async () => {
-      try {
-        const vistos = await leerFlagsVistos(currentUser.id);
-        if (!vivo) return;
-        const t = vistos?.tema;
-        if (t === "light" || t === "dark") setTema((actual) => (actual === t ? actual : t));
-        const tabsValidos = tabsPorRol(currentUser.rol).map((x) => x[0]);
-        if (vistos?.tab && tabsValidos.includes(vistos.tab)) setTab(vistos.tab);
-        if (vistos?.subtab_hospital) setSubTabHospital(vistos.subtab_hospital);
-      } catch {}
-      finally { if (vivo) prefsRestauradas.current = true; }
-    })();
-    return () => { vivo = false; };
-    // eslint-disable-next-line
-  }, [currentUser?.id]);
-  useEffect(() => {
-    if (!currentUser?.id || !prefsRestauradas.current) return;
-    const id = setTimeout(() => { marcarFlagVisto(currentUser.id, "tab", tab); marcarFlagVisto(currentUser.id, "subtab_hospital", subTabHospital); }, 2500);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line
-  }, [tab, subTabHospital]);
   // Si la app cargó bien, se limpia la marca de "ya recargué por caché vieja"
   useEffect(() => { try { sessionStorage.removeItem("uro_recarga_import"); } catch {} }, []);
 
@@ -15798,6 +16006,38 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [subTabHospital, setSubTabHospital] = useState(() => {
     try { return localStorage.getItem("uro_subtab_hospital") || "pacientes"; } catch { return "pacientes"; }
   });
+  // (v3.6.1) Este bloque DEBE ir después de declarar `tab` y `subTabHospital`:
+  // el arreglo de dependencias del segundo efecto se evalúa en cada render y,
+  // puesto antes, leía `subTabHospital` en su zona muerta temporal
+  // ("Cannot access '_e' before initialization") y rompía la app entera.
+  // Pestaña abierta: se guarda en el perfil al cambiarla (con retardo) y al
+  // cerrar sesión, y se restaura al volver a entrar. Antes handleLogout ponía
+  // "chat" y eso pisaba el valor guardado en localStorage.
+  const prefsRestauradas = useRef(false);
+  useEffect(() => {
+    if (!currentUser?.id) { prefsRestauradas.current = false; return; }
+    let vivo = true;
+    (async () => {
+      try {
+        const vistos = await leerFlagsVistos(currentUser.id);
+        if (!vivo) return;
+        const t = vistos?.tema;
+        if (t === "light" || t === "dark") setTema((actual) => (actual === t ? actual : t));
+        const tabsValidos = tabsPorRol(currentUser.rol).map((x) => x[0]);
+        if (vistos?.tab && tabsValidos.includes(vistos.tab)) setTab(vistos.tab);
+        if (vistos?.subtab_hospital) setSubTabHospital(vistos.subtab_hospital);
+      } catch {}
+      finally { if (vivo) prefsRestauradas.current = true; }
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+  useEffect(() => {
+    if (!currentUser?.id || !prefsRestauradas.current) return;
+    const id = setTimeout(() => { marcarFlagVisto(currentUser.id, "tab", tab); marcarFlagVisto(currentUser.id, "subtab_hospital", subTabHospital); }, 2500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, subTabHospital]);
   const [subTabLogbook, setSubTabLogbook] = useState(() => { try { return localStorage.getItem("uro_subtab_logbook") || "lista"; } catch { return "lista"; } });
   useEffect(() => { try { localStorage.setItem("uro_subtab_logbook", subTabLogbook); } catch {} }, [subTabLogbook]);
   const [subTabBiblio, setSubTabBiblio] = useState("protocolos");
@@ -15989,6 +16229,7 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   const chatScrollRef = useRef(null); // contenedor scrolleable de los mensajes del chat
 
   useEffect(() => {
+  TAB_ACTUAL = tab;
   try { localStorage.setItem("uro_tab", tab); }
   catch {}
 }, [tab]);
@@ -17838,6 +18079,8 @@ class ErrorBoundary extends Component {
     this.setState({ info });
     // Queda en la consola para poder revisarlo con el teléfono conectado.
     console.error("[UroSearch] Error no controlado:", error, info?.componentStack);
+    // Y en el servidor, para verlo sin el teléfono.
+    registrarErrorJS("render", error?.message || error, (error?.stack || "") + "\n" + String(info?.componentStack || "").slice(0, 300), { seccion: this.props.seccion || "app" });
     // Se guarda el último error para poder adjuntarlo a un reporte.
     try {
       localStorage.setItem("uro_ultimo_error", JSON.stringify({
