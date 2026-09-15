@@ -1393,17 +1393,22 @@ const MSG_ERROR_CHAT = "No pude completar la consulta. Puede ser la conexión o 
 // Guarda el formulario en localStorage con un pequeño retardo y lo restaura al
 // volver. `limpiar()` se llama al guardar de verdad, para que el borrador no
 // reaparezca sobre un registro ya persistido.
-function useBorrador(clave, valor, aplicar, activo = true) {
+// `admitir(borrador)` decide si el borrador guardado corresponde a lo que se
+// está abriendo. Sin ese filtro, un formulario prellenado (p. ej. el ingreso
+// que propone el Logbook) se llenaba con el borrador del paciente anterior.
+function useBorrador(clave, valor, aplicar, activo = true, admitir = null) {
   const restauradoRef = useRef(false);
   const aplicarRef = useRef(aplicar);
   aplicarRef.current = aplicar;
+  const admitirRef = useRef(admitir);
+  admitirRef.current = admitir;
 
   useEffect(() => {
     if (!activo || !clave || restauradoRef.current) return;
     restauradoRef.current = true;
     try {
       const g = JSON.parse(localStorage.getItem(clave) || "null");
-      if (g && typeof g === "object") aplicarRef.current(g);
+      if (g && typeof g === "object" && (!admitirRef.current || admitirRef.current(g))) aplicarRef.current(g);
     } catch {}
   }, [clave, activo]);
 
@@ -9447,7 +9452,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
           const rm = await listarMiembros(contexto);
           if (rm.ok) rm.miembros.forEach(m => {
             const uid = m.perfiles?.id;
-            if (uid && uid !== currentUser.id) crearNotificacion(uid, `Cirugía completada: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha}) — por ${currentUser.nombre}`, "cirugia");
+            if (uid && uid !== currentUser.id) crearNotificacion(uid, `Cirugía completada: ${cirugia.procedimiento} — ${cirugia.iniciales} (${fmtFecha(cirugia.fecha)}) — por ${currentUser.nombre}`, "cirugia");
           });
         } catch {}
       }
@@ -9533,7 +9538,7 @@ function TablaQuirurgicaPanel({ tablaCirugias, setTablaCirugias, currentUser, co
       const miembro = miembrosEquipo.find(m => m.perfiles?.nombre === nombre);
       const uid = miembro?.perfiles?.id;
       if (uid && uid !== currentUser.id) {
-        crearNotificacion(uid, `Te asignaron como primer ayudante: ${cirugia.procedimiento} — ${cirugia.iniciales} (${cirugia.fecha} ${cirugia.hora?.slice(0,5)}) — por ${currentUser.nombre}`, "cirugia");
+        crearNotificacion(uid, `Te asignaron como primer ayudante: ${cirugia.procedimiento} — ${cirugia.iniciales} (${fmtFecha(cirugia.fecha)} ${cirugia.hora?.slice(0,5)}) — por ${currentUser.nombre}`, "cirugia");
       }
     }
   };
@@ -10581,7 +10586,25 @@ function SelectorCarpetaCascada({ value, onChange, carpetas = [] }) {
   );
 }
 
+// Campo largo que crece con su contenido. Un textarea de 2 filas obliga a
+// desplazarse dentro del recuadro para leer una anamnesis ya escrita: al abrir
+// un ingreso guardado se ve completa de una vez.
+function TextareaAuto({ value, onChange, style, minRows = 2 }) {
+  const ref = useRef(null);
+  const ajustar = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = (el.scrollHeight + 2) + "px";
+  };
+  useEffect(() => { ajustar(); }, [value]);
+  return <textarea ref={ref} rows={minRows} value={value} onChange={onChange} onInput={ajustar} style={{ ...style, resize: "vertical", overflow: "hidden" }} />;
+}
+
 function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExistente, carpetas = [], onGuardarIngreso }) {
+  // Cerrar solo si el clic NACIÓ en el fondo: al seleccionar texto con el mouse
+  // y soltar fuera del formulario, el click cae en el fondo y cerraba el ingreso.
+  const abajoEnIngresoFondo = useRef(false);
   const HOY = hoyLocalISO();
   const DEFAULTS = {
     nombre: "", ficha: "", rut: "", fnac: "", edad: "", sexo: "", domicilio: "", telefono: "", fingreso: HOY,
@@ -10603,16 +10626,32 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
 
   const inp = { width: "100%", padding: "8px 10px", fontSize: "var(--fs-2)", border: "0.5px solid var(--borde)", borderRadius: 7, background: "var(--superficie)", color: "var(--texto)", boxSizing: "border-box", marginBottom: 8 };
   const lbl = { fontSize: "var(--fs-0)", fontWeight: 600, color: "var(--texto-sec)", display: "block", marginBottom: 3 };
-  const campo = (l, k, ml = false) => (<div><label style={lbl}>{l}</label>{ml ? <textarea rows={2} value={f[k]} onChange={e => set(k, e.target.value)} style={{ ...inp, resize: "vertical" }} /> : <input value={f[k]} onChange={e => set(k, e.target.value)} style={inp} />}</div>);
+  const campo = (l, k, ml = false) => (<div><label style={lbl}>{l}</label>{ml ? <TextareaAuto value={f[k]} onChange={e => set(k, e.target.value)} style={inp} /> : <input value={f[k]} onChange={e => set(k, e.target.value)} style={inp} />}</div>);
 
   // Borrador del ingreso: es el formulario más largo de la app y se llena en
   // el pasillo, con interrupciones.
   // Solo para ingresos NUEVOS: al editar uno existente la fuente es la base.
+  // El borrador es uno solo para toda la app. Cuando el ingreso se abre ya
+  // prellenado (desde el Logbook, una foto o un paciente de la lista), el
+  // borrador guardado puede ser de OTRO paciente: antes lo restauraba encima y
+  // aparecía el ingreso anterior. Solo se restaura si coincide el RUT, la
+  // ficha o el nombre.
+  const idIngreso = (d) => [d?.rut, d?.ficha, d?.nombre]
+    .map((x) => String(x || "").trim().toLowerCase().replace(/[^a-z0-9]/g, ""))
+    .filter(Boolean);
+  const admitirBorradorIngreso = (g) => {
+    const dePrefill = idIngreso(ingresoExistente?.datos);
+    if (!dePrefill.length) return true;          // ingreso en blanco: el borrador sirve
+    const delBorrador = idIngreso(g);
+    if (!delBorrador.length) return true;        // borrador sin paciente identificado
+    return delBorrador.some((x) => dePrefill.includes(x));
+  };
   const limpiarBorradorIngreso = useBorrador(
     ingresoExistente?.id ? null : "uro_ingreso_borrador",
     f,
     (g) => setF((p) => ({ ...p, ...g })),
-    !ingresoExistente?.id
+    !ingresoExistente?.id,
+    admitirBorradorIngreso
   );
 
   // Dictado del ingreso: la anamnesis es el campo largo y el que más se dicta.
@@ -11040,7 +11079,10 @@ function IngresoModal({ currentUser, contexto, onCreado, onClose, ingresoExisten
   };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--fondo)", zIndex: 70, display: "flex", justifyContent: "center" }}>
+    <div
+      onPointerDown={(e) => { abajoEnIngresoFondo.current = e.target === e.currentTarget; }}
+      onClick={(e) => { const enFondo = abajoEnIngresoFondo.current && e.target === e.currentTarget; abajoEnIngresoFondo.current = false; if (enFondo) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "var(--fondo)", zIndex: 70, display: "flex", justifyContent: "center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "var(--fondo)", width: "100%", maxWidth: 860, height: "100dvh", overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 40px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, position: "sticky", top: 0, background: "var(--fondo)", paddingBottom: 8, zIndex: 2 }}>
           <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)" }}>📋 Ingreso a Urología</div>
@@ -12926,6 +12968,19 @@ const cargarMiembrosEquipo = async () => {
   const longPressPacRef = useRef(false);
   const pressTimerPac = useRef(null);
   const pressPosPac = useRef(null);
+  // Redistribuir desde el panel de Distribución: dejar presionado a un paciente
+  // abre la hoja de encargados sin tener que ir a buscarlo a su tarjeta.
+  const [redistribuirPac, setRedistribuirPac] = useState(null);
+  const longPressDistRef = useRef(false);
+  const pressTimerDist = useRef(null);
+  const pressPosDist = useRef(null);
+  const gestosRedistribuir = (p) => soloLectura ? {} : ({
+    onPointerDown: (e) => { pressPosDist.current = { x: e.clientX, y: e.clientY }; longPressDistRef.current = false; clearTimeout(pressTimerDist.current); pressTimerDist.current = setTimeout(() => { longPressDistRef.current = true; try { navigator.vibrate?.(20); } catch {} setRedistribuirPac(p); }, 500); },
+    onPointerMove: (e) => { if (pressPosDist.current && (Math.abs(e.clientX - pressPosDist.current.x) > 10 || Math.abs(e.clientY - pressPosDist.current.y) > 10)) clearTimeout(pressTimerDist.current); },
+    onPointerUp: () => clearTimeout(pressTimerDist.current),
+    onPointerCancel: () => clearTimeout(pressTimerDist.current),
+    onPointerLeave: () => clearTimeout(pressTimerDist.current),
+  });
   // Reordena las camas de un servicio de arriba hacia abajo (numérico/alfabético) y persiste el orden.
   const resortCamasServicio = async (servicio) => {
     let ordenados = [];
@@ -15425,6 +15480,40 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
         </div>
       )}
 
+      {redistribuirPac && (() => {
+        // La lista viva del paciente: así los ✓ se actualizan al tocar sin
+        // cerrar la hoja (se puede sacar a uno y agregar a otro de una vez).
+        const pac = pacientes.find(x => x.id === redistribuirPac.id) || redistribuirPac;
+        const encargados = Array.isArray(pac.encargados) ? pac.encargados : [];
+        const alternar = (uid) => asignarEncargados(pac.id, encargados.includes(uid) ? encargados.filter(x => x !== uid) : [...encargados, uid]);
+        return (
+          <div onClick={()=>setRedistribuirPac(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:70}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",borderTopLeftRadius:16,borderTopRightRadius:16,padding:"16px 16px 24px",width:"100%",maxWidth:480,maxHeight:"80vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+              <div style={{width:36,height:4,background:"var(--borde)",borderRadius:2,margin:"0 auto 12px"}}/>
+              <div style={{fontSize:"var(--fs-2)",fontWeight:700,color:"var(--texto)"}}>{pac.iniciales}</div>
+              <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",marginBottom:12}}>Cama {pac.cama||"—"} · {pac.servicio} · ¿quién queda a cargo?</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {miembrosEquipo.length === 0 ? (
+                  <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic"}}>Este contexto no tiene equipo con miembros.</div>
+                ) : miembrosEquipo.map(m => {
+                  const uid = m.perfiles?.id || m.user_id;
+                  if (!uid) return null;
+                  const asignado = encargados.includes(uid);
+                  return (
+                    <button key={uid} onClick={()=>alternar(uid)} style={{display:"flex",alignItems:"center",gap:10,textAlign:"left",padding:"11px 12px",fontSize:"var(--fs-2)",fontWeight:asignado?700:500,background:asignado?"var(--chip-azul-bg)":"var(--fondo-suave)",color:"var(--texto)",border:`0.5px solid ${asignado?"var(--primario)":"var(--borde)"}`,borderRadius:9,cursor:"pointer"}}>
+                      <span style={{width:11,height:11,borderRadius:"50%",background:colorMedico(uid),flexShrink:0}}/>
+                      <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombreMiembroPac(uid)}</span>
+                      <span style={{color:"var(--primario)",fontWeight:700}}>{asignado?"✓":""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={()=>setRedistribuirPac(null)} style={{width:"100%",marginTop:12,padding:11,fontSize:"var(--fs-2)",background:"none",color:"var(--texto-ter)",border:"none",cursor:"pointer"}}>Listo</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {showDistribucion && (
         <div onClick={()=>setShowDistribucion(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:60,padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--fondo)",border:"0.5px solid var(--borde)",borderRadius:14,padding:"18px",width:"100%",maxWidth:360,maxHeight:"80vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
@@ -15448,11 +15537,15 @@ const asignarEncargados = async (pacienteId, nuevosEncargados) => {
                     {abierto && <div style={{padding:"0 12px 10px 30px",display:"flex",flexDirection:"column",gap:4}}>
                       {suyos.length===0 ? <div style={{fontSize:"var(--fs-1)",color:"var(--texto-ter)",fontStyle:"italic"}}>Sin pacientes activos.</div> :
                        suyos.map(p=>(
-                        <div key={p.id} onClick={()=>{setShowDistribucion(false);setDistDoctor(null);abrirFicha(p);}} style={{fontSize:"var(--fs-1)",color:"var(--texto)",cursor:"pointer",display:"flex",justifyContent:"space-between",gap:8,padding:"2px 0"}}>
+                        <div key={p.id} {...gestosRedistribuir(p)}
+                          onClick={()=>{ if (longPressDistRef.current) { longPressDistRef.current = false; return; } setShowDistribucion(false);setDistDoctor(null);abrirFicha(p); }}
+                          title={soloLectura ? undefined : "Deja presionado para redistribuir"}
+                          style={{fontSize:"var(--fs-1)",color:"var(--texto)",cursor:"pointer",display:"flex",justifyContent:"space-between",gap:8,padding:"2px 0",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}>
                           <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.iniciales}</span>
                           <span style={{color:"var(--texto-ter)",flexShrink:0}}>Cama {p.cama||"—"} · {p.servicio}</span>
                         </div>
                       ))}
+                      {!soloLectura && suyos.length>0 && <div style={{fontSize:"var(--fs-0)",color:"var(--texto-ter)",fontStyle:"italic",marginTop:2}}>Deja presionado a un paciente para redistribuirlo.</div>}
                     </div>}
                   </div>
                   );
@@ -16237,8 +16330,13 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
   // ─── Tutorial: se muestra automáticamente la 1ª vez por usuario ───
   // La marca vive en el servidor, así que no reaparece al cambiar de equipo.
   const claveTutorial = `tutorial_v${TUTORIAL_VERSION}`;
+  // El gate legal manda: mientras haya un documento por aceptar, el tutorial no
+  // se monta (se abría encima del texto de aceptación y tapaba el "Acepto").
+  const [docLegalPendiente, setDocLegalPendiente] = useState(null);
+  const [legalChequeado, setLegalChequeado] = useState(false);
   useEffect(() => {
     if (!currentUser) return;
+    if (!legalChequeado || docLegalPendiente) return;
     let vivo = true;
     (async () => {
       const vistos = await leerFlagsVistos(currentUser.id);
@@ -16250,7 +16348,7 @@ const [guardandoMapa, setGuardandoMapa] = useState(false);
       if (vivo && !vistos[claveTutorial]) setTutorialOpen(true);
     })();
     return () => { vivo = false; };
-  }, [currentUser]);
+  }, [currentUser, legalChequeado, docLegalPendiente]);
 
   const cerrarTutorial = () => {
     setTutorialOpen(false);
@@ -16428,7 +16526,6 @@ useEffect(() => {
   // cuando existe uno activo: sin fila, la app funciona igual que hoy. Cada
   // aceptación queda registrada con usuario, versión y fecha — que es lo que
   // vale como consentimiento en línea (Ley 19.799 / eIDAS).
-  const [docLegalPendiente, setDocLegalPendiente] = useState(null);
   useEffect(() => {
     if (!currentUser) return;
     let vivo = true;
@@ -16436,13 +16533,16 @@ useEffect(() => {
       try {
         const { data: docs } = await supabase.from("documentos_legales")
           .select("clave, version, titulo, cuerpo").eq("activo", true);
-        if (!vivo || !docs?.length) return;
+        if (!vivo) return;
+        if (!docs?.length) { setLegalChequeado(true); return; }
         const { data: acept } = await supabase.from("aceptaciones_legales")
           .select("clave, version").eq("user_id", currentUser.id);
         const hechas = new Set((acept || []).map((a) => `${a.clave}|${a.version}`));
         const falta = docs.find((d) => !hechas.has(`${d.clave}|${d.version}`));
-        if (vivo && falta) setDocLegalPendiente(falta);
-      } catch {}
+        if (!vivo) return;
+        if (falta) setDocLegalPendiente(falta);
+        setLegalChequeado(true);
+      } catch { if (vivo) setLegalChequeado(true); }
     })();
     return () => { vivo = false; };
   }, [currentUser]);

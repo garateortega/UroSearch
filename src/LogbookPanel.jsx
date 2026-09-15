@@ -239,6 +239,41 @@ const esIncidente = (r) => r?.escala_complicacion === "incidente";
 // alias, así que un grupo descartado sigue descartado tras actualizar la app.
 const claveIds = (items) => "ids:" + items.map((r) => String(r.id)).sort().join("-");
 
+// Descartes de "posible duplicado". Vivían solo en localStorage: al cerrar y
+// abrir la app (iOS borra el almacenamiento de las webapps tras unos días) o al
+// entrar desde otro dispositivo, la sugerencia ya revisada volvía a aparecer.
+// Ahora se guardan en perfiles.onboarding_visto —el mismo jsonb de los flags de
+// onboarding, sin migración nueva— y localStorage queda como espejo.
+const CLAVE_DUP_LOCAL = "uro_logbook_dup_ign";
+const CLAVE_DUP_SERVIDOR = "logbook_dup_ign";
+async function leerDupIgnServidor(userId) {
+  try {
+    const { data, error } = await supabase.from("perfiles").select("onboarding_visto").eq("id", userId).single();
+    if (error) throw error;
+    const v = data?.onboarding_visto?.[CLAVE_DUP_SERVIDOR];
+    return Array.isArray(v) ? v : [];
+  } catch (e) {
+    console.warn("[UroSearch] no se pudieron leer los duplicados descartados:", e?.message || e);
+    return null;   // sin red o sin la columna: se sigue con el espejo local
+  }
+}
+async function guardarDupIgnServidor(userId, lista) {
+  try {
+    // Relee antes de escribir para no pisar flags guardados por otro dispositivo.
+    const { data } = await supabase.from("perfiles").select("onboarding_visto").eq("id", userId).single();
+    const previos = data?.onboarding_visto || {};
+    const { error } = await supabase.from("perfiles")
+      .update({ onboarding_visto: { ...previos, [CLAVE_DUP_SERVIDOR]: lista.slice(-300) } })
+      .eq("id", userId);
+    if (error) throw error;
+  } catch (e) {
+    console.warn("[UroSearch] no se pudo guardar el descarte de duplicados:", e?.message || e);
+  }
+}
+
+// Fecha ISO (YYYY-MM-DD) → dd/mm/aaaa. Cualquier otro formato pasa tal cual.
+const fFecha = (f) => { const m = String(f || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}/${m[2]}/${m[1]}` : (f || "—"); };
+
 // "No aplica" es una respuesta válida al registrar, pero no aporta nada impresa
 // junto al nombre del procedimiento.
 const latTxt = (r) => (r?.lateralidad && r.lateralidad !== "No aplica" ? r.lateralidad : "");
@@ -691,7 +726,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const [complGuardando, setComplGuardando] = useState(false);
   const pulsacionRef = useRef(null);                           // temporizador de la pulsación larga
   const [dupIgnorados, setDupIgnorados] = useState(() => {     // grupos de duplicados marcados como "no son duplicados"
-    try { return JSON.parse(localStorage.getItem("uro_logbook_dup_ign") || "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(CLAVE_DUP_LOCAL) || "[]"); } catch { return []; }
   });
   const [resumenIA, setResumenIA] = useState("");           // resumen escrito por la IA
   const [resumenCargando, setResumenCargando] = useState(false);
@@ -851,10 +886,12 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   }, [reg.hora_inicio, reg.hora_termino]);
 
   // ─── Guardar ───
+  // Devuelve true si el registro quedó guardado y false si no (lo usa el botón
+  // "Guardar e ingresar": no tiene sentido saltar al ingreso perdiendo la cirugía).
   const guardar = async () => {
     setError("");
-    if (!reg.procedimiento.trim()) return setError("Ingresa el procedimiento");
-    if (!reg.fecha) return setError("Ingresa la fecha");
+    if (!reg.procedimiento.trim()) { setError("Ingresa el procedimiento"); return false; }
+    if (!reg.fecha) { setError("Ingresa la fecha"); return false; }
     setGuardando(true);
 
     let foto_path = null;
@@ -919,7 +956,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       if (result.ok) setRegistros((prev) => [result.registro, ...prev].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "")));
     }
     setGuardando(false);
-    if (!result.ok) return setError(result.error);
+    if (!result.ok) { setError(result.error); return false; }
     // Si hay un paciente hospitalizado con nombre coincidente (sin tildes), le
     // adjunta el protocolo TRANSCRITO completo como evolución tipo "protocolo".
     // Desde la ficha se abre con "📄 Ver protocolo". Al editar el registro, la
@@ -987,10 +1024,11 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
       setComplementoOpen(false);
       setError("");
       try { window.scrollTo?.({ top: 0, behavior: "smooth" }); } catch {}
-      return;
+      return true;
     }
     resetForm();
     setVista("lista");
+    return true;
   };
 
   const resetForm = () => {
@@ -1254,7 +1292,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   };
 
   const eliminar = async (r) => {
-    if (!(await uroConfirm(`¿Eliminar "${r.procedimiento}" del ${r.fecha}?\n\nNo podrás recuperarlo.`))) return;
+    if (!(await uroConfirm(`¿Eliminar "${r.procedimiento}" del ${fFecha(r.fecha)}?\n\nNo podrás recuperarlo.`))) return;
     const result = await eliminarRegistroLogbook(r.id);
     if (!result.ok) return uroToast("Error: " + result.error);
     if (r.foto_path) eliminarFotoLogbook(r.foto_path);
@@ -1326,7 +1364,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   // Corrige un falso positivo: la extracción automática marcó complicación
   // donde no la hubo. Limpia complicación, Clavien, momento y detalle.
   const quitarComplicacion = async (r) => {
-    if (!(await uroConfirm(`¿Marcar "${r.procedimiento}" del ${r.fecha} como SIN complicación?`))) return;
+    if (!(await uroConfirm(`¿Marcar "${r.procedimiento}" del ${fFecha(r.fecha)} como SIN complicación?`))) return;
     const result = await actualizarRegistroLogbook(r.id, camposEvento("ninguno"));
     if (!result.ok) return uroToast("Error: " + result.error);
     setRegistros((prev) => prev.map((x) => (x.id === r.id ? result.registro : x)));
@@ -1419,8 +1457,27 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
   const ignorarDuplicado = (claveIds) => {
     const nuevo = [...dupIgnorados, claveIds];
     setDupIgnorados(nuevo);
-    try { localStorage.setItem("uro_logbook_dup_ign", JSON.stringify(nuevo)); } catch {}
+    try { localStorage.setItem(CLAVE_DUP_LOCAL, JSON.stringify(nuevo)); } catch {}
+    if (currentUser?.id) guardarDupIgnServidor(currentUser.id, nuevo);
   };
+
+  // Al entrar: une lo descartado en este dispositivo con lo del servidor y, si
+  // este dispositivo tenía descartes que allá no estaban, los sube una vez.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let vivo = true;
+    (async () => {
+      const remoto = await leerDupIgnServidor(currentUser.id);
+      if (!vivo || !remoto) return;
+      let local = [];
+      try { local = JSON.parse(localStorage.getItem(CLAVE_DUP_LOCAL) || "[]"); } catch {}
+      const union = Array.from(new Set([...local, ...remoto]));
+      setDupIgnorados(union);
+      try { localStorage.setItem(CLAVE_DUP_LOCAL, JSON.stringify(union)); } catch {}
+      if (union.length > remoto.length) guardarDupIgnServidor(currentUser.id, union);
+    })();
+    return () => { vivo = false; };
+  }, [currentUser?.id]);
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -1741,7 +1798,16 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
               <div style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-1)", color: "var(--texto)", lineHeight: 1.45 }}>
                 🏥 <b>{reg.iniciales}</b> no aparece en tus pacientes hospitalizados. ¿Quieres ingresarlo?
               </div>
-              <button onClick={() => { window.dispatchEvent(new CustomEvent("uro-ingreso-prefill", { detail: { nombre: reg.iniciales || "", rut: reg.rut || "", ficha: reg.ficha_clinica || "", edad: reg.edad || "", sexo: reg.sexo || "", hipotesis: reg.diagnostico_pre || reg.procedimiento || "" } })); setSugerirIngreso(false); }} style={{ flexShrink: 0, padding: "7px 12px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: "pointer" }}>Ingresar</button>
+              <button disabled={guardando} onClick={async () => {
+                // Los datos se copian ANTES de guardar: al guardar, el formulario
+                // se limpia. Y se guarda primero, porque saltar al ingreso dejaba
+                // la cirugía sin registrar (y sin contar en las métricas).
+                const detalle = { nombre: reg.iniciales || "", rut: reg.rut || "", ficha: reg.ficha_clinica || "", edad: reg.edad || "", sexo: reg.sexo || "", hipotesis: reg.diagnostico_pre || reg.procedimiento || "" };
+                const ok = await guardar();
+                if (ok === false) return;
+                setSugerirIngreso(false);
+                window.dispatchEvent(new CustomEvent("uro-ingreso-prefill", { detail: detalle }));
+              }} style={{ flexShrink: 0, padding: "7px 12px", fontSize: "var(--fs-0)", fontWeight: 700, background: "var(--primario)", color: "var(--texto-inv)", border: "none", borderRadius: 8, cursor: guardando ? "default" : "pointer", opacity: guardando ? 0.6 : 1 }}>{guardando ? "…" : "Guardar e ingresar"}</button>
               <button onClick={() => setSugerirIngreso(false)} style={{ flexShrink: 0, background: "none", border: "none", color: "var(--texto-ter)", fontSize: 15, cursor: "pointer" }}>✕</button>
             </div>
           )}
@@ -1976,7 +2042,7 @@ export default function LogbookPanel({ currentUser, equipos = [], vista = "lista
                     {r.procedimiento}{latTxt(r) ? ` (${latTxt(r).toLowerCase()})` : ""}
                   </div>
                   <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-sec)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span>📅 {r.fecha}</span>
+                    <span>📅 {fFecha(r.fecha)}</span>
                     {r.iniciales && <span>👤 {r.iniciales}{r.edad != null ? `, ${r.edad}a` : ""}</span>}
                     {r.ficha_clinica && <span>FC {r.ficha_clinica}</span>}
                     {r.rut && <span>{r.rut}</span>}

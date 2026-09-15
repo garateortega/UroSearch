@@ -22,3 +22,14 @@ body {
   min-height: 100vh;
   background: #e8f3fb;
 }
+
+/* iOS hace zoom al enfocar un campo cuya letra mide menos de 16px y después
+   deja la vista corrida: hay que desplazar la pestaña para volver a verla
+   completa. Solo en Safari/iOS se fuerza el mínimo de 16px en los campos; el
+   resto de los dispositivos conserva la tipografía de la app.
+   Va con !important porque los campos llevan su tamaño en estilo inline. */
+@supports (-webkit-touch-callout: none) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
