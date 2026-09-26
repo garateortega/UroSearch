@@ -2445,6 +2445,76 @@ async function pedirRespuestaIA({ model, maxTokens, system, messages, token, onD
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// CHAT v2: el cerebro de Uros vive en la Edge Function.
+// La app manda { v: 2, modo, messages, contexto } y recibe el mismo flujo SSE de
+// siempre (text_delta) más eventos "urosearch": estado ("Buscando en la
+// biblioteca…"), reiniciar (descartar texto previo a las herramientas), mapa
+// (para des-anonimizar pacientes), fuentes, datos y fin (uso de tokens).
+// ════════════════════════════════════════════════════════════════
+async function pedirRespuestaUros({ modo, messages, contexto, token, onDelta, onMeta }) {
+  const url = import.meta.env.VITE_CHAT_FUNCTION_URL;
+  const headers = { "Content-Type": "application/json", "Authorization": `Bearer ${token}` };
+  const body = JSON.stringify({ v: 2, modo, messages, contexto: contexto || null, stream: true, version: VERSION });
+  const mensajeErrorApi = (data, res) =>
+    data?.error?.message || (typeof data?.error === "string" ? data.error : null) || data?.message || (res ? `${res.status} ${res.statusText}` : "error de la API");
+
+  const res = await fetch(url, { method: "POST", headers, body });
+  if (!res.ok) {
+    let data = null;
+    try { data = await res.json(); } catch {}
+    throw new Error(mensajeErrorApi(data, res));
+  }
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (!ct.includes("event-stream")) {
+    // Respuesta completa (sin streaming): misma forma que la API.
+    const data = await res.json();
+    if (data?.error) throw new Error(mensajeErrorApi(data, res));
+    anotarUsoIA(data, "chat", data?.model);
+    if (onMeta) {
+      onMeta({ evento: "mapa", mapa: data.mapa || [] });
+      onMeta({ evento: "fuentes", fuentes: data.fuentes || [], general: !!data.general });
+      if (data.datos) onMeta({ evento: "datos", datos: data.datos });
+    }
+    return data.content?.find((b) => b.type === "text")?.text || "";
+  }
+
+  const lector = res.body.getReader();
+  const dec = new TextDecoder();
+  let buffer = "", texto = "", modeloResp = null;
+  while (true) {
+    const { done, value } = await lector.read();
+    if (done) break;
+    buffer += dec.decode(value, { stream: true });
+    const lineas = buffer.split("\n");
+    buffer = lineas.pop() || "";
+    for (const linea of lineas) {
+      if (!linea.startsWith("data:")) continue;
+      const crudo = linea.slice(5).trim();
+      if (!crudo || crudo === "[DONE]") continue;
+      let ev;
+      try { ev = JSON.parse(crudo); } catch { continue; }
+      if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+        texto += ev.delta.text;
+        onDelta && onDelta(texto);
+      } else if (ev.type === "urosearch") {
+        if (ev.evento === "reiniciar") texto = "";
+        if (ev.evento === "fin") {
+          modeloResp = ev.modelo || modeloResp;
+          anotarUsoIA({ usage: ev.uso, model: ev.modelo }, "chat", ev.modelo);
+        }
+        onMeta && onMeta(ev);
+      } else if (ev.type === "message_start" && ev.message?.model) {
+        modeloResp = ev.message.model;
+      } else if (ev.type === "error") {
+        throw new Error(ev.error?.message || "error de la API");
+      }
+    }
+  }
+  return texto;
+}
+
 async function tokenFuncionIA() {
   try {
     const { data } = await supabase.auth.getSession();
@@ -2591,8 +2661,8 @@ function ConfigModal({ onClose, currentUser }) {
         <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", marginBottom: 2 }}>🤖 Fuente de respuestas del chat</div>
         <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", marginBottom: 6, lineHeight: 1.45 }}>Solo administradores. Rige para todos los usuarios de UroSearch.</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-          {[["verificada", "📚 Solo base de datos verificada", "Uros responde únicamente con documentos de la biblioteca. Si no encuentra nada, ofrece usar su conocimiento y el usuario decide caso a caso."],
-            ["general", "🧠 Base + conocimiento general de la IA", "Si no hay documentos en la base, Uros responde directo con su conocimiento clínico, marcado como fuera de la base."]].map(([id, label, desc]) => {
+          {[["verificada", "📚 Solo base de datos verificada", "Uros responde únicamente con protocolos del servicio y documentos de la biblioteca. Si no encuentra nada, ofrece usar su conocimiento y el usuario decide caso a caso."],
+            ["general", "🧠 Base + conocimiento general de la IA", "Uros responde siempre como urólogo: cita protocolos y biblioteca cuando los tiene y marca la respuesta cuando se basa en su conocimiento propio. Recomendado."]].map(([id, label, desc]) => {
             const on = modoGlobal === id;
             return (
               <div key={id} onClick={async () => {
@@ -5002,6 +5072,11 @@ function ChatBubble({ msg, userInitials, onPlayVideo, imagenes }) {
         {msg.pacientesConsulta && (
           <div style={{marginTop:6,padding:"7px 10px",background:"var(--chip-rosa-bg)",border:"0.5px solid var(--chip-rosa-borde)",borderRadius:8}}>
             <div style={{fontSize:"var(--fs-xs)",fontWeight:500,color:"var(--chip-rosa)"}}>🏥 Información de tus pacientes · {msg.pacientesConsulta.cantidad} {msg.pacientesConsulta.cantidad === 1 ? "paciente" : "pacientes"}</div>
+          </div>
+        )}
+        {msg.datosConsulta && msg.datosConsulta.consultas > 0 && (
+          <div style={{marginTop:6,padding:"7px 10px",background:"var(--fondo-suave)",border:"0.5px solid var(--borde)",borderRadius:8}}>
+            <div style={{fontSize:"var(--fs-xs)",fontWeight:500,color:"var(--primario-osc)"}}>📊 Calculado con datos del servicio · {msg.datosConsulta.consultas} {msg.datosConsulta.consultas === 1 ? "consulta" : "consultas"}{Array.isArray(msg.datosConsulta.tablas) && msg.datosConsulta.tablas.length ? ` (${msg.datosConsulta.tablas.join(", ")})` : ""}</div>
           </div>
         )}
         {msg.fuentes && msg.fuentes.length > 0 && (
@@ -16193,6 +16268,7 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
     if (fnOculta(config, "tab:" + tab)) setTab("chat");
   }, [config, tab]);
   const [messages, setMessages] = useState([]);
+  const [estadoUros, setEstadoUros] = useState(""); // texto del indicador mientras Uros usa herramientas
   const [conversaciones, setConversaciones] = useState([]); // lista de conversaciones del usuario
 const [conversacionActual, setConversacionActual] = useState(null); // ID de la conversación abierta
 const [panelConversacionesAbierto, setPanelConversacionesAbierto] = useState(false); // mostrar/ocultar lista
@@ -17037,18 +17113,20 @@ if (imgsResult.ok) {
   };
 
  // Acepta un texto directo (preguntas sugeridas); si llega un evento de click, se ignora.
+ // v2: el armado del contexto (biblioteca, pacientes, tabla, logbook, protocolos)
+ // vive en la Edge Function (supabase/functions/chat-ia). La app manda el
+ // historial y el modo, y muestra lo que llega.
  const sendMsg = async (textoDirecto) => {
   const txt = (typeof textoDirecto === "string" ? textoDirecto : input).trim();
   if (!txt || loading) return;
-  
-  const newMsgs = [...messages, {role:"user", content:txt}];
-  setMessages(newMsgs); 
-  setInput(""); 
-  setLoading(true);
 
-  // Perro guardián: si algo se cuelga o lanza fuera del try de más abajo, el
-  // chat se quedaba en "Consultando…" para siempre. Este temporizador garantiza
-  // que siempre haya una respuesta y que el input se libere.
+  const newMsgs = [...messages, {role:"user", content:txt}];
+  setMessages(newMsgs);
+  setInput("");
+  setLoading(true);
+  setEstadoUros("");
+
+  // Perro guardián: si algo se cuelga, siempre hay una respuesta y el input se libera.
   let respondido = false;
   const fallar = (motivo) => {
     if (respondido) return;
@@ -17060,378 +17138,59 @@ if (imgsResult.ok) {
     });
     setLoading(false);
   };
-  const relojChat = setTimeout(() => fallar("timeout"), 75000);
+  // Una consulta con varias herramientas (buscar + consultar datos + redactar) puede tomar más de un minuto.
+  const relojChat = setTimeout(() => fallar("timeout"), 150000);
   const t0Chat = Date.now();
-  // Declaradas acá y no dentro del try: el bloque finally que registra la
-  // métrica está fuera de ese alcance y no podría leerlas.
-  let mtDocs = 0, mtPac = false, mtLog = false, mtProto = false, mtGeneral = false;
-
-  // ── Frontera de protección ──
-  // TODO lo que sigue —detección de pacientes, cirugías, videos, logbook,
-  // protocolos, RAG y la llamada al modelo— corre dentro de este try. La serie
-  // de cuelgues en "Consultando…" tuvo siempre la misma anatomía: un campo
-  // nulo de la base (keywords de un video, iniciales de un paciente) lanzaba
-  // en el tramo previo al try y la excepción escapaba. Al mover la frontera
-  // acá, cualquier fallo de armado de la consulta produce la respuesta
-  // estándar de error en vez de un chat colgado. Los datos opcionales de la
-  // base NUNCA deben poder tumbar la consulta.
-  try {
-  
-  // ── Detección de intención ANTES de todo ──────────────────────
-  // Permite saltarse búsquedas innecesarias (respuesta más rápida) y no citar
-  // la base de conocimiento cuando no corresponde (saludos, pacientes, tabla).
-  const esCharla = esCharlaBasica(txt);
-  const consultaCirugias = buscarCirugiasRelevantes(txt);
-  // Los pacientes los carga el panel de Servicio al visitarlo. Si la primera
-  // acción de la sesión es preguntar en el chat, la lista en memoria está
-  // vacía y el chat respondía "no tienes pacientes" teniéndolos: acá se van a
-  // buscar directo antes de decidir.
-  // Política de fuente definida por el administrador. Si la lectura falla, el
-  // valor por defecto es el conservador: limitarse a la biblioteca.
-  const modoChatVigente = await leerModoChatGlobal();
-  const instruccionesAdmin = (await leerAjusteGlobal("chat_instrucciones")).trim().slice(0, 4000);
-
-  let listaPacChat = pacientes;
-  if ((!listaPacChat || listaPacChat.length === 0) && currentUser) {
-    try {
-      const rp = await listarPacientes(currentUser.id, contexto);
-      if (rp.ok) { listaPacChat = rp.pacientes; setPacientes(rp.pacientes); }
-    } catch {}
-  }
-  const consultaPacientes = buscarPacientesRelevantes(txt, listaPacChat);
-  mtPac = !!consultaPacientes;
-  // Una pregunta puede ser sobre pacientes Y necesitar la biblioteca a la vez
-  // ("indicaciones de RTU de próstata" con un paciente prostático en la lista).
-  // Antes, detectar pacientes CANCELABA la búsqueda documental y el chat
-  // respondía "no tengo el documento" sin haber buscado nunca.
-  // "Busca en conocimiento general", "usa tu conocimiento", "responde igual":
-  // el usuario pide EXPLÍCITAMENTE responder fuera de la base. Antes esa frase
-  // pasaba por la búsqueda como una consulta más, calzaba por palabras sueltas
-  // ("general", "busca") con cualquier manual, y el modelo —obligado a usar
-  // solo esos documentos— se negaba y encima los citaba como fuente.
-  const pideGeneralExplicito = !esCharla && PIDE_CONOCIMIENTO_GENERAL.test(sinTildes(txt));
-  const necesitaBase = !esCharla && !pideGeneralExplicito;
-  // La búsqueda parte de inmediato y corre EN PARALELO con la persistencia.
-  // Si la RPC falla (esquema en caché de PostgREST, permisos, firma cambiada),
-  // buscarChunks devuelve {ok:false} y el chat respondía "no encontré nada en
-  // la base" — indistinguible de una búsqueda legítimamente vacía. Ese error
-  // silencioso costó una sesión entera de diagnóstico: ahora queda registrado.
-  const busquedaPromise = necesitaBase
-    ? buscarChunks(expandirConsulta(txt), 20).then((r) => {
-        if (!r.ok) logDiag(`biblioteca: la búsqueda FALLÓ → ${r.error}`);
-        else logDiag(`biblioteca: ${r.chunks.length} fragmentos para "${txt.slice(0, 40)}"`);
-        return r;
-      }).catch((e) => { logDiag(`biblioteca: excepción → ${e?.message || e}`); return { ok: false, chunks: [] }; })
-    : Promise.resolve({ ok: true, chunks: [] });
-  
-  // ============================================
-  // PERSISTENCIA: obtener sesión actual de Supabase
-  // ============================================
-  const sesionResult = await getSession();
-  const sesionActiva = sesionResult.ok ? sesionResult.session : null;
-
-  // Crear la conversación y guardar el mensaje del usuario son escrituras en
-  // la base que ANTES bloqueaban la llamada al modelo. Ahora corren en
-  // paralelo: solo se espera su resultado al final, para guardar la respuesta.
-  const conversacionPromise = (async () => {
-    let id = conversacionActual;
-    if (!id && currentUser && sesionActiva) {
-      const titulo = generarTituloDesdeMensaje(txt);
-      const crearResult = await crearConversacion(sesionActiva.user.id, titulo, modo);
-      if (crearResult.ok) {
-        id = crearResult.conversacion.id;
-        setConversacionActual(id);
-        // Agregar la nueva conversación al inicio; limitar a MAX_CONVERSACIONES
-        setConversaciones(prev => {
-          const nueva = [crearResult.conversacion, ...prev];
-          if (nueva.length > MAX_CONVERSACIONES) {
-            const sobrantes = nueva.slice(MAX_CONVERSACIONES); // las más antiguas
-            sobrantes.forEach(c => { eliminarConversacion(c.id).catch(()=>{}); });
-            return nueva.slice(0, MAX_CONVERSACIONES);
-          }
-          return nueva;
-        });
-      } else {
-        console.error("Error al crear conversación:", crearResult.error);
-      }
-    }
-    if (id && sesionActiva) {
-      agregarMensaje(id, sesionActiva.user.id, "usuario", txt, modo).catch(() => {});
-    }
-    return id;
-  })();
-  conversacionPromise.catch(() => {});
-  
-  // ============================================
-  // LÓGICA ORIGINAL DEL CHAT
-  // ============================================
-  const videosRelevantes = esCharla ? [] : buscarVideosRelevantes(txt);
-
-  // Imágenes candidatas: si el catálogo es chico va entero; si crece, solo las
-  // que calzan por keywords/título con la consulta (ya expandida de siglas).
-  let ctxImagenes = "";
-  if (!esCharla && imagenesChat.length > 0) {
-    const qImg = sinTildes(expandirSiglas(txt));
-    const candidatas = (imagenesChat.length <= 10
-      ? imagenesChat
-      : imagenesChat.filter((im) =>
-          (im.keywords || []).some((k) => qImg.includes(sinTildes(k))) ||
-          sinTildes(im.titulo).split(" ").some((p) => p.length >= 4 && qImg.includes(p)))
-    ).slice(0, 12);
-    if (candidatas.length > 0) {
-      ctxImagenes = `\n\n=== IMÁGENES DISPONIBLES ===\nPuedes ilustrar tu respuesta insertando el marcador [IMAGEN:clave] tal cual, en su propia línea, en el punto exacto donde aporte. Máximo 2 por respuesta. Úsalas SOLO si son directamente atingentes a lo preguntado; ante la duda, no insertes ninguna. Nunca inventes claves que no estén en esta lista.\n${candidatas.map((im) => `- [IMAGEN:${im.clave}] · ${im.titulo}${im.descripcion ? ` — ${im.descripcion}` : ""}`).join("\n")}`;
-    }
-  }
-  // Fragmentos de la base (la búsqueda ya venía corriendo en paralelo).
-  // Se filtran por relevancia real: si el calce con la consulta es pobre,
-  // no se usan ni se citan.
-  let docsRelevantes = [];
-  const busqueda = await busquedaPromise;
-  if (busqueda.ok) {
-    docsRelevantes = filtrarChunksRelevantes(expandirSiglas(txt), busqueda.chunks || []);
-    // Segunda pasada de precisión: si nada pasó el filtro pero la consulta
-    // tiene términos fuertes, se busca SOLO con ellos (sin adjetivos que
-    // arrastran fragmentos ajenos) y se filtra de nuevo.
-    if (docsRelevantes.length === 0 && clasificarTerminos(expandirSiglas(txt)).some((g) => g.clase === "fuerte")) {
-      try {
-        const q2 = expandirConsulta(txt, { soloFuertes: true });
-        logDiag(`chat: sin fragmentos pertinentes en la 1ª pasada; 2ª pasada con "${q2.slice(0, 80)}"`);
-        const r2 = await buscarChunks(q2, 20);
-        if (r2.ok) docsRelevantes = filtrarChunksRelevantes(expandirSiglas(txt), r2.chunks || []);
-      } catch (e) { logDiag(`chat: 2ª pasada falló → ${e?.message || e}`); }
-    }
-    logDiag(`chat: candidatos=${(busqueda.chunks || []).length} pertinentes=${docsRelevantes.length}${docsRelevantes.length ? " · " + docsRelevantes.map((d) => (d.titulo || "").slice(0, 40)).join(" | ") : ""}`);
-    // El segundo filtro es local y puede descartar todo lo que trajo la base:
-    // conviene ver ambos números para saber cuál de los dos dejó al chat sin
-    // material.
-    logDiag(`biblioteca: ${(busqueda.chunks || []).length} de la base → ${docsRelevantes.length} tras el filtro local`);
-    mtDocs = docsRelevantes.length;
-  }
-  const tieneFuentes = docsRelevantes.length > 0;
-  // Contexto del logbook quirúrgico si la pregunta lo amerita
-  let ctxLogbook = "";
-  {
-    const qLog = txt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    // Antes exigía frases literales ("logbook", "mis cirugias"). Preguntas
-    // naturales como "¿cuántas RTU he hecho el último año?" no contenían
-    // ninguna, así que el chat respondía sin ver un solo registro.
-    // Ahora basta con que la pregunta sea sobre la propia actividad quirúrgica.
-    const pideLogbook = ["logbook", "casuistica", "bitacora", "mis cirugias", "he operado", "he ayudado", "registro quirurgico", "protocolos operatorios"].some(k => qLog.includes(k))
-      || /\b(he|llevo|hice|tengo)\b.*\b(hecho|operad|realizad|cirugi|procedimient|ayudant|cirujano)/.test(qLog)
-      || /\bcuant[oa]s?\b.*\b(he|llevo|hice|hecho|operad|realizad|cirugi|rtu|reseccion|nefrectomia|prostatectomia|biopsia|cistoscopia|ureteroscopia|litotricia|orquid|circuncision|hidrocel|varicocel|cistostomia|adenomectomia|holep|nlpc|turp|turv)/.test(qLog)
-      || /\b(mi|mis)\b.*\b(casuistica|numeros|estadistica|actividad quirurgica|experiencia)/.test(qLog);
-    if (pideLogbook) {
-      try {
-        const rl = await listarLogbook(sesionActiva?.user?.id || currentUser?.id);
-        if (rl.ok) {
-          const regs = rl.registros || [];
-          if (regs.length === 0) {
-            ctxLogbook = "\n\n=== LOGBOOK QUIRÚRGICO DEL USUARIO ===\nEl usuario aún no tiene cirugías registradas en su logbook.";
-          } else {
-            const cx = regs.filter(r => (r.rol || "").toLowerCase().includes("ciruj")).length;
-            const ayud = regs.length - cx;
-            const porProc = {};
-            regs.forEach(r => { const k = r.procedimiento || "Sin procedimiento"; porProc[k] = (porProc[k] || 0) + 1; });
-            const top = Object.entries(porProc).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}: ${v}`).join(" · ");
-            const compl = regs.filter(r => r.complicacion).length;
-            const conCtrl = regs.filter(r => r.control_resultado);
-            const ctrlFav = conCtrl.filter(r => r.control_resultado === "favorable").length;
-            const ctrlMayor = conCtrl.filter(r => ["clavien_3a", "clavien_3b", "clavien_4a", "clavien_4b", "clavien_5"].includes(r.control_resultado)).length;
-            const stone = regs.filter(r => r.control_stone_free);
-            const stoneFree = stone.filter(r => r.control_stone_free === "stone_free").length;
-            const ultimas = regs.slice(0, 5).map(r => `- ${r.fecha || "s/f"} | ${r.procedimiento || "?"} | rol: ${r.rol || "?"}${r.complicacion ? " | con complicación" : ""}`).join("\n");
-            // Desglose temporal: "el último año", "este mes" son preguntas
-            // habituales y sin estos números el modelo tendría que contar a
-            // ojo sobre los últimos 5 registros.
-            const hoyD = new Date();
-            const haceN = (d) => { const x = new Date(hoyD); x.setDate(x.getDate() - d); return x.toISOString().slice(0, 10); };
-            const enRango = (desde) => regs.filter(r => (r.fecha || "") >= desde);
-            const resumenPeriodo = (etiqueta, lista) => {
-              if (!lista.length) return `${etiqueta}: 0`;
-              const pp = {};
-              lista.forEach(r => { const k = r.procedimiento || "Sin procedimiento"; pp[k] = (pp[k] || 0) + 1; });
-              const det = Object.entries(pp).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k}: ${v}`).join(" · ");
-              return `${etiqueta}: ${lista.length} (${det})`;
-            };
-            const bloquePeriodos = [
-              resumenPeriodo("Últimos 30 días", enRango(haceN(30))),
-              resumenPeriodo("Últimos 12 meses", enRango(haceN(365))),
-            ].join("\n");
-            const porLugar = `Pabellón: ${regs.filter(r => (r.lugar || "pabellon") !== "box").length} · Box: ${regs.filter(r => r.lugar === "box").length}`;
-
-            ctxLogbook = `\n\n=== LOGBOOK QUIRÚRGICO DEL USUARIO ===\nHoy es ${hoyD.toISOString().slice(0, 10)}.\n${bloquePeriodos}\n${porLugar}\nTotal de registros: ${regs.length} (como cirujano: ${cx}, como ayudante: ${ayud}).\nPor procedimiento: ${top}.\nComplicaciones intraoperatorias registradas: ${compl}.${conCtrl.length ? `\nControles post-operatorios registrados: ${conCtrl.length} (favorables: ${ctrlFav}, Clavien ≥ III: ${ctrlMayor}).` : ""}${stone.length ? `\nControles imagenológicos de litiasis: ${stone.length} (stone free: ${stoneFree}).` : ""}\nÚltimos 5 registros:\n${ultimas}\nResponde con un resumen motivador y concreto del progreso de su casuística.`;
-          }
-        }
-      } catch {}
-    }
-  }
-  // ── Protocolos locales del servicio ──
-  // Si la consulta calza con un protocolo subido (por título, categoría o al
-  // pedir explícitamente "protocolo"/"nuestro manejo"), su texto entra al
-  // contexto con prioridad: el protocolo local manda por sobre la guía
-  // genérica, porque refleja cómo se hace EN ese hospital.
-  let ctxProtocolos = "";
-  try {
-    const qn = txt.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const pideProto = /protocolo|nuestro manejo|manejo local|como (lo )?hacemos|pauta del servicio|guia del servicio/.test(qn);
-    const rp = await obtenerProtocolosParaChat();
-    if (rp.ok && rp.protocolos.length) {
-      const VAC = new Set(["de","del","la","el","los","las","en","y","o","para","con"]);
-      const puntuados = rp.protocolos.map((pr) => {
-        const palabras = `${pr.titulo} ${pr.categoria || ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !VAC.has(w));
-        const aciertos = palabras.filter((w) => qn.includes(w)).length;
-        return { pr, aciertos };
-      }).filter((x) => x.aciertos >= (pideProto ? 1 : 2))
-        .sort((a, b) => b.aciertos - a.aciertos)
-        .slice(0, 2);
-      if (puntuados.length) {
-        ctxProtocolos = "\n\n=== PROTOCOLOS LOCALES DEL SERVICIO ===\n" +
-          "Estos protocolos fueron subidos por el equipo del usuario y PRIORIZAN sobre guías generales. Si contradicen a la literatura, señálalo, pero responde según el protocolo local.\n" +
-          puntuados.map(({ pr }) => `\n--- ${pr.titulo} (${pr.categoria || "General"}) ---\n${(pr.contenido_texto || "(sin texto extraído: sugiere abrirlo desde Biblioteca › Protocolos)").slice(0, 6000)}`).join("\n");
-      } else if (pideProto) {
-        ctxProtocolos = `\n\n=== PROTOCOLOS LOCALES ===\nNinguno calza con la consulta. Disponibles: ${rp.protocolos.map((pr) => pr.titulo).slice(0, 20).join("; ")}. Indícale al usuario cuáles existen.`;
-      }
-    }
-  } catch {}
-
-  // Si la pregunta va sobre pacientes en seguimiento, se le entrega ese contexto real
-  let ctxSeguimiento = "";
-  if (/seguimiento|vigilancia|control(es)?\b|atrasad|pendiente.*control|proximo.*control|pr[oó]ximos?\s*control/i.test(txt)) {
-    try { ctxSeguimiento = await resumenSeguimientoParaIA(currentUser.id, contexto); } catch { ctxSeguimiento = ""; }
-  }
-
-  // ── Flujo "responder con conocimiento propio" ──────────────────
-  // Detecta si el mensaje anterior de Uros fue una OFERTA de responder con
-  // conocimiento propio (porque no encontró nada en la base) y si el usuario
-  // acaba de aceptar/rechazar esa oferta.
+  let mtDocs = 0, mtPac = false, mtLog = false, mtProto = false, mtGeneral = false, mtConsultas = 0, mtBusquedas = 0;
   const FRASE_OFERTA = "¿Quieres que te responda con mi propio conocimiento";
-  const ultimoAsistente = [...messages].reverse().find(m => m.role === "assistant");
-  // La oferta se reconoce por la marca del mensaje o por su texto: el modelo
-  // a veces la parafrasea ("¿activo el modo de conocimiento general?"), y esa
-  // variante también debe contar como oferta.
-  const pareceOferta = (m) => !!(m && (m.ofrecioConocimiento || /conocimiento (clinico )?general|mi propio conocimiento|conocimiento propio/.test(sinTildes(m.content || "")) && /\?/.test(m.content || "")));
-  const ofrecioConocimiento = pareceOferta(ultimoAsistente);
-  const esAfirmacion = /^\s*(s[ií]\b|si\b|dale\b|ok(ay)?\b|ya\b|claro\b|bueno\b|obvio\b|correcto\b|afirmativo\b|por\s*favor\b|de\s*una\b|hazlo\b|adelante\b|responde|resp[oó]ndeme|cont[eé]stame|yes\b|activa|act[ií]valo)/i;
-  const esNegacion = /^\s*(no\b|nel\b|negativo\b|mejor\s*no\b|d[eé]jalo\b|as[ií]\s*no\b)/i;
-  const usarConocimientoPropio = pideGeneralExplicito || (ofrecioConocimiento && esAfirmacion.test(txt) && !esNegacion.test(txt));
-  const declinoConocimiento = !pideGeneralExplicito && ofrecioConocimiento && !usarConocimientoPropio && esNegacion.test(txt);
-  // Recupera la consulta original. Si el mismo mensaje trae la pregunta ("usa tu
-  // conocimiento: manejo de la epididimitis"), esa es la consulta; si no, el
-  // último mensaje del usuario que fue una pregunta real (no un "sí", no un
-  // "busca en general", no un saludo).
-  let preguntaOriginal = "";
-  if (usarConocimientoPropio) {
-    const resto = sinTildes(txt).replace(PIDE_CONOCIMIENTO_GENERAL, " ");
-    const traePregunta = pideGeneralExplicito && terminosConsulta(resto).some((t) => !GENERICOS_CLINICOS.has(t));
-    if (traePregunta) preguntaOriginal = txt;
-    else {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const m = messages[i];
-        if (m.role !== "user") continue;
-        const c = m.content || "";
-        if (esAfirmacion.test(c) || esNegacion.test(c) || PIDE_CONOCIMIENTO_GENERAL.test(sinTildes(c)) || esCharlaBasica(c)) continue;
-        preguntaOriginal = c; break;
-      }
-    }
-  }
 
-    const modoIns = modo === "precisa"
-      ? "\n\nMODO PRECISA: Responde en máximo 3-4 líneas (aproximadamente 50 palabras). Sé estricto con esta extensión: solo lo esencial, directo al grano, sin introducción ni rodeos. NO te extiendas."
-      : "\n\nMODO EXPLICATIVA: respuesta completa con contexto y evidencia.";
-    let ctx = "";
-    if (esCharla) {
-      ctx += "\n\n=== CONVERSACIÓN CASUAL ===\nEl mensaje del usuario es un saludo, agradecimiento o conversación social, NO una consulta clínica. Responde breve (1-3 frases), cercano y natural, como Uros. Puedes cerrar con UNA pregunta corta de seguimiento u ofrecer ayuda concreta (revisar sus pacientes hospitalizados, su tabla quirúrgica de la semana, o resolver una duda clínica). NO agregues información clínica, NO digas que no encontraste información en la base y NO menciones documentos.";
-    } else if (usarConocimientoPropio) {
-      // El usuario autorizó explícitamente responder con conocimiento propio
-      ctx += "\n\n=== RESPUESTA CON CONOCIMIENTO PROPIO (AUTORIZADA POR EL USUARIO) ===\n"
-        + "El usuario NO encontró la información en la base de conocimiento de UroSearch y te ha autorizado explícitamente a responder con tu propio conocimiento clínico. "
-        + "Esta autorización tiene PRIORIDAD sobre la regla de fuente de información SOLO para esta respuesta.\n"
-        + "Responde ahora la consulta original usando tu conocimiento médico como urólogo especialista (guías EAU/AUA, criterio clínico, terminología precisa).\n"
-        + "IMPORTANTE: comienza tu respuesta EXACTAMENTE con esta línea y luego responde:\n"
-        + "\"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\"\n\n"
-        + `CONSULTA ORIGINAL DEL USUARIO: "${preguntaOriginal || txt}"`;
-    } else if (declinoConocimiento) {
-      // El usuario rechazó la oferta de conocimiento propio
-      ctx += "\n\n=== EL USUARIO DECLINÓ ===\nEl usuario NO quiere que uses conocimiento fuera de la base. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar información clínica: \"De acuerdo, me limito a la base de conocimiento de UroSearch. ¿Puedo ayudarte con otra consulta?\"";
-    } else if (tieneFuentes) {
-      // Qué hacer si los documentos recuperados NO cubren la pregunta depende de
-      // la política del administrador: en modo general se responde igual con
-      // conocimiento propio (marcado); en modo verificada se ofrece. En ambos
-      // casos la respuesta trae una marca que el cliente usa para NO mostrar
-      // como fuente documentos que no se usaron.
-      const siNoCubren = modoChatVigente === "general"
-        ? "Si los documentos NO contienen la información necesaria para responder, responde con tu conocimiento clínico como urólogo especialista (guías EAU/AUA, criterio clínico) y comienza tu respuesta EXACTAMENTE con esta línea: \"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\" En ese caso no cites ni menciones los documentos. "
-        : "Si los documentos NO contienen la información necesaria para responder, NO uses conocimiento propio: responde EXACTAMENTE y SOLO con este mensaje: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\" ";
-      ctx += "\n\n=== BASE DE CONOCIMIENTO ===\nResponde con la información contenida en estos documentos. Mientras los documentos respondan la pregunta, NO uses conocimiento externo ni general. " + siNoCubren + "NO menciones la fuente ni el título dentro de tu respuesta (se muestra aparte automáticamente). AL FINAL de tu respuesta, en una línea aparte, escribe exactamente [[FUENTES: n,n]] con los números de los DOC que realmente usaste (por ejemplo [[FUENTES: 1,3]]); si no usaste ninguno escribe [[FUENTES: ]]. Esa línea no se muestra al usuario.\n\n"
-        // La búsqueda puede traer documentos de OTRA patología que comparten
-        // vocabulario ("vigilancia activa" existe en próstata y en testículo).
-        // Sin esta regla el modelo los fusionaba en un solo párrafo y terminaba
-        // atribuyéndole al paciente una enfermedad que no tiene.
-        + "REGLA CRÍTICA: algunos documentos pueden ser de una patología DISTINTA a la preguntada, porque comparten vocabulario. Identifica primero de qué órgano y patología trata la consulta y usa SOLO los documentos que correspondan a esa patología. IGNORA por completo los demás: no los cites, no los mezcles y no traslades sus criterios. Si ninguno corresponde, dilo. NUNCA combines criterios de patologías diferentes en una misma respuesta.\n\n" + docsRelevantes.map((d,i) => `--- DOC ${i+1}: ${d.titulo}${d.fuente ? " ("+d.fuente+")" : ""} ---\n${(d.contenido||"").slice(0,5000)}`).join("\n\n");
-    } else if (!consultaCirugias && !consultaPacientes) {
-      if (modoChatVigente === "general") {
-        // Configuración "conocimiento general": responde directo con conocimiento
-        // propio, marcado como fuera de la base, sin pedir permiso cada vez.
-        ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE (MODO CONOCIMIENTO GENERAL ACTIVADO) ===\n"
-          + "No se encontraron documentos relevantes en la base de UroSearch, pero el usuario tiene activada en su configuración la opción de responder con conocimiento general de la IA. "
-          + "Responde la consulta usando tu conocimiento médico como urólogo especialista (guías EAU/AUA, criterio clínico, terminología precisa).\n"
-          + "IMPORTANTE: comienza tu respuesta EXACTAMENTE con esta línea y luego responde:\n"
-          + "\"ℹ️ Respuesta basada en conocimiento clínico general, no en la base de UroSearch.\"";
-      } else {
-        // Pregunta clínica/teórica pero SIN documentos relevantes en la base:
-        // en vez de rechazar, ofrece responder con conocimiento propio (como pregunta).
-        ctx += "\n\n=== SIN INFORMACIÓN EN LA BASE ===\nNo se encontraron documentos relevantes en la base de conocimiento de UroSearch para esta consulta. NO respondas la pregunta con conocimiento propio todavía. Responde EXACTAMENTE y SOLO con este mensaje, sin agregar ninguna información clínica: \"No encontré información sobre esto en la base de conocimiento de UroSearch. ¿Quieres que te responda con mi propio conocimiento clínico como urólogo? (fuera de la base de UroSearch)\"";
+  try {
+    const esCharla = esCharlaBasica(txt);
+    const sesionResult = await getSession();
+    const sesionActiva = sesionResult.ok ? sesionResult.session : null;
+
+    // Persistencia en paralelo (crear conversación y guardar el mensaje del usuario).
+    const conversacionPromise = (async () => {
+      let id = conversacionActual;
+      if (!id && currentUser && sesionActiva) {
+        const titulo = generarTituloDesdeMensaje(txt);
+        const crearResult = await crearConversacion(sesionActiva.user.id, titulo, modo);
+        if (crearResult.ok) {
+          id = crearResult.conversacion.id;
+          setConversacionActual(id);
+          setConversaciones(prev => {
+            const nueva = [crearResult.conversacion, ...prev];
+            if (nueva.length > MAX_CONVERSACIONES) {
+              const sobrantes = nueva.slice(MAX_CONVERSACIONES);
+              sobrantes.forEach(c => { eliminarConversacion(c.id).catch(()=>{}); });
+              return nueva.slice(0, MAX_CONVERSACIONES);
+            }
+            return nueva;
+          });
+        } else {
+          console.error("Error al crear conversación:", crearResult.error);
+        }
       }
-    }
-    if (consultaCirugias) {
-      ctx += `\n\n=== TABLA QUIRÚRGICA DEL USUARIO ===\nEl usuario está preguntando sobre programación quirúrgica. Cirugías programadas en el rango "${consultaCirugias.rango}":\n`;
-      if (consultaCirugias.cirugias.length === 0) {
-        ctx += `No hay cirugías programadas en este rango.`;
-      } else {
-        ctx += consultaCirugias.cirugias.map(c => `- ${c.fecha} ${c.hora} | ${c.iniciales}${c.edad?` (${c.edad}a)`:""} | ${c.procedimiento}${c.lateralidad?` (${c.lateralidad})`:""} | Cirujano: ${c.cirujano} | Pabellón ${c.pabellon} | Estado: ${c.estado}`).join("\n");
+      if (id && sesionActiva) {
+        agregarMensaje(id, sesionActiva.user.id, "usuario", txt, modo).catch(() => {});
       }
-    }
-    if (consultaPacientes) {
-      ctx += "\n\nREGLA: los datos de pacientes son solo contexto. NO mezcles la información de un paciente con la respuesta clínica general, ni atribuyas a un paciente una patología o un hallazgo que no figure explícitamente en su ficha.";
-      ctx += "\n\n=== PACIENTES DEL USUARIO ===\nEl usuario está preguntando sobre sus pacientes. Responde con detalle. ";
-      if (consultaPacientes.ningun) {
-        ctx += "El usuario no tiene pacientes registrados aún.";
-      } else if (consultaPacientes.pacientes.length === 0) {
-        ctx += `El usuario tiene ${consultaPacientes.totalMisPacientes} pacientes en total, pero ninguno coincide con los filtros aplicados a la consulta.`;
-      } else {
-        ctx += `Total de pacientes del usuario: ${consultaPacientes.totalMisPacientes}. Coinciden con la consulta: ${consultaPacientes.pacientes.length}.\n\nDETALLE DE PACIENTES:\n`;
-        ctx += consultaPacientes.pacientes.map(p => {
-          let detalle = `- ${p.iniciales} (${p.edad || "?"}a ${p.sexo || ""}) | Cama ${p.cama} | Servicio: ${p.servicio} | Estado: ${p.estado === "activo" ? "Hospitalizado" : "Alta"} | Ingreso: ${p.fecha_ingreso}\n  Diagnóstico: ${p.diagnostico}`;
-          if (p.operado) detalle += `\n  Operado: sí${Array.isArray(p.cirugias_realizadas) && p.cirugias_realizadas.length ? ` (${p.cirugias_realizadas.map(cx => cx.nombre).join(", ")})` : ""}`;
-          if (Array.isArray(p.antecedentes) && p.antecedentes.length) detalle += `\n  Antecedentes: ${p.antecedentes.join(", ")}`;
-          if (p.alergias) detalle += `\n  Alergias: ${p.alergias}`;
-          if (p.estado_clinico) detalle += `\n  Estado clínico: ${p.estado_clinico}`;
-          if (p.historia) detalle += `\n  Historia: ${p.historia.slice(0,300)}${p.historia.length > 300 ? "..." : ""}`;
-          if (p.plan_manejo) detalle += `\n  Plan: ${p.plan_manejo}`;
-          return detalle;
-        }).join("\n\n");
-      }
-    }
-    // Contexto de pacientes en seguimiento (si la pregunta lo amerita)
-    if (ctxSeguimiento) ctx += `\n\n${ctxSeguimiento}`;
-    if (ctxLogbook) { ctx += ctxLogbook; mtLog = true; }
-    if (ctxProtocolos) { ctx += ctxProtocolos; mtProto = true; }
-    // Anonimizar datos de pacientes antes de enviar al proveedor de IA.
-    const { texto: ctxAnon, mapa: mapaAnon } = anonimizarCtx(ctx);
-    // Instrucciones del administrador (Configuración → 🎯 Instrucciones para
-    // Uros): van después del prompt base y antes del contexto de la consulta.
-    const insAdmin = instruccionesAdmin ? `\n\nINSTRUCCIONES DEL ADMINISTRADOR DE UROSEARCH (prevalecen sobre el estilo por defecto; NUNCA sobre la regla de seguridad clínica ni sobre la política de fuente de esta consulta):\n${instruccionesAdmin}` : "";
-    const sysPrompt = SYSTEM_PROMPT + insAdmin + modoIns + ctxAnon + ctxImagenes;
-    const apiMsgs = newMsgs.map(m => ({role:m.role, content:m.content}));
-    // El token ya viene de la sesión que se pidió arriba: evita un segundo
-    // getSession() justo antes de disparar la petición.
+      return id;
+    })();
+    conversacionPromise.catch(() => {});
+
+    const videosRelevantes = esCharla ? [] : buscarVideosRelevantes(txt);
+    const apiMsgs = newMsgs.map(m => ({ role: m.role, content: m.content }));
     const token = sesionActiva?.access_token || await tokenFuncionIA();
 
-    // La respuesta se va mostrando mientras se escribe (si la función lo permite).
+    // Lo que llega por los eventos "urosearch" mientras se escribe la respuesta.
+    let mapaAnon = [];
+    const meta = { fuentes: null, general: false, datos: null };
     let placeholder = false;
+    let estadoVisible = "";
     const onDelta = (acumulado) => {
       // La línea [[FUENTES: …]] (o su comienzo, aún incompleto) no se muestra.
       const visible = desanonimizar(acumulado.replace(/\n?\s*\[\[(?:FUENTES:[^\]]*|F(?:U(?:E(?:N(?:T(?:E(?:S:?)?)?)?)?)?)?)?\]?\]?\s*$/, ""), mapaAnon);
+      if (estadoVisible) { estadoVisible = ""; setEstadoUros(""); }
       setMessages(prev => {
         if (!placeholder) { placeholder = true; return [...prev, { role: "assistant", content: visible, streaming: true }]; }
         const copia = [...prev];
@@ -17440,70 +17199,58 @@ if (imgsResult.ok) {
         return copia;
       });
     };
+    const onMeta = (ev) => {
+      if (ev.evento === "estado") {
+        estadoVisible = ev.texto || "";
+        setEstadoUros(estadoVisible);
+      } else if (ev.evento === "reiniciar") {
+        // El modelo escribió algo antes de usar herramientas: se descarta y se vuelve al indicador.
+        if (placeholder) {
+          placeholder = false;
+          setMessages(prev => (prev.length && prev[prev.length - 1]?.streaming) ? prev.slice(0, -1) : prev);
+        }
+      } else if (ev.evento === "mapa") {
+        mapaAnon = Array.isArray(ev.mapa) ? ev.mapa : [];
+      } else if (ev.evento === "fuentes") {
+        meta.fuentes = Array.isArray(ev.fuentes) ? ev.fuentes : [];
+        meta.general = !!ev.general;
+      } else if (ev.evento === "datos") {
+        meta.datos = ev.datos || null;
+      } else if (ev.evento === "fin") {
+        mtBusquedas = ev.busquedas || 0;
+        logDiag(`chat v2: ${ev.modelo} · ${ev.ms} ms · búsquedas ${ev.busquedas} · consultas ${ev.consultas}`);
+      }
+    };
 
-    let reply = (await pedirRespuestaIA({
-      // Para saludos y charla no hace falta el modelo grande: responde bastante antes.
-      model: esCharla ? "claude-haiku-4-5-20251001" : "claude-sonnet-5",
-      maxTokens: esCharla ? 500 : 2000,
-      system: sysPrompt,
-      messages: apiMsgs,
-      token,
-      onDelta,
-    })) || "Sin respuesta.";
-    // El modelo declara qué documentos usó ([[FUENTES: 1,3]]); la línea se
-    // quita del texto y solo esos documentos se muestran como bibliografía.
-    // Sin la marca (respuesta cortada, modelo que no la puso) se muestran los
-    // documentos que pasaron el filtro, como antes.
-    let docsUsados = null;
-    const mFuentes = reply.match(/\[\[FUENTES:\s*([\d,\s]*)\]\]/);
-    if (mFuentes) {
-      docsUsados = mFuentes[1].split(/[,\s]+/).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= docsRelevantes.length);
-      reply = reply.replace(/\n?\s*\[\[FUENTES:[^\]]*\]\]\s*/g, "").trim();
+    let reply = (await pedirRespuestaUros({ modo, messages: apiMsgs, contexto, token, onDelta, onMeta })) || "Sin respuesta.";
+    reply = reply.replace(/\n?\s*\[\[FUENTES:[^\]]*\]\]\s*/g, "").trim();
+    const respuesta = { role: "assistant", content: desanonimizar(reply, mapaAnon) };
+    mtGeneral = meta.general || reply.includes(MARCA_RESPUESTA_GENERAL);
+    if (meta.fuentes && meta.fuentes.length && !mtGeneral) { respuesta.fuentes = meta.fuentes; mtDocs = meta.fuentes.length; }
+    if (meta.datos && meta.datos.consultas > 0) {
+      respuesta.datosConsulta = meta.datos;
+      mtConsultas = meta.datos.consultas;
+      const tablas = meta.datos.tablas || [];
+      mtPac = tablas.includes("pacientes");
+      mtLog = tablas.some(t => /logbook/.test(t));
     }
-    const respuesta = { role:"assistant", content: desanonimizar(reply, mapaAnon) };
-    // ¿La respuesta salió de los documentos o de conocimiento general? El
-    // modelo lo declara con una marca; sin ella, citar el documento era
-    // mentir sobre la fuente.
-    const respondioConGeneral = usarConocimientoPropio || reply.includes(MARCA_RESPUESTA_GENERAL) || (docsUsados !== null && docsUsados.length === 0 && !reply.includes(FRASE_OFERTA));
-    const hizoOferta = reply.includes(FRASE_OFERTA);
-    mtGeneral = respondioConGeneral;
-    // Marca esta respuesta como "oferta de conocimiento propio" para reconocer
-    // el "sí" del usuario en el siguiente turno (dentro de la misma sesión).
-    if (!esCharla && !usarConocimientoPropio && !declinoConocimiento && (hizoOferta || (!tieneFuentes && !consultaCirugias && !consultaPacientes && modoChatVigente !== "general"))) {
-      respuesta.ofrecioConocimiento = true;
-    }
-    if (videosRelevantes.length > 0 && !usarConocimientoPropio && !declinoConocimiento) respuesta.videos = videosRelevantes;
-    if (tieneFuentes && !respondioConGeneral && !hizoOferta && !declinoConocimiento) {
-      const vistas = new Set();
-      const base = docsUsados && docsUsados.length ? docsRelevantes.filter((_, i) => docsUsados.includes(i + 1)) : docsRelevantes;
-      respuesta.fuentes = base
-        .filter(d => { if (vistas.has(d.titulo)) return false; vistas.add(d.titulo); return true; })
-        .map(d => ({id:d.id, titulo:d.titulo, fuente:d.fuente||"", categoria:d.categoria||""}));
-      if (!respuesta.fuentes.length) delete respuesta.fuentes;
-    }
-    if (consultaCirugias && consultaCirugias.cirugias.length > 0) respuesta.cirugiasConsulta = { rango: consultaCirugias.rango, cantidad: consultaCirugias.cirugias.length };
-    if (consultaPacientes && !consultaPacientes.ningun && consultaPacientes.pacientes.length > 0) respuesta.pacientesConsulta = { cantidad: consultaPacientes.pacientes.length };
-    
+    if (videosRelevantes.length > 0 && !mtGeneral) respuesta.videos = videosRelevantes;
+    if (reply.includes(FRASE_OFERTA)) respuesta.ofrecioConocimiento = true;
+
     setMessages(prev => {
       const base = (placeholder && prev.length && prev[prev.length - 1]?.streaming) ? prev.slice(0, -1) : prev;
       return [...base, respuesta];
     });
-    
-    // ============================================
-    // PERSISTENCIA: guardar respuesta de Claude
-    // ============================================
+
+    // Persistencia de la respuesta. Se guarda como antes: con los identificadores
+    // de pacientes anonimizados ([PAC-1]) y sin la marca de fuentes. Si prefieres
+    // que el historial muestre los nombres reales, guarda `respuesta.content`.
     const conversacionId = await conversacionPromise;
     if (conversacionId && sesionActiva) {
       await agregarMensaje(conversacionId, sesionActiva.user.id, "asistente", reply, modo);
       setConversaciones(prev => {
-        const actualizada = prev.map(c => 
-          c.id === conversacionId 
-            ? {...c, fecha_actualizacion: new Date().toISOString()} 
-            : c
-        );
-        return actualizada.sort((a, b) => 
-          new Date(b.fecha_actualizacion) - new Date(a.fecha_actualizacion)
-        );
+        const actualizada = prev.map(c => c.id === conversacionId ? {...c, fecha_actualizacion: new Date().toISOString()} : c);
+        return actualizada.sort((a, b) => new Date(b.fecha_actualizacion) - new Date(a.fecha_actualizacion));
       });
     }
   } catch(e) {
@@ -17513,14 +17260,14 @@ if (imgsResult.ok) {
     clearTimeout(relojChat);
     respondido = true;
     setLoading(false);
-    // Métrica de la consulta. Sin el texto: solo tamaño, latencia y de dónde
-    // salió la respuesta. `fuentes` es la señal clave de si la biblioteca
-    // está sirviendo o el chat responde de memoria.
+    setEstadoUros("");
     registrarEvento("chat_consulta", {
       ms: Date.now() - t0Chat,
       modo,
       largo: txt.length,
       fuentes: mtDocs,
+      busquedas: mtBusquedas,
+      consultas: mtConsultas,
       con_pacientes: mtPac,
       con_logbook: mtLog,
       con_protocolos: mtProto,
@@ -18096,7 +17843,7 @@ if (!currentUser) {
               <div style={{display:"flex",gap:8,alignItems:"center",padding:"8px 0"}}>
                 <UrosAvatar size={30}/>
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",borderRadius:"16px 16px 16px 4px",background:"var(--superficie)",fontSize:"var(--fs-2)",color:"var(--texto-ter)",border:"0.5px solid var(--borde)"}}>
-                  Consultando...
+                  {estadoUros || "Consultando..."}
                 </div>
               </div>
             )}
