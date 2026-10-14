@@ -18,6 +18,9 @@ export async function register({ nombre, correo, password, especialidad, documen
           especialidad: especialidad,
           documento_nombre: documentoNombre || null,
         },
+        // El link de confirmación vuelve a la app (si el dominio está en
+        // Auth → URL Configuration → Redirect URLs; si no, usa el Site URL).
+        emailRedirectTo: urlRetorno(),
       },
     });
 
@@ -35,7 +38,46 @@ export async function register({ nombre, correo, password, especialidad, documen
       return { ok: false, error: error.message };
     }
 
-    return { ok: true, user: data.user };
+    // Con "Confirm email" activo, si el correo YA estaba registrado Supabase no
+    // devuelve error (para no revelar qué correos existen): devuelve un usuario
+    // sin identidades y no manda ningún correo. Antes la app mostraba
+    // "solicitud enviada" y la persona se quedaba esperando un link que nunca llegaba.
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return {
+        ok: false,
+        codigo: 'ya_registrado',
+        error: 'Ya hay una solicitud con ese correo. No necesitas registrarte de nuevo: inicia sesión con tu contraseña. Si el administrador aún no la aprueba, te lo indicaremos al entrar.',
+      };
+    }
+
+    return { ok: true, user: data.user, requiereConfirmacion: !data.session };
+  } catch (err) {
+    return { ok: false, error: 'Error de conexión. Intenta de nuevo.' };
+  }
+}
+
+function urlRetorno() {
+  try { return window.location.origin + '/'; } catch { return undefined; }
+}
+
+/**
+ * Reenvía el correo de confirmación de cuenta.
+ * Supabase limita a una solicitud por minuto por correo.
+ */
+export async function reenviarConfirmacion(correo) {
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: String(correo || '').trim(),
+      options: { emailRedirectTo: urlRetorno() },
+    });
+    if (error) {
+      if (/seconds|rate|security purposes/i.test(error.message)) {
+        return { ok: false, error: 'Espera un minuto antes de pedir otro link.' };
+      }
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: 'Error de conexión. Intenta de nuevo.' };
   }
@@ -87,7 +129,12 @@ export async function login({ identificador, correo, password }) {
         return { ok: false, error: 'Correo/RUT o contraseña incorrectos' };
       }
       if (error.message.includes('Email not confirmed')) {
-        return { ok: false, error: 'Tu correo aún no ha sido confirmado' };
+        return {
+          ok: false,
+          codigo: 'correo_sin_confirmar',
+          email,
+          error: 'Tu correo aún no está confirmado. Si el link del correo venció, no importa: cuando el administrador apruebe tu cuenta quedará confirmada sola y podrás entrar con tu contraseña. También puedes pedir un link nuevo.',
+        };
       }
       return { ok: false, error: error.message };
     }
@@ -126,7 +173,9 @@ export async function getPerfil(userId) {
       .single();
 
     if (error) {
-      return { ok: false, error: error.message };
+      // PGRST116 = .single() sin filas: el usuario existe en Auth pero no
+      // tiene perfil (p. ej. fue eliminado desde Administración).
+      return { ok: false, error: error.message, noExiste: error.code === 'PGRST116' };
     }
 
     return { ok: true, perfil: data };

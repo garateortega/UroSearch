@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Component, Fragment } from "react";
-import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario } from "./auth";
+import { register as registerUser, login as loginUser, logout as logoutUser, getPerfil, getSession, onAuthChange, listarPerfiles, cambiarEstadoUsuario, eliminarUsuario, reenviarConfirmacion } from "./auth";
 import { listarConversaciones, crearConversacion, cargarMensajes, agregarMensaje, actualizarTitulo, eliminarConversacion, generarTituloDesdeMensaje } from "./chat";
 import { listarMapas, obtenerMapa, guardarMapa, eliminarMapa } from "./mapas";
 import { listarMisEquipos, listarMisInvitaciones, listarMiembros, listarInvitacionesEquipo, crearEquipo, eliminarEquipo, salirDelEquipo, expulsarMiembro, buscarUsuarioPorCorreo, crearInvitacion, aceptarInvitacion, rechazarInvitacion, cancelarInvitacion } from "./equipos";
@@ -553,6 +553,82 @@ async function adjuntarImagenesPaciente(pacienteId, userId, b64s) {
 // archivo se guarda en memoria y se sube en el primer login (antes de que la
 // app cierre la sesión por estar pendiente).
 let DOC_ACREDITACION_PENDIENTE = null;
+// El documento también se guarda en IndexedDB: si la persona cierra la app
+// antes de su primer inicio de sesión (típico cuando hay que confirmar el
+// correo), antes se perdía y el administrador no tenía qué revisar.
+const DOC_IDB = { db: "uro_registro", store: "doc", key: "acreditacion", diasMax: 30 };
+function _docIdb(modo, fn) {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(DOC_IDB.db, 1);
+      req.onupgradeneeded = () => { try { req.result.createObjectStore(DOC_IDB.store); } catch {} };
+      req.onerror = () => resolve(null);
+      req.onsuccess = () => {
+        try {
+          const tx = req.result.transaction(DOC_IDB.store, modo);
+          const r = fn(tx.objectStore(DOC_IDB.store));
+          tx.oncomplete = () => { resolve(r?.result ?? null); req.result.close(); };
+          tx.onerror = () => { resolve(null); req.result.close(); };
+        } catch { resolve(null); }
+      };
+    } catch { resolve(null); }
+  });
+}
+function guardarDocPendiente(file, correo) {
+  return _docIdb("readwrite", (st) => st.put({ file, nombre: file?.name || "documento", correo: String(correo || "").trim().toLowerCase(), ts: Date.now() }, DOC_IDB.key));
+}
+function borrarDocPendiente() { return _docIdb("readwrite", (st) => st.delete(DOC_IDB.key)); }
+// Solo devuelve el documento si es de ESTE correo (dispositivo compartido) y no es viejo.
+async function leerDocPendiente(correo) {
+  const v = await _docIdb("readonly", (st) => st.get(DOC_IDB.key));
+  if (!v?.file) return null;
+  if (Date.now() - (v.ts || 0) > DOC_IDB.diasMax * 86400000) { borrarDocPendiente(); return null; }
+  if (v.correo && correo && v.correo !== String(correo).trim().toLowerCase()) return null;
+  try { if (!v.file.name) Object.defineProperty(v.file, "name", { value: v.nombre }); } catch {}
+  return v.file;
+}
+
+// ─── Avisos de estado de cuenta en la pantalla de inicio ─────────
+// Antes, una cuenta pendiente que iniciaba sesión (o volvía desde el link del
+// correo) veía un toast de 3 segundos y la app la sacaba: parecía un error.
+// Ahora el motivo queda escrito en la pantalla de inicio hasta que lo cierren.
+const AVISOS_CUENTA = {
+  pendiente: { tono: "alerta", titulo: "Solicitud en revisión", texto: "Tu cuenta aún no ha sido aprobada por el administrador. Cuando la apruebe podrás entrar con tu correo y contraseña; no necesitas volver a abrir el link del correo." },
+  confirmado_pendiente: { tono: "exito", titulo: "✓ Correo confirmado", texto: "Tu solicitud quedó en revisión. Cuando el administrador la apruebe podrás entrar con tu correo y contraseña." },
+  rechazado: { tono: "peligro", titulo: "Cuenta no habilitada", texto: "Tu solicitud fue rechazada o la cuenta está suspendida. Contacta al administrador." },
+  inactivo: { tono: "peligro", titulo: "Cuenta inactiva", texto: "Tu cuenta no está activa. Contacta al administrador." },
+  sin_perfil: { tono: "peligro", titulo: "Sin solicitud activa", texto: "Tu usuario existe, pero no tiene una solicitud activa en UroSearch (puede haber sido eliminada). Escribe al administrador para reactivarla." },
+  link_vencido: { tono: "alerta", titulo: "El link del correo venció", texto: "No te preocupes: cuando el administrador apruebe tu cuenta, tu correo quedará confirmado solo. Si ya te aprobaron, inicia sesión ahora con tu correo y contraseña." },
+};
+// Lo que traía la URL al abrir la app desde el link del correo. Se lee al
+// cargar el módulo, antes de que supabase-js limpie el hash.
+const AUTH_URL = (() => {
+  const out = { error: null, codigo: null, confirmacion: false };
+  try {
+    const p = new URLSearchParams((window.location.hash || "").replace(/^#/, "") + "&" + (window.location.search || "").replace(/^\?/, ""));
+    out.error = p.get("error_description") || p.get("error");
+    out.codigo = p.get("error_code");
+    out.confirmacion = p.get("type") === "signup" && !!p.get("access_token");
+  } catch {}
+  return out;
+})();
+function avisoDesdeUrl() {
+  if (!AUTH_URL.error && !AUTH_URL.codigo) return null;
+  if (AUTH_URL.codigo === "otp_expired" || /expired|invalid|vencid/i.test(AUTH_URL.error || "")) return AVISOS_CUENTA.link_vencido;
+  return { tono: "alerta", titulo: "No se pudo usar el link del correo", texto: `Inicia sesión con tu correo y contraseña; si tu cuenta ya fue aprobada, entrarás igual. (${String(AUTH_URL.error || AUTH_URL.codigo).replace(/\+/g, " ").slice(0, 120)})` };
+}
+function AvisoCuenta({ aviso, onCerrar }) {
+  if (!aviso) return null;
+  const c = { exito: ["var(--exito)", "var(--exito-bg)"], alerta: ["var(--alerta)", "var(--alerta-bg)"], peligro: ["var(--peligro)", "var(--peligro-bg)"] }[aviso.tono] || ["var(--texto-sec)", "var(--fondo-suave)"];
+  return (
+    <div role="status" style={{ position: "relative", textAlign: "left", background: c[1], borderLeft: `3px solid ${c[0]}`, borderRadius: 8, padding: "10px 32px 10px 12px", marginBottom: 16, lineHeight: 1.5 }}>
+      <div style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: c[0], marginBottom: 2 }}>{aviso.titulo}</div>
+      <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)" }}>{aviso.texto}</div>
+      {onCerrar && <button onClick={onCerrar} aria-label="Cerrar aviso" style={{ position: "absolute", top: 6, right: 6, background: "none", border: "none", color: "var(--texto-ter)", fontSize: 16, cursor: "pointer", padding: 4, lineHeight: 1 }}>×</button>}
+    </div>
+  );
+}
+
 async function subirDocumentoAcreditacion(uid, file) {
   if (!uid || !file) return { ok: false, error: "sin archivo" };
   try {
@@ -563,6 +639,7 @@ async function subirDocumentoAcreditacion(uid, file) {
     const { error: e2 } = await supabase.from("perfiles").update({ documento_path: path, documento_nombre: file.name || limpio }).eq("id", uid);
     if (e2) return { ok: false, error: e2.message };
     DOC_ACREDITACION_PENDIENTE = null;
+    borrarDocPendiente();
     return { ok: true, path };
   } catch (e) { return { ok: false, error: e?.message || String(e) }; }
 }
@@ -3839,7 +3916,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.7.0";
+const VERSION = "v3.7.1";
 
 // ─── Registro de uso ──────────────────────────────────────────────
 // Mide qué funciones se usan de verdad. Antes la actividad se infería de las
@@ -5479,8 +5556,9 @@ function InputPassword({ value, onChange, placeholder, onKeyDown, disabled, esti
   );
 }
 
-function AuthScreen({ onLogin }) {
+function AuthScreen({ onLogin, aviso, onCerrarAviso }) {
   const [view, setView] = useState("welcome");
+  const [reenviarA, setReenviarA] = useState(""); // correo sin confirmar al que se puede reenviar el link
   const [form, setForm] = useState({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -5497,6 +5575,15 @@ function AuthScreen({ onLogin }) {
     if (f.size > 5*1024*1024) { setError("El archivo no debe superar 5 MB"); return; }
     setForm({...form, documento:f, documentoNombre:f.name});
     setError("");
+  };
+
+  const handleReenviar = async () => {
+    if (!reenviarA) return;
+    setLoading(true);
+    const r = await reenviarConfirmacion(reenviarA);
+    setLoading(false);
+    if (r.ok) { setError(""); setInfo(`Te enviamos un link nuevo a ${reenviarA}. Ábrelo y luego inicia sesión.`); setReenviarA(""); }
+    else setError(r.error);
   };
 
   const handleRegister = async () => {
@@ -5531,6 +5618,7 @@ function AuthScreen({ onLogin }) {
     // igual queda para el primer inicio de sesión. Si la subida sale bien, la
     // función limpia el pendiente.
     DOC_ACREDITACION_PENDIENTE = form.documento;
+    try { await guardarDocPendiente(form.documento, form.correo); } catch {}
     try {
       const { data: sesionData } = await supabase.auth.getSession();
       const uid = sesionData?.session?.user?.id;
@@ -5539,16 +5627,19 @@ function AuthScreen({ onLogin }) {
         if (up.ok) notaDoc = " Tu documento de acreditación quedó adjunto a la solicitud.";
         else { logDiag(`registro: no se pudo subir el documento → ${up.error}`); notaDoc = " El documento se adjuntará cuando inicies sesión por primera vez."; }
       } else {
-        notaDoc = " Cuando confirmes tu correo e inicies sesión, el documento se adjuntará solo a tu solicitud.";
+        notaDoc = " Tu documento se adjuntará a la solicitud la primera vez que entres desde este dispositivo: abre el link del correo para que el administrador pueda revisarlo antes.";
       }
     } catch {}
 
-    setInfo("Tu solicitud fue enviada. Si la confirmación por correo está activada, te llegará un link para verificar tu dirección; luego recibirás acceso una vez que el administrador apruebe tu cuenta." + notaDoc);
+    setInfo((result.requiereConfirmacion
+      ? "Solicitud enviada. Te llegará un correo con un link para confirmar tu dirección (revisa también el spam). Si el link vence, no importa: tu correo se confirma solo cuando el administrador aprueba la cuenta. Una vez aprobada, entra con tu correo y contraseña."
+      : "Solicitud enviada. Podrás entrar con tu correo y contraseña cuando el administrador apruebe tu cuenta.") + notaDoc);
     setForm({ nombre:"", correo:"", especialidad:"Urología", password:"", password2:"", documento:null, documentoNombre:"" });
   };
 
   const handleLogin = async () => {
-    setError(""); setInfo("");
+    setError(""); setInfo(""); setReenviarA("");
+    onCerrarAviso?.();
     const id = form.correo.trim();
     if (!id) return setError("Ingresa tu correo o RUT");
     if (!form.password) return setError("Ingresa tu contraseña");
@@ -5562,6 +5653,7 @@ function AuthScreen({ onLogin }) {
 
     if (!result.ok) {
       setError(result.error);
+      if (result.codigo === "correo_sin_confirmar" && result.email) setReenviarA(result.email);
       return;
     }
 
@@ -5576,6 +5668,7 @@ function AuthScreen({ onLogin }) {
         <div style={{fontSize:32, fontWeight:600, fontStyle:"italic", fontFamily:"Georgia, 'Times New Roman', serif", color:"var(--texto)", letterSpacing:"-0.5px", marginBottom:8}}>UroSearch<sup style={{fontSize:13,fontStyle:"normal",fontWeight:500,verticalAlign:"super",marginLeft:2,opacity:0.7}}>™</sup></div>
         <div style={{fontSize:"var(--fs-3)", color:"var(--texto-sec)", marginBottom:34, lineHeight:1.5}}>Asistente Clínico de Urología</div>
         <div style={{maxWidth:340, margin:"0 auto"}}>
+          <AvisoCuenta aviso={aviso} onCerrar={onCerrarAviso}/>
           <button onClick={()=>{setView("login"); setError(""); setInfo("");}} style={{...btnPrimary, padding:"14px", fontSize:16}}>Iniciar sesión</button>
           <button onClick={()=>{setView("register"); setError(""); setInfo("");}} style={{...btnSecondary, padding:"14px", fontSize:16}}>Solicitar cuenta</button>
         </div>
@@ -5602,11 +5695,14 @@ function AuthScreen({ onLogin }) {
           <LogoUroSearch size={36}/>
           <div style={{fontSize:22,fontWeight:600,fontStyle:"italic",fontFamily:"Georgia, 'Times New Roman', serif",color:"var(--texto)"}}>Iniciar sesión</div>
         </div>
+        <AvisoCuenta aviso={aviso} onCerrar={onCerrarAviso}/>
         <label style={labelStyle}>Correo o RUT</label>
         <input type="text" autoCapitalize="none" autoCorrect="off" value={form.correo} onChange={e=>setForm({...form,correo:e.target.value})} placeholder="tu.correo@hbv.cl  o  12.345.678-9" style={inputStyle} disabled={loading}/>
         <label style={labelStyle}>Contraseña</label>
         <InputPassword value={form.password} onChange={e=>setForm({...form,password:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")handleLogin();}} placeholder="••••••••" disabled={loading}/>
         {error && <div style={{fontSize:"var(--fs-1)",color:"var(--peligro)",background:"var(--peligro-bg)",padding:"8px 10px",borderRadius:6,marginBottom:6}}>{error}</div>}
+        {reenviarA && <button onClick={handleReenviar} disabled={loading} style={{...btnSecondary, marginTop:0, marginBottom:6, padding:"9px", fontSize:"var(--fs-1)"}}>✉️ Reenviar link de confirmación</button>}
+        {info && <div style={{fontSize:"var(--fs-1)",color:"var(--exito)",background:"var(--exito-bg)",padding:"10px 12px",borderRadius:6,marginBottom:6,lineHeight:1.5}}>✓ {info}</div>}
         <button onClick={handleLogin} disabled={loading} style={{...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? "default" : "pointer"}}>
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
@@ -16633,6 +16729,13 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   const [mostrarOnboardingPush, setMostrarOnboardingPush] = useState(false);
   const [bloqueado, setBloqueado] = useState(() => leerLock().enabled);
   const [recuperandoPassword, setRecuperandoPassword] = useState(false);
+  const [avisoCuenta, setAvisoCuenta] = useState(() => avisoDesdeUrl());
+  // Si se volvió desde un link con error, se limpia la URL para que el aviso
+  // no reaparezca al recargar.
+  useEffect(() => {
+    if (!AUTH_URL.error && !AUTH_URL.codigo) return;
+    try { window.history.replaceState(null, "", window.location.pathname); } catch {}
+  }, []);
   // Bloqueo por inactividad: con el bloqueo activo, si no hay interacción
   // durante N minutos (configurable en Seguridad), la app se bloquea sola.
   useEffect(() => {
@@ -17367,6 +17470,16 @@ const cargarPerfil = async (sessionData) => {
     result = { ok: false, error: e?.message || "network" };
   }
   
+  if (!result.ok && result.noExiste) {
+    // La consulta respondió, pero no hay fila: no es un problema de red y no
+    // se entra con un perfil en caché de alguien que ya no está.
+    await logoutUser();
+    setCurrentUser(null);
+    setSession(null);
+    setAvisoCuenta(AVISOS_CUENTA.sin_perfil);
+    return;
+  }
+
   if (!result.ok) {
     // Falló la carga del perfil por red. NO cerramos sesión a la ligera:
     // si tenemos el perfil en caché, entramos en modo offline con él.
@@ -17397,22 +17510,28 @@ const cargarPerfil = async (sessionData) => {
   }
   
   const perfil = result.perfil;
-  
+
+  // Documento de acreditación que quedó guardado en el dispositivo (registro
+  // con correo por confirmar): se sube en el primer inicio de sesión, esté la
+  // cuenta pendiente o ya aprobada, si el perfil aún no tiene documento.
+  if (!perfil.documento_path && perfil.estado !== "rechazado") {
+    try {
+      const doc = DOC_ACREDITACION_PENDIENTE || await leerDocPendiente(sessionData.user.email);
+      if (doc) {
+        const up = await subirDocumentoAcreditacion(perfil.id, doc);
+        if (up.ok) uroToast("✓ Tu documento de acreditación quedó adjunto a la solicitud.");
+        else logDiag(`primer login: no se pudo subir el documento → ${up.error}`);
+      }
+    } catch {}
+  }
+
   // Si el usuario no está aprobado, no dejarlo entrar
   if (perfil.estado !== "aprobado") {
-    // Documento de acreditación pendiente de subir (registro con correo por
-    // confirmar): se sube ahora, que hay sesión, antes de cerrarla.
-    if (perfil.estado === "pendiente" && DOC_ACREDITACION_PENDIENTE) {
-      const up = await subirDocumentoAcreditacion(perfil.id, DOC_ACREDITACION_PENDIENTE);
-      if (up.ok) uroToast("✓ Tu documento de acreditación quedó adjunto a la solicitud.");
-      else logDiag(`login pendiente: no se pudo subir el documento → ${up.error}`);
-    }
-    let mensaje = "";
-    if (perfil.estado === "pendiente") mensaje = "Tu cuenta aún está pendiente de aprobación por el administrador.";
-    else if (perfil.estado === "rechazado") mensaje = "Tu cuenta fue rechazada. Contacta al administrador.";
-    else mensaje = "Tu cuenta no está activa.";
-    
-    uroToast(mensaje);
+    setAvisoCuenta(
+      perfil.estado === "pendiente" ? (AUTH_URL.confirmacion ? AVISOS_CUENTA.confirmado_pendiente : AVISOS_CUENTA.pendiente)
+      : perfil.estado === "rechazado" ? AVISOS_CUENTA.rechazado
+      : AVISOS_CUENTA.inactivo
+    );
     await logoutUser();
     setCurrentUser(null);
     setSession(null);
@@ -17430,6 +17549,7 @@ const cargarPerfil = async (sessionData) => {
 };
   
   setCurrentUser(userAdaptado);
+  setAvisoCuenta(null);
   try { guardarSnapshot(`perfil:${perfil.id}`, userAdaptado); } catch {}
   try { guardarSnapshot("perfil:ultimo", userAdaptado); } catch {}
   let tabGuardado = null;
@@ -17935,7 +18055,7 @@ if (!currentUser) {
   return (
     <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",background:"var(--fondo)",borderRadius:"var(--border-radius-lg)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px"}}>
       <div style={{width:"100%",maxWidth:480,background:"var(--superficie)",borderRadius:16,boxShadow:"0 4px 24px rgba(26,58,92,0.10)",padding:"8px"}}>
-        <AuthScreen/>
+        <AuthScreen aviso={avisoCuenta} onCerrarAviso={()=>setAvisoCuenta(null)}/>
       </div>
       <UroDialogHost/>
       {recuperandoPassword && <NuevaPasswordModal onClose={()=>setRecuperandoPassword(false)}/>}
