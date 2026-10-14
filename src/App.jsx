@@ -3839,7 +3839,7 @@ const PRESET_MAPS = {
   ]}
 };
 
-const VERSION = "v3.6.1";
+const VERSION = "v3.7.0";
 
 // ─── Registro de uso ──────────────────────────────────────────────
 // Mide qué funciones se usan de verdad. Antes la actividad se infería de las
@@ -3895,7 +3895,71 @@ function registrarEvento(evento, detalle = null) {
       .insert({ user_id: userId, evento, detalle, equipo_id: equipoId })
       .then(() => {}, () => {});   // silencioso a propósito
   } catch {}
+  // La última acción viaja con el latido: el administrador la ve en vivo.
+  if (!EVENTOS_INTERNOS.has(evento)) latidoActualizar({ accion: evento, accion_en: new Date().toISOString() });
 }
+
+// ─── Presencia en vivo ("latido") ─────────────────────────────────
+// Cada sesión abierta mantiene una fila en la tabla `presencia` con dónde
+// está el usuario (pestaña y sección), si la app está visible y su última
+// acción. Se actualiza al cambiar de pestaña y cada 60 s mientras la app está
+// en primer plano. Solo el administrador puede leer esa tabla (RLS), así que
+// ningún usuario ve quién más está conectado.
+//
+// Se eligió una tabla y no Realtime Presence porque el canal de Presence es
+// público para cualquier usuario autenticado: con él, cualquier residente
+// podría listar nombres y correos de quienes están en línea.
+//
+// Nunca guarda contenido clínico: solo nombres de pestaña y de evento.
+const LATIDO = { uid: null, datos: {}, intervalo: null, deb: null, avisado: false };
+async function _latidoEnviar() {
+  if (!LATIDO.uid) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  try {
+    const { error } = await supabase.from("presencia").upsert(
+      { user_id: LATIDO.uid, ...LATIDO.datos, visto_en: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    if (error && !LATIDO.avisado) { LATIDO.avisado = true; logDiag(`presencia: no se pudo registrar (${error.message}). ¿Se ejecutó actividad_admin.sql?`); }
+  } catch {}
+}
+function latidoIniciar(user) {
+  if (!user?.id) return;
+  if (LATIDO.uid === user.id && LATIDO.intervalo) return;
+  latidoDetener(false);
+  LATIDO.uid = user.id;
+  LATIDO.datos = {
+    activo: true,
+    visible: typeof document === "undefined" ? true : document.visibilityState !== "hidden",
+    tab: TAB_ACTUAL || null,
+    sub: null,
+    version: VERSION,
+    movil: typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ""),
+    sesion_desde: new Date().toISOString(),
+  };
+  _latidoEnviar();
+  LATIDO.intervalo = setInterval(() => {
+    if (typeof document === "undefined" || document.visibilityState === "visible") _latidoEnviar();
+  }, 60000);
+}
+function latidoActualizar(parcial, inmediato = false) {
+  if (!LATIDO.uid) return;
+  LATIDO.datos = { ...LATIDO.datos, ...parcial };
+  clearTimeout(LATIDO.deb);
+  if (inmediato) _latidoEnviar();
+  else LATIDO.deb = setTimeout(_latidoEnviar, 1500);
+}
+async function latidoDetener(marcarInactivo) {
+  clearInterval(LATIDO.intervalo); clearTimeout(LATIDO.deb);
+  LATIDO.intervalo = null; LATIDO.deb = null;
+  if (marcarInactivo && LATIDO.uid) {
+    LATIDO.datos = { ...LATIDO.datos, activo: false, visible: false };
+    try { await Promise.race([_latidoEnviar(), new Promise((r) => setTimeout(r, 1500))]); } catch {}
+  }
+  LATIDO.uid = null;
+}
+// Eventos internos que no son "una acción del usuario" para el panel en vivo.
+const EVENTOS_INTERNOS = new Set(["error_js", "ia_uso"]);
 
 // ─── Errores en producción → eventos_uso ("error_js") ─────────────
 // Hasta ahora un error en el teléfono de un residente solo se veía si él lo
@@ -6116,6 +6180,474 @@ function FeedbackAdmin() {
   );
 }
 
+// ════════════════════════════════════════════════════════════════
+// ACTIVIDAD DE USUARIOS (solo administrador)
+//
+// Quién está en línea ahora y en qué parte de la app, qué acaban de hacer
+// (feed en vivo) y estadísticas del período: activos por día, mapa de calor
+// por día y hora, qué funciones se usan y el detalle por usuario.
+//
+// Fuentes: tabla `presencia` (latido de cada sesión) y `eventos_uso` (registro
+// de acciones, sin texto de consultas ni datos de pacientes). Los agregados
+// los calcula la RPC admin_actividad en el servidor para no descargar miles de
+// eventos al teléfono. Los cambios llegan por Supabase Realtime; si Realtime no
+// está activo, el panel se refresca solo cada 30 s.
+// ════════════════════════════════════════════════════════════════
+const ETIQUETAS_EVENTO = {
+  sesion_abierta: ["🔓", "Abrió la app"],
+  chat_consulta: ["💬", "Consulta a Uros"],
+  evolucion_guardada: ["📝", "Guardó una evolución"],
+  examen_creado: ["🧪", "Registró un examen"],
+  examen_editado: ["✏️", "Editó un examen"],
+  ingreso_guardado: ["📥", "Guardó un ingreso"],
+  comite_guardado: ["🎗️", "Guardó un comité"],
+  protocolo_subido: ["📘", "Subió un protocolo"],
+  imagen_paciente: ["📷", "Adjuntó una imagen clínica"],
+  dictado: ["🎤", "Dictó por voz"],
+  dictado_cancelado: ["🎤", "Canceló un dictado"],
+  prueba_base: ["🧬", "Corrió la prueba de la base"],
+  ia_uso: ["✨", "Función de IA (visión)"],
+  error_js: ["🐞", "Error en la app"],
+};
+const etiquetaEvento = (ev) => ETIQUETAS_EVENTO[ev] || ["•", String(ev || "").replace(/_/g, " ")];
+const NOMBRE_SECCION = {
+  chat: "Chat", hospital: "Servicio", logbook: "Logbook", conocimiento: "Biblioteca", admin: "Administración",
+  pacientes: "Pacientes", tabla: "Tabla", notas: "Notas", prescripciones: "Recetas", interconsultas: "Interconsultas",
+  seguimiento: "Seguimiento", ingresos: "Ingresos", comites: "Comités", lista: "Registros", nueva: "Nueva",
+  metricas: "Métricas", cirugias: "Cirugías", videos: "Videos", preguntas: "Preguntas", medicamentos: "Medicamentos",
+  protocolos: "Protocolos", scores: "Scores", documentos: "Documentos", imagenes: "Imágenes del chat",
+};
+const SECCIONES_MAPA = [["chat", "💬"], ["hospital", "🏥"], ["logbook", "📓"], ["conocimiento", "📚"], ["admin", "🛡️"]];
+
+function haceTxt(iso) {
+  if (!iso) return "nunca";
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 45) return "ahora";
+  if (s < 3600) return `hace ${Math.round(s / 60)} min`;
+  if (s < 86400) return `hace ${Math.round(s / 3600)} h`;
+  const d = Math.round(s / 86400);
+  return d === 1 ? "ayer" : `hace ${d} días`;
+}
+function horaTxt(iso) {
+  try { return new Date(iso).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
+}
+// Estado de conexión a partir del latido. La app manda latido cada 60 s solo
+// en primer plano, así que >150 s sin latido = ya no está mirando la pantalla.
+function estadoPresencia(r) {
+  if (!r || r.activo === false || !r.visto_en) return "fuera";
+  const edad = Date.now() - new Date(r.visto_en).getTime();
+  if (r.visible && edad < 150000) return "linea";
+  if (edad < 600000) return "fondo";
+  return "fuera";
+}
+const ESTADO_PRES = {
+  linea: { color: "var(--exito)", txt: "En línea" },
+  fondo: { color: "var(--alerta)", txt: "En segundo plano" },
+  fuera: { color: "var(--neutro)", txt: "Desconectado" },
+};
+// Resumen del detalle de un evento, sin datos clínicos (el registro no los tiene).
+function resumenDetalleEvento(evento, d) {
+  if (!d || typeof d !== "object") return "";
+  if (evento === "chat_consulta") return [d.ms ? `${(d.ms / 1000).toFixed(1)} s` : "", d.fuentes ? `${d.fuentes} fuente${d.fuentes === 1 ? "" : "s"}` : "", d.con_pacientes ? "con pacientes" : "", d.general ? "conocimiento general" : ""].filter(Boolean).join(" · ");
+  if (evento === "dictado") return [d.seg ? `${d.seg} s de audio` : "", d.chars ? `${d.chars} caracteres` : ""].filter(Boolean).join(" · ");
+  if (evento === "evolucion_guardada" || evento === "examen_creado" || evento === "examen_editado") return d.tipo || "";
+  if (evento === "ia_uso") return [d.que, d.tokens_in != null ? `${d.tokens_in + (d.tokens_out || 0)} tokens` : ""].filter(Boolean).join(" · ");
+  if (evento === "sesion_abierta") return d.version || "";
+  if (evento === "error_js") return String(d.msg || "").slice(0, 90);
+  if (evento === "prueba_base") return d.total ? `${d.ok}/${d.total} ✓` : "";
+  return "";
+}
+const fechaDeFila = (r) => r?.momento || r?.created_at || r?.creado_en || r?.fecha || r?.ts || Object.values(r || {}).find((v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) || new Date().toISOString();
+
+function TarjetaKPI({ valor, etiqueta, sub, color }) {
+  return (
+    <div style={{ flex: "1 1 120px", minWidth: 0, background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px" }}>
+      <div style={{ fontSize: 24, fontWeight: 700, color: color || "var(--texto)", lineHeight: 1.1 }}>{valor ?? "—"}</div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", marginTop: 2 }}>{etiqueta}</div>
+      {sub && <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+const tituloBloque = { fontSize: "var(--fs-2)", fontWeight: 700, color: "var(--texto)", margin: "18px 0 8px" };
+const cajaBloque = { background: "var(--superficie)", border: "0.5px solid var(--borde)", borderRadius: 10, padding: "10px 12px" };
+
+function ActividadAdmin() {
+  const [dias, setDias] = useState(30);
+  const [agg, setAgg] = useState(null);
+  const [errorAgg, setErrorAgg] = useState("");
+  const [presencia, setPresencia] = useState({}); // user_id → fila
+  const [feed, setFeed] = useState([]);
+  const [nuevos, setNuevos] = useState(new Set()); // claves recién llegadas (resaltado)
+  const [enVivo, setEnVivo] = useState(false);
+  const [, setTick] = useState(0);
+  const [busqueda, setBusqueda] = useState("");
+  const [orden, setOrden] = useState("ultimo");
+  const [soloActivos, setSoloActivos] = useState(false);
+  const [abierto, setAbierto] = useState(null);  // user_id con detalle desplegado
+  const [timeline, setTimeline] = useState({});   // user_id → eventos
+  const [perfilesMapa, setPerfilesMapa] = useState({});
+  const refrescoAgg = useRef(null);
+  const diasRef = useRef(dias);
+  diasRef.current = dias;
+
+  const nombreDe = (uid) => perfilesMapa[uid]?.nombre || (agg?.usuarios || []).find((u) => u.id === uid)?.nombre || "Usuario";
+  const correoDe = (uid) => perfilesMapa[uid]?.correo || (agg?.usuarios || []).find((u) => u.id === uid)?.correo || "";
+  const claveEv = (e) => (e.id != null ? String(e.id) : `${e.user_id}|${e.evento}|${e.momento}`);
+
+  const cargarAgg = async () => {
+    const { data, error } = await supabase.rpc("admin_actividad", { p_dias: diasRef.current });
+    if (error) { setErrorAgg(error.message); return; }
+    setErrorAgg(""); setAgg(data || {});
+  };
+  const cargarPresencia = async () => {
+    try {
+      const { data, error } = await supabase.from("presencia").select("*");
+      if (!error) setPresencia(Object.fromEntries((data || []).map((r) => [r.user_id, r])));
+    } catch {}
+  };
+  const cargarFeed = async () => {
+    try {
+      const { data, error } = await supabase.rpc("admin_eventos_recientes", { p_limite: 60 });
+      if (error) return;
+      setFeed((prev) => {
+        const vistos = new Set(prev.map(claveEv));
+        const extra = (data || []).filter((e) => !vistos.has(claveEv(e)));
+        return [...extra, ...prev].sort((a, b) => String(b.momento).localeCompare(String(a.momento))).slice(0, 80);
+      });
+    } catch {}
+  };
+  // Tras un evento en vivo, los agregados se recalculan como máximo cada 15 s.
+  const programarAgg = () => {
+    if (refrescoAgg.current) return;
+    refrescoAgg.current = setTimeout(() => { refrescoAgg.current = null; cargarAgg(); }, 15000);
+  };
+
+  useEffect(() => { cargarAgg(); }, [dias]);
+  useEffect(() => {
+    cargarPresencia(); cargarFeed();
+    supabase.from("perfiles").select("id, nombre, correo, rol").then(({ data }) => {
+      if (data) setPerfilesMapa(Object.fromEntries(data.map((p) => [p.id, p])));
+    }, () => {});
+
+    let vivo = true;
+    const canal = supabase.channel("admin-actividad-" + Math.random().toString(36).slice(2))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "eventos_uso" }, (p) => {
+        const r = p.new || {};
+        if (r.evento === "ia_uso") return;
+        const ev = { id: r.id, user_id: r.user_id, evento: r.evento, detalle: r.detalle, momento: fechaDeFila(r) };
+        const k = claveEv(ev);
+        setFeed((prev) => (prev.some((e) => claveEv(e) === k) ? prev : [ev, ...prev].slice(0, 80)));
+        setNuevos((prev) => new Set(prev).add(k));
+        setTimeout(() => setNuevos((prev) => { const s = new Set(prev); s.delete(k); return s; }), 4000);
+        programarAgg();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "presencia" }, (p) => {
+        const r = p.new;
+        if (r?.user_id) setPresencia((prev) => ({ ...prev, [r.user_id]: r }));
+      })
+      .subscribe((status) => { if (vivo) setEnVivo(status === "SUBSCRIBED"); });
+
+    // Respaldo por si Realtime no está habilitado en las tablas.
+    const poll = setInterval(() => { cargarPresencia(); cargarFeed(); }, 30000);
+    const pollAgg = setInterval(cargarAgg, 120000);
+    const tick = setInterval(() => setTick((t) => t + 1), 15000);
+    return () => {
+      vivo = false;
+      clearInterval(poll); clearInterval(pollAgg); clearInterval(tick);
+      clearTimeout(refrescoAgg.current);
+      try { supabase.removeChannel(canal); } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const abrirUsuario = async (uid) => {
+    if (abierto === uid) { setAbierto(null); return; }
+    setAbierto(uid);
+    // Desde el mapa o el feed, lleva a la fila del usuario en la lista.
+    setTimeout(() => { try { document.getElementById(`act-u-${uid}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {} }, 80);
+    const { data, error } = await supabase.rpc("admin_eventos_usuario", { p_user: uid, p_limite: 40 });
+    setTimeline((prev) => ({ ...prev, [uid]: error ? { error: error.message } : (data || []) }));
+  };
+
+  // ── Derivados ──
+  const presentes = Object.values(presencia).map((r) => ({ ...r, est: estadoPresencia(r) })).filter((r) => r.est !== "fuera");
+  const enLinea = presentes.filter((r) => r.est === "linea");
+  const resumen = agg?.resumen || {};
+  const usuarios = (agg?.usuarios || []).filter((u) => {
+    const q = busqueda.trim().toLowerCase();
+    if (q && !`${u.nombre || ""} ${u.correo || ""}`.toLowerCase().includes(q)) return false;
+    if (soloActivos && !(u.eventos > 0)) return false;
+    return true;
+  }).sort((a, b) => {
+    if (orden === "eventos") return (b.eventos || 0) - (a.eventos || 0);
+    if (orden === "nombre") return String(a.nombre || "").localeCompare(String(b.nombre || ""), "es");
+    // último uso: primero los conectados ahora
+    const pa = estadoPresencia(presencia[a.id]) === "linea" ? 1 : 0, pb = estadoPresencia(presencia[b.id]) === "linea" ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    return String(b.ultimo || "").localeCompare(String(a.ultimo || ""));
+  });
+
+  // Serie diaria completa (los días sin actividad también aparecen, en cero).
+  const serieDiaria = useMemo(() => {
+    const porDia = Object.fromEntries((agg?.diario || []).map((d) => [String(d.dia).slice(0, 10), d]));
+    const out = [];
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      out.push({ dia: k, activos: porDia[k]?.activos || 0, eventos: porDia[k]?.eventos || 0 });
+    }
+    return out;
+  }, [agg, dias]);
+  const maxActivos = Math.max(1, ...serieDiaria.map((d) => d.activos));
+
+  const calor = useMemo(() => {
+    const m = {}; let max = 0;
+    (agg?.calor || []).forEach((c) => { m[`${c.dow}-${c.hora}`] = c.n; if (c.n > max) max = c.n; });
+    return { m, max: Math.max(1, max) };
+  }, [agg]);
+
+  const porEvento = (agg?.por_evento || []).filter((e) => e.evento !== "error_js");
+  const maxEvento = Math.max(1, ...porEvento.map((e) => e.n));
+
+  const sel = { padding: "6px 10px", fontSize: "var(--fs-1)", border: "0.5px solid var(--borde)", borderRadius: 8, background: "var(--superficie)", color: "var(--texto)" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+        <div style={{ fontSize: "var(--fs-3)", fontWeight: 700, color: "var(--texto)", flex: 1, minWidth: 160 }}>📊 Actividad de usuarios</div>
+        <span title={enVivo ? "Recibiendo cambios en tiempo real" : "Realtime no disponible: se actualiza cada 30 s"} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "var(--fs-0)", fontWeight: 600, color: enVivo ? "var(--exito)" : "var(--texto-ter)" }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: enVivo ? "var(--exito)" : "var(--neutro)", animation: enVivo ? "uroLatido 1.6s ease-in-out infinite" : "none" }} />
+          {enVivo ? "En vivo" : "Cada 30 s"}
+        </span>
+        <select value={dias} onChange={(e) => setDias(Number(e.target.value))} style={sel} aria-label="Período">
+          <option value={7}>Últimos 7 días</option>
+          <option value={30}>Últimos 30 días</option>
+          <option value={90}>Últimos 90 días</option>
+        </select>
+        <button onClick={() => { cargarAgg(); cargarPresencia(); cargarFeed(); }} style={{ ...sel, cursor: "pointer", color: "var(--primario)" }}>↻</button>
+      </div>
+      <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", lineHeight: 1.5, marginBottom: 12 }}>
+        Registra qué funciones se usan y cuándo, nunca el texto de las consultas ni datos de pacientes.
+      </div>
+
+      {errorAgg && (
+        <div style={{ ...estiloMsg(false), marginBottom: 12 }}>
+          No se pudieron calcular las estadísticas: {errorAgg}
+          {/(admin_actividad|function|does not exist|not find)/i.test(errorAgg) ? " — falta ejecutar actividad_admin.sql en Supabase." : ""}
+        </div>
+      )}
+
+      {/* KPIs */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <TarjetaKPI valor={enLinea.length} etiqueta="En línea ahora" sub={presentes.length > enLinea.length ? `+${presentes.length - enLinea.length} en segundo plano` : null} color="var(--exito)" />
+        <TarjetaKPI valor={resumen.activos_hoy} etiqueta="Activos hoy" sub={resumen.usuarios_aprobados != null ? `de ${resumen.usuarios_aprobados} con cuenta` : null} />
+        <TarjetaKPI valor={resumen.activos_7d} etiqueta="Activos 7 días" />
+        <TarjetaKPI valor={resumen.activos_periodo} etiqueta={`Activos ${dias} días`} />
+        <TarjetaKPI valor={resumen.eventos_hoy} etiqueta="Acciones hoy" sub={resumen.eventos_periodo != null ? `${resumen.eventos_periodo} en ${dias} días` : null} />
+      </div>
+
+      {/* Mapa de la app en vivo */}
+      <div style={tituloBloque}>🗺️ Dónde están ahora</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+        {SECCIONES_MAPA.map(([id, ico]) => {
+          const aqui = presentes.filter((r) => (r.tab || "chat") === id);
+          return (
+            <div key={id} style={{ ...cajaBloque, borderTop: `3px solid ${aqui.length ? "var(--primario)" : "var(--borde)"}`, minHeight: 74 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 15 }}>{ico}</span>
+                <span style={{ flex: 1, fontSize: "var(--fs-1)", fontWeight: 700, color: "var(--texto)" }}>{NOMBRE_SECCION[id]}</span>
+                <span style={{ fontSize: "var(--fs-2)", fontWeight: 700, color: aqui.length ? "var(--primario)" : "var(--texto-ter)" }}>{aqui.length}</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {aqui.map((r) => (
+                  <button key={r.user_id} onClick={() => abrirUsuario(r.user_id)} title={`${nombreDe(r.user_id)} · ${correoDe(r.user_id)}\n${ESTADO_PRES[r.est].txt}${r.sub ? " · " + (NOMBRE_SECCION[r.sub] || r.sub) : ""}`}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "100%", padding: "3px 8px", fontSize: "var(--fs-0)", fontWeight: 600, background: "var(--fondo-suave)", color: "var(--texto)", border: "0.5px solid var(--borde)", borderRadius: 12, cursor: "pointer" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: ESTADO_PRES[r.est].color }} />
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombreDe(r.user_id).split(" ").slice(0, 2).join(" ")}</span>
+                  </button>
+                ))}
+                {aqui.length === 0 && <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Nadie</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Lista de conectados */}
+      {presentes.length > 0 && (
+        <div style={{ ...cajaBloque, marginTop: 8, padding: 0 }}>
+          {[...presentes].sort((a, b) => (a.est === b.est ? 0 : a.est === "linea" ? -1 : 1)).map((r, i) => (
+            <div key={r.user_id} onClick={() => abrirUsuario(r.user_id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderTop: i ? "0.5px solid var(--borde)" : "none", cursor: "pointer" }}>
+              <span title={ESTADO_PRES[r.est].txt} style={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, background: ESTADO_PRES[r.est].color }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nombreDe(r.user_id)} <span style={{ fontWeight: 400, color: "var(--texto-ter)" }}>{correoDe(r.user_id)}</span></div>
+                <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)" }}>
+                  {NOMBRE_SECCION[r.tab] || r.tab || "—"}{r.sub ? ` › ${NOMBRE_SECCION[r.sub] || r.sub}` : ""}
+                  {r.accion ? ` · ${etiquetaEvento(r.accion)[1].toLowerCase()} ${haceTxt(r.accion_en)}` : ""}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0, fontSize: "var(--fs-xs)", color: "var(--texto-ter)", lineHeight: 1.4 }}>
+                <div>{r.movil ? "📱" : "💻"} {r.version || ""}</div>
+                <div>{ESTADO_PRES[r.est].txt}{r.sesion_desde ? ` · desde ${horaTxt(r.sesion_desde)}` : ""}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Feed en vivo */}
+      <div style={tituloBloque}>⚡ Actividad reciente</div>
+      <div style={{ ...cajaBloque, padding: 0, maxHeight: 320, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+        {feed.length === 0 && <div style={{ padding: 14, fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center" }}>Sin actividad registrada todavía.</div>}
+        {feed.map((e, i) => {
+          const [ico, txt] = etiquetaEvento(e.evento);
+          const det = resumenDetalleEvento(e.evento, e.detalle);
+          const nuevo = nuevos.has(claveEv(e));
+          return (
+            <div key={claveEv(e)} onClick={() => abrirUsuario(e.user_id)} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 12px", borderTop: i ? "0.5px solid var(--borde)" : "none", cursor: "pointer", background: nuevo ? "var(--exito-bg)" : "transparent", transition: "background 1.2s" }}>
+              <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", width: 40, flexShrink: 0, paddingTop: 1 }}>{horaTxt(e.momento)}</span>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>{ico}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "var(--fs-1)", color: "var(--texto)" }}><b>{nombreDe(e.user_id)}</b> · <span style={{ color: e.evento === "error_js" ? "var(--peligro)" : "var(--texto-sec)" }}>{txt}</span></div>
+                {det && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{det}</div>}
+              </div>
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)", flexShrink: 0 }}>{haceTxt(e.momento)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Activos por día */}
+      <div style={tituloBloque}>📈 Usuarios activos por día</div>
+      <div style={cajaBloque}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: dias > 40 ? 1 : 2, height: 120 }}>
+          {serieDiaria.map((d) => (
+            <div key={d.dia} title={`${d.dia.split("-").reverse().join("/")}: ${d.activos} usuario${d.activos === 1 ? "" : "s"} · ${d.eventos} acciones`}
+              style={{ flex: 1, minWidth: 2, height: "100%", display: "flex", alignItems: "flex-end", cursor: "default" }}>
+              <div style={{ width: "100%", height: `${d.activos ? Math.max(3, (d.activos / maxActivos) * 100) : 0}%`, background: "var(--primario)", borderRadius: "4px 4px 0 0" }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-xs)", color: "var(--texto-ter)", marginTop: 4, borderTop: "0.5px solid var(--borde)", paddingTop: 3 }}>
+          <span>{serieDiaria[0]?.dia.split("-").reverse().slice(0, 2).join("/")}</span>
+          <span>máx. {maxActivos} usuarios/día</span>
+          <span>hoy</span>
+        </div>
+      </div>
+
+      {/* Mapa de calor */}
+      <div style={tituloBloque}>🔥 Mapa de calor: cuándo se usa la app</div>
+      <div style={{ ...cajaBloque, overflowX: "auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "28px repeat(24, minmax(10px, 1fr))", gap: 2, minWidth: 300 }}>
+          <span />
+          {Array.from({ length: 24 }, (_, h) => <span key={h} style={{ fontSize: 9, color: "var(--texto-ter)", textAlign: "center" }}>{h % 3 === 0 ? h : ""}</span>)}
+          {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((dn, i) => (
+            <Fragment key={dn}>
+              <span style={{ fontSize: "var(--fs-xs)", color: "var(--texto-sec)", alignSelf: "center" }}>{dn}</span>
+              {Array.from({ length: 24 }, (_, h) => {
+                const n = calor.m[`${i + 1}-${h}`] || 0;
+                return (
+                  <div key={h} title={`${dn} ${String(h).padStart(2, "0")}:00 · ${n} acciones`}
+                    style={{ aspectRatio: "1", minHeight: 10, borderRadius: 2, background: n ? "var(--primario)" : "var(--fondo-suave)", opacity: n ? 0.18 + 0.82 * (n / calor.max) : 1 }} />
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end", marginTop: 6, fontSize: "var(--fs-xs)", color: "var(--texto-ter)" }}>
+          menos {[0.18, 0.45, 0.72, 1].map((o) => <span key={o} style={{ width: 10, height: 10, borderRadius: 2, background: "var(--primario)", opacity: o }} />)} más
+          <span style={{ marginLeft: 6 }}>· hora de Chile</span>
+        </div>
+      </div>
+
+      {/* Qué hacen */}
+      <div style={tituloBloque}>🧩 Qué funciones se usan</div>
+      <div style={{ ...cajaBloque, display: "flex", flexDirection: "column", gap: 6 }}>
+        {porEvento.length === 0 && <div style={{ fontSize: "var(--fs-1)", color: "var(--texto-ter)" }}>Sin datos en el período.</div>}
+        {porEvento.map((e) => {
+          const [ico, txt] = etiquetaEvento(e.evento);
+          return (
+            <div key={e.evento} title={`${txt}: ${e.n} veces, ${e.usuarios} usuario${e.usuarios === 1 ? "" : "s"}`} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 38%) 1fr auto", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: "var(--fs-0)", color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ico} {txt}</span>
+              <div style={{ height: 10, background: "var(--fondo-suave)", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ width: `${(e.n / maxEvento) * 100}%`, height: "100%", background: "var(--primario)", borderRadius: 4 }} />
+              </div>
+              <span style={{ fontSize: "var(--fs-0)", color: "var(--texto-sec)", minWidth: 64, textAlign: "right" }}>{e.n} · {e.usuarios} 👤</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Usuarios */}
+      <div style={tituloBloque}>👥 Usuarios</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="🔍 Nombre o correo" style={{ ...sel, flex: "1 1 160px", minWidth: 0 }} />
+        <select value={orden} onChange={(e) => setOrden(e.target.value)} style={sel} aria-label="Ordenar">
+          <option value="ultimo">Último uso</option>
+          <option value="eventos">Más acciones</option>
+          <option value="nombre">Nombre</option>
+        </select>
+        <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-1)", color: "var(--texto-sec)", cursor: "pointer" }}>
+          <input type="checkbox" checked={soloActivos} onChange={(e) => setSoloActivos(e.target.checked)} /> Solo activos
+        </label>
+      </div>
+      <div style={{ ...cajaBloque, padding: 0 }}>
+        {!agg && !errorAgg && <div style={{ padding: 14, fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center" }}>Cargando…</div>}
+        {agg && usuarios.length === 0 && <div style={{ padding: 14, fontSize: "var(--fs-1)", color: "var(--texto-ter)", textAlign: "center" }}>Ningún usuario coincide.</div>}
+        {usuarios.map((u, i) => {
+          const est = estadoPresencia(presencia[u.id]);
+          const exp = abierto === u.id;
+          const tl = timeline[u.id];
+          const det = Object.entries(u.detalle || {}).filter(([k]) => k !== "error_js").sort((a, b) => b[1] - a[1]);
+          return (
+            <div key={u.id} id={`act-u-${u.id}`} style={{ borderTop: i ? "0.5px solid var(--borde)" : "none" }}>
+              <div onClick={() => abrirUsuario(u.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer", background: exp ? "var(--fondo-suave)" : "transparent" }}>
+                <span title={ESTADO_PRES[est].txt} style={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, background: ESTADO_PRES[est].color }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "var(--fs-1)", fontWeight: 600, color: "var(--texto)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {u.nombre || "Sin nombre"}{u.rol ? <span style={{ fontWeight: 400, color: "var(--texto-ter)" }}> · {ROL_LABEL[u.rol] || u.rol}</span> : null}
+                  </div>
+                  <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.correo}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, lineHeight: 1.35 }}>
+                  <div style={{ fontSize: "var(--fs-0)", fontWeight: 600, color: est === "linea" ? "var(--exito)" : "var(--texto-sec)" }}>{est === "linea" ? "En línea" : haceTxt(u.ultimo)}</div>
+                  <div style={{ fontSize: "var(--fs-xs)", color: "var(--texto-ter)" }}>{u.eventos || 0} acciones · {u.dias_activos || 0} día{u.dias_activos === 1 ? "" : "s"}</div>
+                </div>
+                <span style={{ color: "var(--texto-ter)", fontSize: "var(--fs-0)" }}>{exp ? "▴" : "▾"}</span>
+              </div>
+              {exp && (
+                <div style={{ padding: "4px 12px 12px 31px", background: "var(--fondo-suave)" }}>
+                  {det.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+                      {det.map(([k, n]) => (
+                        <span key={k} style={{ fontSize: "var(--fs-0)", padding: "2px 8px", borderRadius: 10, background: "var(--superficie)", border: "0.5px solid var(--borde)", color: "var(--texto)" }}>{etiquetaEvento(k)[0]} {etiquetaEvento(k)[1]} <b>{n}</b></span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: "var(--fs-0)", fontWeight: 700, color: "var(--texto-sec)", marginBottom: 4 }}>Últimas acciones</div>
+                  {!tl && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Cargando…</div>}
+                  {tl?.error && <div style={{ fontSize: "var(--fs-0)", color: "var(--peligro)" }}>{tl.error}</div>}
+                  {Array.isArray(tl) && tl.length === 0 && <div style={{ fontSize: "var(--fs-0)", color: "var(--texto-ter)" }}>Sin acciones registradas.</div>}
+                  {Array.isArray(tl) && tl.map((e, j) => {
+                    const [ico, txt] = etiquetaEvento(e.evento);
+                    const d2 = resumenDetalleEvento(e.evento, e.detalle);
+                    return (
+                      <div key={j} style={{ display: "flex", gap: 8, fontSize: "var(--fs-0)", lineHeight: 1.5, color: "var(--texto)" }}>
+                        <span style={{ color: "var(--texto-ter)", flexShrink: 0, width: 92 }}>{new Date(e.momento).toLocaleString("es-CL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                        <span style={{ minWidth: 0 }}>{ico} {txt}{d2 ? <span style={{ color: "var(--texto-ter)" }}> · {d2}</span> : null}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AdminPanel() {
   const [seccionAdmin, setSeccionAdmin] = useState("cuentas");
   const [perfiles, setPerfiles] = useState([]);
@@ -6213,7 +6745,7 @@ function AdminPanel() {
 
       {/* Secciones desplegables: solo una abierta a la vez */}
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-        {[["cuentas","👥 Panel de administración","Cuentas del equipo clínico" + (counts.pendiente>0?` · ${counts.pendiente} pendiente${counts.pendiente===1?"":"s"}`:"")],["centros","🏥 Centros","Equipos y acceso de soporte"],["boletines","📢 Boletines","Comunicados a los usuarios"],["sugerencias","📬 Buzón de sugerencias","Feedback y evaluaciones del chat"]].map(([id,label,desc]) => (
+        {[["cuentas","👥 Panel de administración","Cuentas del equipo clínico" + (counts.pendiente>0?` · ${counts.pendiente} pendiente${counts.pendiente===1?"":"s"}`:"")],["actividad","📊 Actividad de usuarios","Quién está en línea, qué hacen y estadísticas de uso"],["centros","🏥 Centros","Equipos y acceso de soporte"],["boletines","📢 Boletines","Comunicados a los usuarios"],["sugerencias","📬 Buzón de sugerencias","Feedback y evaluaciones del chat"]].map(([id,label,desc]) => (
           <button key={id} onClick={()=>setSeccionAdmin(prev => prev===id ? null : id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",background:seccionAdmin===id?"var(--fondo-suave)":"var(--superficie)",border:"0.5px solid "+(seccionAdmin===id?"var(--primario)":"var(--borde)"),borderRadius:10,cursor:"pointer"}}>
             <span style={{flex:1,minWidth:0}}>
               <span style={{display:"block",fontSize:"var(--fs-2)",fontWeight:700,color:seccionAdmin===id?"var(--primario)":"var(--texto)"}}>{label}</span>
@@ -6290,6 +6822,7 @@ function AdminPanel() {
 
       </>)}
 
+      {seccionAdmin === "actividad" && <ActividadAdmin />}
       {seccionAdmin === "centros" && <CentrosAdmin />}
       {seccionAdmin === "boletines" && <BoletinesAdmin />}
       {seccionAdmin === "sugerencias" && <FeedbackAdmin />}
@@ -16223,6 +16756,24 @@ const [loadingPacientes, setLoadingPacientes] = useState(false);
   useEffect(() => { try { localStorage.setItem("uro_contexto", contexto); } catch {} }, [contexto]);
   useEffect(() => { setSubmenuOpen(false); }, [tab]); // al cambiar de pestaña, cerrar el submenú
 
+  // ─── Latido de presencia: dónde está el usuario y si la app está visible ───
+  useEffect(() => {
+    if (currentUser?.id) latidoIniciar(currentUser);
+    else latidoDetener(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+  useEffect(() => {
+    const sub = tab === "hospital" ? subTabHospital : tab === "conocimiento" ? subTabBiblio : tab === "logbook" ? subTabLogbook : null;
+    latidoActualizar({ tab, sub });
+  }, [tab, subTabHospital, subTabBiblio, subTabLogbook]);
+  useEffect(() => {
+    const alCambiar = () => latidoActualizar({ visible: document.visibilityState === "visible" }, true);
+    const alSalir = () => latidoActualizar({ visible: false }, true);
+    document.addEventListener("visibilitychange", alCambiar);
+    window.addEventListener("pagehide", alSalir);
+    return () => { document.removeEventListener("visibilitychange", alCambiar); window.removeEventListener("pagehide", alSalir); };
+  }, []);
+
   // Dirección de la transición lateral: compara la posición de la pestaña nueva
   // con la anterior para decidir si entra desde la derecha o desde la izquierda.
   useEffect(() => {
@@ -16720,6 +17271,7 @@ const eliminarConv = async (conversacionId) => {
       ]);
     } catch {}
   }
+  await latidoDetener(true);
   await logoutUser();
   setCurrentUser(null);
   setSession(null);
